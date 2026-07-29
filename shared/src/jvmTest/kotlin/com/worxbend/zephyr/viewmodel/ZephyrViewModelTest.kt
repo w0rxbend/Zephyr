@@ -1,5 +1,6 @@
 package com.worxbend.zephyr.viewmodel
 
+import com.worxbend.zephyr.data.DiagnosticsExporter
 import com.worxbend.zephyr.data.OperationJournalExporter
 import com.worxbend.zephyr.data.SdkmanRepository
 import com.worxbend.zephyr.domain.Candidate
@@ -11,6 +12,7 @@ import com.worxbend.zephyr.domain.ConnectivityState
 import com.worxbend.zephyr.domain.ConnectivityStatus
 import com.worxbend.zephyr.domain.DiskImpactEstimate
 import com.worxbend.zephyr.domain.DiskImpactKind
+import com.worxbend.zephyr.domain.DiagnosticsSnapshot
 import com.worxbend.zephyr.domain.EstimateConfidence
 import com.worxbend.zephyr.domain.IntegrityCheck
 import com.worxbend.zephyr.domain.IntegrityCheckId
@@ -22,6 +24,7 @@ import com.worxbend.zephyr.domain.ProtectedVersion
 import com.worxbend.zephyr.domain.SdkmanSelfUpdateStatus
 import com.worxbend.zephyr.domain.SdkmanStatus
 import com.worxbend.zephyr.domain.SdkmanTransaction
+import com.worxbend.zephyr.domain.SupportBundleExportResult
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.filterIsInstance
@@ -253,6 +256,30 @@ class ZephyrViewModelTest {
     }
 
     @Test
+    fun exportsCurrentStateAsADiagnosticsSnapshot() {
+        val exporter = FakeDiagnosticsExporter()
+        val viewModel = ZephyrViewModel(
+            repository = FakeSdkmanRepository(),
+            dispatcher = testScope(),
+            diagnosticsExporter = exporter,
+            clock = { 1_234L },
+        )
+
+        viewModel.exportDiagnostics()
+
+        val snapshot = exporter.exported.single()
+        assertEquals(1_234L, snapshot.generatedAtEpochMillis)
+        assertEquals("SDKMAN 5", snapshot.sdkmanStatus.cliVersion)
+        assertEquals(ConnectivityState.Online, snapshot.connectivityStatus.state)
+        assertEquals(1, snapshot.integrityChecks.size)
+        assertEquals(
+            "Exported a redacted support bundle to /tmp/zephyr-support.txt.",
+            assertIs<ZephyrUiState.Ready>(viewModel.state.value).lastOutcome,
+        )
+        viewModel.close()
+    }
+
+    @Test
     fun failedMutationIsRetainedInTheJournal() {
         val repository = FakeSdkmanRepository(
             installOutcome = CommandOutcome(false, "Download unavailable"),
@@ -474,5 +501,14 @@ private class FakeOperationJournalExporter : OperationJournalExporter {
     override suspend fun export(entries: List<OperationJournalEntry>): JournalExportResult {
         exported += entries
         return JournalExportResult("/tmp/zephyr-journal.csv", entries.size)
+    }
+}
+
+private class FakeDiagnosticsExporter : DiagnosticsExporter {
+    val exported = mutableListOf<DiagnosticsSnapshot>()
+
+    override suspend fun export(snapshot: DiagnosticsSnapshot): SupportBundleExportResult {
+        exported += snapshot
+        return SupportBundleExportResult("/tmp/zephyr-support.txt")
     }
 }

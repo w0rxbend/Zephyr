@@ -131,13 +131,29 @@ internal fun OverviewScreen(
 internal fun DiagnosticsScreen(
     state: ZephyrUiState.Ready,
     onRefreshIntegrity: () -> Unit,
+    onExportDiagnostics: () -> Unit,
 ) {
     val metrics = LocalZephyrMetrics.current
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(metrics.spacing * 2),
     ) {
-        item { PageTitle("Diagnostics", "Inspect the SDKMAN integration without changing your environment.") }
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Column(Modifier.weight(1f)) {
+                    PageTitle("Diagnostics", "Inspect the SDKMAN integration without changing your environment.")
+                }
+                ZephyrToolbarButton(
+                    label = if (state.diagnosticsExportInProgress) "Exporting…" else "Export support bundle",
+                    onClick = onExportDiagnostics,
+                    enabled = !state.diagnosticsExportInProgress,
+                )
+            }
+        }
         item {
             ZephyrPanel(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(metrics.panelPadding), verticalArrangement = Arrangement.spacedBy(4.dp)) {

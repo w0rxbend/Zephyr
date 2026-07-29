@@ -39,6 +39,7 @@ The first product slice delivers:
 17. Persistent protected-version pins with page-level controls and repository-enforced cleanup/uninstall blocking.
 18. SDKMAN service reachability state with explicit network requirements and offline preflight behavior.
 19. Independent SDKMAN integrity checks for scripts, directories, malformed entries, and broken or escaping default links.
+20. Redacted support-bundle export with platform/runtime details, SDKMAN health, integrity results, inventory counts, and session operations.
 
 ## Delivery log
 
@@ -52,7 +53,8 @@ The first product slice delivers:
 | SAFE-05 Protected versions | Delivered | Pins persist locally, appear across version/cleanup views, and are enforced inside repository cleanup and uninstall boundaries. |
 | SAFE-06 Offline awareness | Delivered | Toolbar, status bar, Overview, and Diagnostics show reachability; network operations preflight while local mutations remain available offline. |
 | SAFE-07 SDKMAN integrity check | Delivered | Diagnostics independently reports required scripts, candidate storage, malformed entries, version entries, and default-link safety. |
-| SAFE-08 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
+| SAFE-08 Exportable diagnostics | Delivered | Diagnostics writes a collision-safe support report while redacting user-home and custom SDKMAN paths by default. |
+| FLOW-01 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
 
 ## Groomed feature backlog
 

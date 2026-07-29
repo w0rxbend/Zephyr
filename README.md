@@ -42,7 +42,7 @@ Zephyr uses user-facing labels instead of SDKMAN's internal "candidate" term:
 - **Browse JDKs** — SDKMAN's remote Java catalog.
 - **Browse SDKs** — all other remote SDKMAN candidates.
 - **Local-Only Versions** — orphan review and an explicit rescan workflow.
-- **Diagnostics** — read-only SDKMAN installation, metadata, and updater health.
+- **Diagnostics** — SDKMAN installation, connectivity, integrity health, and redacted support-bundle export.
 - **Operation History** — searchable session journal with timestamps, command fields, outcomes, and CSV export.
 - **Settings** — persisted theme, information density, and SDKMAN-path privacy controls.
 - **About** — application version, runtime integration, project links, and license.
@@ -140,6 +140,13 @@ Diagnostics independently checks:
 - Broken `current` links and links that escape their candidate directory.
 
 The Overview health panel summarizes failures, while Diagnostics preserves every individual result and can rerun the checks without modifying SDKMAN.
+
+### Support bundles
+
+- Diagnostics exports a collision-safe text report to `~/Downloads` when available, falling back to the user home directory.
+- The report includes Zephyr, operating-system, and Java versions; SDKMAN and network state; inventory counts; individual integrity results; and the current session operation journal.
+- The user home and custom `SDKMAN_DIR` are replaced with `<redacted-path>` throughout the report by default.
+- Export does not run SDKMAN commands or include candidate metadata, command output, environment variables, or file contents.
 
 ### Appearance and desktop behavior
 

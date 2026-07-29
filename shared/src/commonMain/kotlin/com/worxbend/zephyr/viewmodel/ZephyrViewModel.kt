@@ -1,7 +1,9 @@
 package com.worxbend.zephyr.viewmodel
 
+import com.worxbend.zephyr.data.DiagnosticsExporter
 import com.worxbend.zephyr.data.OperationJournalExporter
 import com.worxbend.zephyr.data.SdkmanRepository
+import com.worxbend.zephyr.data.createDiagnosticsExporter
 import com.worxbend.zephyr.data.createOperationJournalExporter
 import com.worxbend.zephyr.data.currentEpochMillis
 import com.worxbend.zephyr.domain.Candidate
@@ -12,6 +14,7 @@ import com.worxbend.zephyr.domain.ConnectivityState
 import com.worxbend.zephyr.domain.ConnectivityStatus
 import com.worxbend.zephyr.domain.DiskImpactEstimate
 import com.worxbend.zephyr.domain.DiskImpactKind
+import com.worxbend.zephyr.domain.DiagnosticsSnapshot
 import com.worxbend.zephyr.domain.EstimateConfidence
 import com.worxbend.zephyr.domain.IntegrityCheck
 import com.worxbend.zephyr.domain.OperationJournalEntry
@@ -72,6 +75,7 @@ sealed interface ZephyrUiState {
         val transactionPreviewLoading: Boolean = false,
         val operationJournal: List<OperationJournalEntry> = emptyList(),
         val journalExportInProgress: Boolean = false,
+        val diagnosticsExportInProgress: Boolean = false,
         val protectedVersions: Set<ProtectedVersion> = emptySet(),
         val connectivityStatus: ConnectivityStatus = ConnectivityStatus(ConnectivityState.Unknown),
         val integrityChecks: List<IntegrityCheck> = emptyList(),
@@ -82,6 +86,7 @@ class ZephyrViewModel(
     private val repository: SdkmanRepository,
     dispatcher: CoroutineDispatcher = Dispatchers.Default,
     private val journalExporter: OperationJournalExporter = createOperationJournalExporter(),
+    private val diagnosticsExporter: DiagnosticsExporter = createDiagnosticsExporter(),
     private val clock: () -> Long = ::currentEpochMillis,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
@@ -344,6 +349,44 @@ class ZephyrViewModel(
                     it.copy(
                         journalExportInProgress = false,
                         errorMessage = "Operation journal export failed: ${failure.message}",
+                    )
+                }
+            }
+        }
+    }
+
+    fun exportDiagnostics() {
+        val ready = _state.value as? ZephyrUiState.Ready ?: return
+        val snapshot = DiagnosticsSnapshot(
+            generatedAtEpochMillis = clock(),
+            sdkmanStatus = ready.sdkmanStatus,
+            connectivityStatus = ready.connectivityStatus,
+            integrityChecks = ready.integrityChecks,
+            installedCandidates = ready.candidates.size,
+            installedVersions = ready.candidates.sumOf { candidate ->
+                candidate.installedVersions.count { it.isInstalled }
+            },
+            localOnlyVersions = ready.candidates.sumOf { it.localOnlyVersionCount },
+            protectedVersions = ready.protectedVersions.size,
+            journal = ready.operationJournal,
+        )
+        scope.launch {
+            _state.updateReady { it.copy(diagnosticsExportInProgress = true, errorMessage = null) }
+            runCatchingCancellable {
+                diagnosticsExporter.export(snapshot)
+            }.onSuccess { result ->
+                _state.updateReady {
+                    it.copy(
+                        diagnosticsExportInProgress = false,
+                        lastOutcome = "Exported a redacted support bundle to ${result.path}.",
+                    )
+                }
+            }.onFailure { failure ->
+                ZephyrLogger.warn("Support bundle export failed.", failure)
+                _state.updateReady {
+                    it.copy(
+                        diagnosticsExportInProgress = false,
+                        errorMessage = "Support bundle export failed: ${failure.message}",
                     )
                 }
             }
@@ -749,4 +792,5 @@ private fun ZephyrUiState.Ready.hasActiveOperation(): Boolean =
         localOnlyScanInProgress ||
         detailLoadingCandidate != null ||
         journalExportInProgress ||
+        diagnosticsExportInProgress ||
         transactionPreviewLoading

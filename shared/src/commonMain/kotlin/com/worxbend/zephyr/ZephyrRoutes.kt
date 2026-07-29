@@ -85,7 +85,11 @@ internal fun Content(
                 onOpen = { viewModel.navigate(ZephyrRoute.SdkDetail(it.name)) },
             )
             ZephyrRoute.LocalOnly -> LocalOnlyScreen(state, viewModel::navigate, viewModel::scanLocalOnly, onClean)
-            ZephyrRoute.Diagnostics -> DiagnosticsScreen(state, viewModel::refreshIntegrity)
+            ZephyrRoute.Diagnostics -> DiagnosticsScreen(
+                state,
+                viewModel::refreshIntegrity,
+                viewModel::exportDiagnostics,
+            )
             ZephyrRoute.History -> OperationHistoryScreen(state, viewModel)
             ZephyrRoute.Settings -> SettingsScreen(settings, onSettingsChange)
             ZephyrRoute.About -> AboutScreen(state)

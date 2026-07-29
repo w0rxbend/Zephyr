@@ -475,6 +475,7 @@ private fun ZephyrUiState.Ready.busyLabel(): String? =
         isCatalogLoading -> "Loading SDKMAN catalog"
         detailLoadingCandidate != null -> "Loading package details"
         journalExportInProgress -> "Exporting operation journal"
+        diagnosticsExportInProgress -> "Exporting support bundle"
         transactionPreviewLoading -> "Calculating disk impact"
         isRefreshing -> "Refreshing SDKMAN state"
         else -> null
