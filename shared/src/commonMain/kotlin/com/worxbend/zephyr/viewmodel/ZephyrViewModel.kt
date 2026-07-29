@@ -78,6 +78,8 @@ sealed interface ZephyrUiState {
         val previousRoute: ZephyrRoute?,
         val candidates: List<Candidate>,
         val catalog: List<CandidateCatalogItem>,
+        val catalogCachedAtEpochMillis: Long? = null,
+        val catalogIsCached: Boolean = false,
         val selectedCandidate: Candidate?,
         val isRefreshing: Boolean,
         val isCatalogLoading: Boolean,
@@ -134,6 +136,7 @@ class ZephyrViewModel(
                     val version = repository.cliVersion()
                     val status = detected.copy(cliVersion = version)
                     val candidates = repository.installedCandidates()
+                    val cachedCatalog = repository.cachedCatalog()
                     val protectedVersions = loadProtectedVersions()
                     val integrityChecks = loadIntegrityChecks()
                     _state.value = ZephyrUiState.Ready(
@@ -141,7 +144,9 @@ class ZephyrViewModel(
                         route = ZephyrRoute.Overview,
                         previousRoute = null,
                         candidates = candidates,
-                        catalog = emptyList(),
+                        catalog = cachedCatalog?.items.orEmpty().withInstalledCandidates(candidates),
+                        catalogCachedAtEpochMillis = cachedCatalog?.cachedAtEpochMillis,
+                        catalogIsCached = cachedCatalog != null,
                         selectedCandidate = null,
                         isRefreshing = false,
                         isCatalogLoading = false,
@@ -158,12 +163,16 @@ class ZephyrViewModel(
                 runCatchingCancellable {
                     val detected = repository.detect()
                     if (detected.isInstalled) {
+                        val candidates = repository.installedCandidates()
+                        val cachedCatalog = repository.cachedCatalog()
                         _state.value = ZephyrUiState.Ready(
                             sdkmanStatus = detected.copy(cliVersion = repository.cliVersion()),
                             route = ZephyrRoute.BrowseSdks,
                             previousRoute = null,
-                            candidates = repository.installedCandidates(),
-                            catalog = emptyList(),
+                            candidates = candidates,
+                            catalog = cachedCatalog?.items.orEmpty().withInstalledCandidates(candidates),
+                            catalogCachedAtEpochMillis = cachedCatalog?.cachedAtEpochMillis,
+                            catalogIsCached = cachedCatalog != null,
                             selectedCandidate = null,
                             isRefreshing = false,
                             isCatalogLoading = false,
@@ -498,6 +507,8 @@ class ZephyrViewModel(
                 it.copy(
                     sdkmanStatus = it.sdkmanStatus.copy(metadataStatus = metadataStatus),
                     catalog = catalog,
+                    catalogCachedAtEpochMillis = null,
+                    catalogIsCached = false,
                     isCatalogLoading = false,
                     lastOutcome = if (scheduled) {
                         "Scheduled metadata refresh completed. Loaded ${catalog.size} packages."
@@ -718,19 +729,38 @@ class ZephyrViewModel(
 
     private fun ensureCatalog() {
         val ready = _state.value as? ZephyrUiState.Ready ?: return
-        if (ready.catalog.isNotEmpty()) return
+        if (ready.catalog.isNotEmpty() && !ready.catalogIsCached) return
         launchQueuedOperation {
-            if ((_state.value as? ZephyrUiState.Ready)?.catalog?.isNotEmpty() == true) return@launchQueuedOperation
+            val current = _state.value as? ZephyrUiState.Ready ?: return@launchQueuedOperation
+            if (current.catalog.isNotEmpty() && !current.catalogIsCached) return@launchQueuedOperation
             _state.updateReady { it.copy(isCatalogLoading = true) }
             if (!checkOnline()) {
-                fail("Catalog loading requires the SDKMAN service, but Zephyr is offline.")
+                if (current.catalogIsCached && current.catalog.isNotEmpty()) {
+                    _state.updateReady {
+                        it.copy(
+                            isCatalogLoading = false,
+                            errorMessage = null,
+                            lastOutcome = "Showing cached candidate metadata while offline.",
+                        )
+                    }
+                } else {
+                    fail("Catalog loading requires the SDKMAN service, but Zephyr is offline.")
+                }
                 return@launchQueuedOperation
             }
             runCatchingCancellable {
                 val catalog = retryRead(RetryableReadOperation.CandidateCatalog) {
                     repository.catalog(refreshMetadata = true)
                 }
-                _state.updateReady { it.copy(catalog = catalog, isCatalogLoading = false, lastOutcome = "Loaded ${catalog.size} SDKMAN packages.") }
+                _state.updateReady {
+                    it.copy(
+                        catalog = catalog,
+                        catalogCachedAtEpochMillis = null,
+                        catalogIsCached = false,
+                        isCatalogLoading = false,
+                        lastOutcome = "Loaded ${catalog.size} SDKMAN packages.",
+                    )
+                }
             }.onFailure {
                 ZephyrLogger.warn("Catalog load failed.", it)
                 fail("Catalog load failed: ${it.message}")

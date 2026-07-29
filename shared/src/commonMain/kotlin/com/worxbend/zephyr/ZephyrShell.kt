@@ -59,6 +59,7 @@ import com.worxbend.zephyr.domain.SdkmanTransaction
 import com.worxbend.zephyr.domain.formatByteSize
 import com.worxbend.zephyr.domain.copyableCommand
 import com.worxbend.zephyr.domain.requiresNetwork
+import com.worxbend.zephyr.data.currentEpochMillis
 import com.worxbend.zephyr.settings.AppSettings
 import com.worxbend.zephyr.settings.MetadataRefreshSchedule
 import com.worxbend.zephyr.settings.recordRecentCandidate
@@ -697,6 +698,14 @@ private fun WorkbenchStatusBar(
                 Text("•", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(
                     "Retrying ${retry.operation.label} (${retry.nextAttempt}/${retry.maximumAttempts})",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.tertiary,
+                )
+            }
+            state.catalogCachedAtEpochMillis?.takeIf { state.catalogIsCached }?.let { cachedAt ->
+                Text("•", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    "Cached catalog: ${candidateCacheAgeLabel(cachedAt, currentEpochMillis())}",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.tertiary,
                 )

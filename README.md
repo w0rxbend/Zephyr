@@ -148,6 +148,12 @@ Navigation is grouped into Workspace, Discover, Maintenance, and application sec
 - The status bar shows the queued read and next attempt while retrying, then clears it on success or terminal failure.
 - The retry API accepts only typed read operations; installs, default changes, removals, cleanup, metadata writes, and self-update execute once and remain user-controlled.
 
+### Offline catalog cache
+
+- Successful SDKMAN catalog loads persist a versioned metadata cache under the platform cache directory.
+- Startup hydrates Browse from that cache before network access; offline refresh keeps cached results usable instead of replacing them with an empty error state.
+- Browse headers and the status bar distinguish cached from live metadata and show a stable human-readable cache age.
+
 ### Local-only cleanup grace
 
 - Settings provides opt-in Off, 7-day, 30-day, and 90-day review thresholds.

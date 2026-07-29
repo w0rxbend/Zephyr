@@ -17,6 +17,7 @@ interface SdkmanRepository {
     suspend fun cliVersion(): String?
     suspend fun installedCandidates(): List<Candidate>
     suspend fun catalog(refreshMetadata: Boolean = false): List<CandidateCatalogItem>
+    suspend fun cachedCatalog(): CandidateMetadataCache? = null
     suspend fun versions(candidate: String): List<CandidateVersion>
     suspend fun mergedCandidate(candidate: String): Candidate?
     suspend fun checkConnectivity(): ConnectivityStatus
@@ -31,5 +32,10 @@ interface SdkmanRepository {
     suspend fun setDefault(candidate: String, version: String): CommandOutcome
     suspend fun cleanLocalOnly(candidate: String, versions: List<String>): CommandOutcome
 }
+
+data class CandidateMetadataCache(
+    val cachedAtEpochMillis: Long,
+    val items: List<CandidateCatalogItem>,
+)
 
 expect fun createSdkmanRepository(): SdkmanRepository

@@ -97,6 +97,7 @@ internal fun Content(
             )
             ZephyrRoute.BrowseSdks -> BrowseScreen(
                 title = "Browse SDKs",
+                subtitle = state.catalogFreshnessDescription(),
                 items = state.catalog.filter { it.kind == CandidateKind.Sdk },
                 loading = state.isCatalogLoading,
                 favoriteCandidates = settings.favoriteCandidates,
@@ -142,6 +143,12 @@ internal fun Content(
         }
     }
 }
+
+private fun ZephyrUiState.Ready.catalogFreshnessDescription(): String =
+    catalogCachedAtEpochMillis
+        ?.takeIf { catalogIsCached }
+        ?.let { "Cached metadata (${candidateCacheAgeLabel(it, currentEpochMillis())}). Refresh to check upstream." }
+        ?: if (isCatalogLoading) "Refreshing SDKMAN metadata." else "Live SDKMAN metadata."
 
 @Composable
 private fun InstalledJdkScreen(
@@ -292,6 +299,7 @@ private fun InstalledSdksScreen(
 @Composable
 private fun BrowseScreen(
     title: String,
+    subtitle: String,
     items: List<CandidateCatalogItem>,
     loading: Boolean,
     favoriteCandidates: Set<String>,
@@ -321,7 +329,7 @@ private fun BrowseScreen(
                 .thenBy { it.displayName.lowercase() },
         )
     Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxSize()) {
-        PageTitle(title, "Explore ${items.size} SDKMAN package(s), then inspect available versions.")
+        PageTitle(title, "$subtitle Explore ${items.size} SDKMAN package(s), then inspect available versions.")
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -417,7 +425,10 @@ private fun BrowseScreen(
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxSize()) {
-        PageTitle("Browse JDKs", "SDKMAN JDK versions. ${jdkPackage?.installedVersions?.size ?: 0} version(s) loaded.")
+        PageTitle(
+            "Browse JDKs",
+            "${state.catalogFreshnessDescription()} ${jdkPackage?.installedVersions?.size ?: 0} version(s) loaded.",
+        )
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(10.dp),

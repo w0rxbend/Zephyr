@@ -101,7 +101,8 @@ The first product slice delivers:
 | AUTO-06 Snapshot restore plan | Delivered | Imported snapshots become typed install/default previews, run sequentially with per-step results, and recalculate unfinished work for safe resume. |
 | AUTO-07 Operation notifications | Delivered | Configurable path-free desktop notices report long-running or all reviewed operation completions once per journal entry. |
 | AUTO-08 Retry queue | Delivered | Typed installed/catalog/detail/integrity reads retry twice with visible bounded backoff, while every mutation remains single-attempt and user-controlled. |
-| ECO-01 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
+| ECO-01 Candidate metadata cache | Delivered | Versioned catalog metadata persists in the platform cache, hydrates Browse offline, refreshes online, and exposes cached/live state plus age. |
+| ECO-02 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
 
 ## Groomed feature backlog
 

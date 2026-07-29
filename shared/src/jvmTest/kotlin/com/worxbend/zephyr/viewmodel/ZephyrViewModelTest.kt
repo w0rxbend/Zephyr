@@ -1,6 +1,7 @@
 package com.worxbend.zephyr.viewmodel
 
 import com.worxbend.zephyr.data.DiagnosticsExporter
+import com.worxbend.zephyr.data.CandidateMetadataCache
 import com.worxbend.zephyr.data.OperationJournalExporter
 import com.worxbend.zephyr.data.SdkmanRepository
 import com.worxbend.zephyr.domain.Candidate
@@ -65,6 +66,37 @@ class ZephyrViewModelTest {
         viewModel.navigate(ZephyrRoute.BrowseSdks)
 
         assertEquals(listOf(true), repository.catalogRefreshRequests)
+        viewModel.close()
+    }
+
+    @Test
+    fun cachedCatalogRemainsBrowsableOfflineWithItsTimestamp() {
+        val cachedItem = CandidateCatalogItem(
+            name = "gradle",
+            displayName = "Gradle",
+            stableVersion = "8.14",
+            description = null,
+            websiteUrl = "https://gradle.org",
+            kind = CandidateKind.Sdk,
+            isInstalled = false,
+        )
+        val repository = FakeSdkmanRepository(
+            cachedCatalog = CandidateMetadataCache(123_456L, listOf(cachedItem)),
+            connectivity = ConnectivityStatus(ConnectivityState.Offline),
+        )
+        val viewModel = ZephyrViewModel(repository, testScope())
+
+        val loaded = assertIs<ZephyrUiState.Ready>(viewModel.state.value)
+        assertEquals(listOf(cachedItem), loaded.catalog)
+        assertTrue(loaded.catalogIsCached)
+        assertEquals(123_456L, loaded.catalogCachedAtEpochMillis)
+
+        viewModel.navigate(ZephyrRoute.BrowseSdks)
+
+        val offline = assertIs<ZephyrUiState.Ready>(viewModel.state.value)
+        assertEquals(listOf(cachedItem), offline.catalog)
+        assertFalse(offline.isCatalogLoading)
+        assertEquals(0, repository.catalogCalls)
         viewModel.close()
     }
 
@@ -548,6 +580,7 @@ private fun remoteCandidate(name: String, kind: CandidateKind = CandidateKind.Sd
 
 private class FakeSdkmanRepository(
     private val catalogFailure: Throwable? = null,
+    private val cachedCatalog: CandidateMetadataCache? = null,
     private var catalogFailuresBeforeSuccess: Int = 0,
     private val selfUpdateFailure: Throwable? = null,
     private val remoteDetail: Candidate? = null,
@@ -594,6 +627,8 @@ private class FakeSdkmanRepository(
         }
         return emptyList()
     }
+
+    override suspend fun cachedCatalog(): CandidateMetadataCache? = cachedCatalog
 
     override suspend fun versions(candidate: String): List<CandidateVersion> = emptyList()
 

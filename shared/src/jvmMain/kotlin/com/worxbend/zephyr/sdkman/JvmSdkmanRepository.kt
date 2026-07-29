@@ -38,6 +38,7 @@ class JvmSdkmanRepository(
     private val sdkmanHomeResolver: () -> Path = ::defaultSdkmanHome,
     private val protectedVersionStore: ProtectedVersionStore = InMemoryProtectedVersionStore(),
     private val connectivityProbe: suspend () -> Boolean = ::probeSdkmanService,
+    private val candidateCacheStore: CandidateMetadataCacheStore = NoOpCandidateMetadataCacheStore,
     private val commandRunnerFactory: (Path) -> SdkmanCommandRunner,
 ) : SdkmanRepository {
     private var sdkmanHome: Path? = null
@@ -131,8 +132,14 @@ class JvmSdkmanRepository(
             ZephyrLogger.warn(message)
             throw IllegalStateException(message)
         }
-        return parsed.also { catalogCache = it }
+        return parsed.also {
+            catalogCache = it
+            candidateCacheStore.save(it)
+        }
     }
+
+    override suspend fun cachedCatalog(): com.worxbend.zephyr.data.CandidateMetadataCache? =
+        candidateCacheStore.load()
 
     override suspend fun versions(candidate: String): List<CandidateVersion> {
         validateCandidate(candidate)
