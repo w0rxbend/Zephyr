@@ -38,6 +38,7 @@ The first product slice delivers:
 16. Filesystem-backed disk-impact summaries in transaction previews, including exact reclaimable bytes and evidence-labeled install estimates.
 17. Persistent protected-version pins with page-level controls and repository-enforced cleanup/uninstall blocking.
 18. SDKMAN service reachability state with explicit network requirements and offline preflight behavior.
+19. Independent SDKMAN integrity checks for scripts, directories, malformed entries, and broken or escaping default links.
 
 ## Delivery log
 
@@ -50,7 +51,8 @@ The first product slice delivers:
 | SAFE-04 Disk-impact estimate | Delivered | Previews show exact removable bytes, median-based install estimates, confidence, evidence, and current free space. |
 | SAFE-05 Protected versions | Delivered | Pins persist locally, appear across version/cleanup views, and are enforced inside repository cleanup and uninstall boundaries. |
 | SAFE-06 Offline awareness | Delivered | Toolbar, status bar, Overview, and Diagnostics show reachability; network operations preflight while local mutations remain available offline. |
-| SAFE-07 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
+| SAFE-07 SDKMAN integrity check | Delivered | Diagnostics independently reports required scripts, candidate storage, malformed entries, version entries, and default-link safety. |
+| SAFE-08 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
 
 ## Groomed feature backlog
 

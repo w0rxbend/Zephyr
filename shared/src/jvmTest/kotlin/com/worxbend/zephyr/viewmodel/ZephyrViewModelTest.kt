@@ -12,6 +12,9 @@ import com.worxbend.zephyr.domain.ConnectivityStatus
 import com.worxbend.zephyr.domain.DiskImpactEstimate
 import com.worxbend.zephyr.domain.DiskImpactKind
 import com.worxbend.zephyr.domain.EstimateConfidence
+import com.worxbend.zephyr.domain.IntegrityCheck
+import com.worxbend.zephyr.domain.IntegrityCheckId
+import com.worxbend.zephyr.domain.IntegrityStatus
 import com.worxbend.zephyr.domain.JournalExportResult
 import com.worxbend.zephyr.domain.OperationJournalEntry
 import com.worxbend.zephyr.domain.OperationStatus
@@ -39,6 +42,10 @@ class ZephyrViewModelTest {
 
         assertEquals(0, repository.catalogCalls)
         assertEquals(0, repository.metadataRefreshCalls)
+        assertEquals(
+            IntegrityStatus.Passed,
+            assertIs<ZephyrUiState.Ready>(viewModel.state.value).integrityChecks.single().status,
+        )
         viewModel.close()
     }
 
@@ -399,6 +406,16 @@ private class FakeSdkmanRepository(
     }
 
     override suspend fun checkConnectivity(): ConnectivityStatus = connectivity
+
+    override suspend fun integrityChecks(): List<IntegrityCheck> =
+        listOf(
+            IntegrityCheck(
+                IntegrityCheckId.RequiredScripts,
+                "Required scripts",
+                IntegrityStatus.Passed,
+                "Available",
+            ),
+        )
 
     override suspend fun estimateDiskImpact(transaction: SdkmanTransaction): DiskImpactEstimate =
         DiskImpactEstimate(

@@ -129,6 +129,18 @@ Every SDKMAN mutation is reviewed before execution:
 - Install, metadata, self-update, Browse, detail loading, and local-only scanning run an online preflight.
 - Default changes and uninstall remain available offline; cleanup requires connectivity because the repository re-verifies remote availability immediately before removal.
 
+### Integrity diagnostics
+
+Diagnostics independently checks:
+
+- Required SDKMAN initialization and command scripts.
+- Availability of the candidates directory.
+- Malformed, non-directory, or symlinked candidate entries.
+- Malformed, non-directory, or symlinked version entries.
+- Broken `current` links and links that escape their candidate directory.
+
+The Overview health panel summarizes failures, while Diagnostics preserves every individual result and can rerun the checks without modifying SDKMAN.
+
 ### Appearance and desktop behavior
 
 - JetBrains-inspired light and dark palettes with a restrained blue accent.

@@ -25,6 +25,8 @@ import androidx.compose.ui.unit.dp
 import com.worxbend.zephyr.domain.CandidateKind
 import com.worxbend.zephyr.domain.CandidateMetadataStatus
 import com.worxbend.zephyr.domain.ConnectivityState
+import com.worxbend.zephyr.domain.IntegrityCheck
+import com.worxbend.zephyr.domain.IntegrityStatus
 import com.worxbend.zephyr.domain.OperationJournalEntry
 import com.worxbend.zephyr.domain.OperationStatus
 import com.worxbend.zephyr.domain.RecoveryAction
@@ -111,6 +113,10 @@ internal fun OverviewScreen(
                     HealthRow("CLI version available", state.sdkmanStatus.cliVersion != null)
                     HealthRow("Default JDK configured", jdk?.defaultVersion != null)
                     HealthRow("No local-only versions", localOnly == 0)
+                    HealthRow(
+                        "SDKMAN integrity",
+                        state.integrityChecks.none { it.status == IntegrityStatus.Failed },
+                    )
                     ZephyrToolbarButton(
                         label = "Open diagnostics",
                         onClick = { viewModel.navigate(ZephyrRoute.Diagnostics) },
@@ -122,49 +128,106 @@ internal fun OverviewScreen(
 }
 
 @Composable
-internal fun DiagnosticsScreen(state: ZephyrUiState.Ready) {
+internal fun DiagnosticsScreen(
+    state: ZephyrUiState.Ready,
+    onRefreshIntegrity: () -> Unit,
+) {
     val metrics = LocalZephyrMetrics.current
-    Column(
+    LazyColumn(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(metrics.spacing * 2),
     ) {
-        PageTitle("Diagnostics", "Inspect the SDKMAN integration without changing your environment.")
-        ZephyrPanel(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(metrics.panelPadding), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                PanelHeading("Installation", "Local SDKMAN environment")
-                DiagnosticRow("SDKMAN home", state.sdkmanStatus.home ?: "Unavailable", state.sdkmanStatus.home != null)
-                DiagnosticRow("CLI version", sdkmanVersionLabel(state), state.sdkmanStatus.cliVersion != null)
-                DiagnosticRow(
-                    "SDKMAN service",
-                    state.connectivityStatus.state.label,
-                    state.connectivityStatus.state == ConnectivityState.Online,
-                )
-                DiagnosticRow("Installed candidates", state.candidates.size.toString(), true)
-                DiagnosticRow(
-                    "Persisted default JDK",
-                    state.candidates.firstOrNull { it.name == "java" }?.defaultVersion ?: "Not configured",
-                    state.candidates.firstOrNull { it.name == "java" }?.defaultVersion != null,
-                )
+        item { PageTitle("Diagnostics", "Inspect the SDKMAN integration without changing your environment.") }
+        item {
+            ZephyrPanel(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(metrics.panelPadding), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    PanelHeading("Installation", "Local SDKMAN environment")
+                    DiagnosticRow("SDKMAN home", state.sdkmanStatus.home ?: "Unavailable", state.sdkmanStatus.home != null)
+                    DiagnosticRow("CLI version", sdkmanVersionLabel(state), state.sdkmanStatus.cliVersion != null)
+                    DiagnosticRow(
+                        "SDKMAN service",
+                        state.connectivityStatus.state.label,
+                        state.connectivityStatus.state == ConnectivityState.Online,
+                    )
+                    DiagnosticRow("Installed candidates", state.candidates.size.toString(), true)
+                    DiagnosticRow(
+                        "Persisted default JDK",
+                        state.candidates.firstOrNull { it.name == "java" }?.defaultVersion ?: "Not configured",
+                        state.candidates.firstOrNull { it.name == "java" }?.defaultVersion != null,
+                    )
+                }
             }
         }
-        ZephyrPanel(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(metrics.panelPadding), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                PanelHeading("Remote metadata", "Catalog and updater state")
-                DiagnosticRow("Catalog packages", state.catalog.size.toString(), state.catalog.isNotEmpty())
-                DiagnosticRow("Metadata", metadataShortLabel(state.sdkmanStatus.metadataStatus), state.sdkmanStatus.metadataStatus !is CandidateMetadataStatus.Failed)
-                DiagnosticRow("SDKMAN update", selfUpdateShortLabel(state.sdkmanStatus.selfUpdateStatus), state.sdkmanStatus.selfUpdateStatus !is SdkmanSelfUpdateStatus.Failed)
-                DiagnosticRow(
-                    "Local-only findings",
-                    state.candidates.sumOf { it.localOnlyVersionCount }.toString(),
-                    state.candidates.none { it.hasLocalOnlyVersions },
-                )
+        item {
+            ZephyrPanel(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(metrics.panelPadding), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    PanelHeading("Remote metadata", "Catalog and updater state")
+                    DiagnosticRow("Catalog packages", state.catalog.size.toString(), state.catalog.isNotEmpty())
+                    DiagnosticRow("Metadata", metadataShortLabel(state.sdkmanStatus.metadataStatus), state.sdkmanStatus.metadataStatus !is CandidateMetadataStatus.Failed)
+                    DiagnosticRow("SDKMAN update", selfUpdateShortLabel(state.sdkmanStatus.selfUpdateStatus), state.sdkmanStatus.selfUpdateStatus !is SdkmanSelfUpdateStatus.Failed)
+                    DiagnosticRow(
+                        "Local-only findings",
+                        state.candidates.sumOf { it.localOnlyVersionCount }.toString(),
+                        state.candidates.none { it.hasLocalOnlyVersions },
+                    )
+                }
             }
         }
-        Text(
-            "Diagnostics are intentionally read-only. Refresh, metadata update, and cleanup actions remain explicit in the toolbar and package pages.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        item {
+            ZephyrPanel(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(metrics.panelPadding), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            PanelHeading("Integrity checks", "Filesystem and SDKMAN runtime boundaries")
+                        }
+                        ZephyrToolbarButton("Run again", onClick = onRefreshIntegrity, enabled = !state.isRefreshing)
+                    }
+                    if (state.integrityChecks.isEmpty()) {
+                        Text("Integrity checks are not available.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
+                        state.integrityChecks.forEach { check -> IntegrityCheckRow(check) }
+                    }
+                }
+            }
+        }
+        item {
+            Text(
+                "Diagnostics are read-only. Refresh, update, cleanup, and repair actions remain explicit elsewhere.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun IntegrityCheckRow(check: IntegrityCheck) {
+    val tone = when (check.status) {
+        IntegrityStatus.Passed -> StatusTone.Success
+        IntegrityStatus.Warning -> StatusTone.Warning
+        IntegrityStatus.Failed -> StatusTone.Error
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        StatusDot(tone, Modifier.padding(top = 6.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(check.title, fontWeight = FontWeight.Medium)
+                Badge(check.status.label)
+            }
+            Text(
+                check.detail,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 

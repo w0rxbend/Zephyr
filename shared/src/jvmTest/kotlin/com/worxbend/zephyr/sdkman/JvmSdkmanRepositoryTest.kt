@@ -4,6 +4,8 @@ import com.worxbend.zephyr.domain.DiskImpactKind
 import com.worxbend.zephyr.domain.EstimateConfidence
 import com.worxbend.zephyr.domain.ProtectedVersion
 import com.worxbend.zephyr.domain.ConnectivityState
+import com.worxbend.zephyr.domain.IntegrityCheckId
+import com.worxbend.zephyr.domain.IntegrityStatus
 import com.worxbend.zephyr.domain.SdkmanTransaction
 import okio.FileSystem
 import okio.Path
@@ -237,6 +239,41 @@ class JvmSdkmanRepositoryTest {
     }
 
     @Test
+    fun reportsIntegrityBoundariesIndependentlyAndRejectsEscapingCurrentLinks() = runBlocking {
+        val home = Files.createTempDirectory("zephyr-sdkman-test-").toString().toPath()
+        try {
+            createSdkmanHome(home)
+            val fileSystem = FileSystem.SYSTEM
+            REQUIRED_TEST_SCRIPTS.forEach { relative ->
+                val path = home / relative
+                fileSystem.createDirectories(path.parent!!)
+                fileSystem.write(path) { writeUtf8("# test") }
+            }
+            fileSystem.createDirectories(home / "candidates" / "invalid;candidate" / "1.0")
+            fileSystem.createDirectories(home / "candidates" / "java" / "invalid;version")
+            fileSystem.createDirectories(home / "outside" / "21.0.5-tem")
+            fileSystem.delete(home / "candidates" / "java" / "current")
+            fileSystem.createSymlink(
+                home / "candidates" / "java" / "current",
+                home / "outside" / "21.0.5-tem",
+            )
+            val repository = JvmSdkmanRepository(fileSystem, { home }) { RecordingRunner() }
+
+            val checks = repository.integrityChecks().associateBy { it.id }
+            val installed = repository.installedCandidates()
+
+            assertEquals(IntegrityStatus.Passed, checks[IntegrityCheckId.RequiredScripts]?.status)
+            assertEquals(IntegrityStatus.Passed, checks[IntegrityCheckId.CandidatesDirectory]?.status)
+            assertEquals(IntegrityStatus.Warning, checks[IntegrityCheckId.CandidateEntries]?.status)
+            assertEquals(IntegrityStatus.Warning, checks[IntegrityCheckId.VersionEntries]?.status)
+            assertEquals(IntegrityStatus.Failed, checks[IntegrityCheckId.DefaultLinks]?.status)
+            assertNull(installed.first { it.name == "java" }.defaultVersion)
+        } finally {
+            FileSystem.SYSTEM.deleteRecursively(home, mustExist = false)
+        }
+    }
+
+    @Test
     fun refusesCleanupWhenRemoteVersionsCannotBeVerified() = runBlocking {
         val home = Files.createTempDirectory("zephyr-sdkman-test-").toString().toPath()
         try {
@@ -295,6 +332,16 @@ class JvmSdkmanRepositoryTest {
     }
 
     private companion object {
+        val REQUIRED_TEST_SCRIPTS = listOf(
+            "src/sdkman-main.sh",
+            "src/sdkman-list.sh",
+            "src/sdkman-install.sh",
+            "src/sdkman-uninstall.sh",
+            "src/sdkman-default.sh",
+            "src/sdkman-update.sh",
+            "src/sdkman-selfupdate.sh",
+        )
+
         const val CATALOG_OUTPUT = """
             ================================================================================
             Available Candidates

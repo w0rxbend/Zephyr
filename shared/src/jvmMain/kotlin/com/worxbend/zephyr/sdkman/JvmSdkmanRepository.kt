@@ -10,6 +10,9 @@ import com.worxbend.zephyr.domain.ConnectivityStatus
 import com.worxbend.zephyr.domain.DiskImpactEstimate
 import com.worxbend.zephyr.domain.DiskImpactKind
 import com.worxbend.zephyr.domain.EstimateConfidence
+import com.worxbend.zephyr.domain.IntegrityCheck
+import com.worxbend.zephyr.domain.IntegrityCheckId
+import com.worxbend.zephyr.domain.IntegrityStatus
 import com.worxbend.zephyr.domain.ProtectedVersion
 import com.worxbend.zephyr.domain.SdkmanSelfUpdateStatus
 import com.worxbend.zephyr.domain.SdkmanStatus
@@ -210,6 +213,86 @@ class JvmSdkmanRepository(
                 detail = "SDKMAN service is not reachable from this session.",
             )
         }
+    }
+
+    override suspend fun integrityChecks(): List<IntegrityCheck> {
+        val sdkmanHome = home()
+        val candidatesPath = sdkmanHome / "candidates"
+        val missingScripts = REQUIRED_SDKMAN_SCRIPTS.filter { relative ->
+            fileSystem.metadataOrNull(sdkmanHome / relative)?.let { metadata ->
+                !metadata.isDirectory && metadata.symlinkTarget == null
+            } != true
+        }
+        val candidateEntries = fileSystem.listOrNull(candidatesPath).orEmpty()
+        val invalidCandidates = candidateEntries.filter { path ->
+            val metadata = fileSystem.metadataOrNull(path)
+            !isValidCandidate(path.name) || metadata?.isDirectory != true || metadata.symlinkTarget != null
+        }
+        val validCandidates = candidateEntries - invalidCandidates.toSet()
+        val invalidVersions = validCandidates.flatMap { candidatePath ->
+            fileSystem.listOrNull(candidatePath).orEmpty()
+                .filter { it.name != "current" }
+                .filter { versionPath ->
+                    val metadata = fileSystem.metadataOrNull(versionPath)
+                    !isValidVersion(versionPath.name) || metadata?.isDirectory != true || metadata.symlinkTarget != null
+                }
+                .map { "${candidatePath.name}/${it.name}" }
+        }
+        val invalidDefaultLinks = validCandidates.mapNotNull { candidatePath ->
+            val current = candidatePath / "current"
+            fileSystem.metadataOrNull(current)?.let {
+                candidatePath.name.takeIf { currentLinkTargetVersion(candidatePath, current) == null }
+            }
+        }
+
+        return listOf(
+            IntegrityCheck(
+                id = IntegrityCheckId.RequiredScripts,
+                title = "Required scripts",
+                status = if (missingScripts.isEmpty()) IntegrityStatus.Passed else IntegrityStatus.Failed,
+                detail = if (missingScripts.isEmpty()) {
+                    "${REQUIRED_SDKMAN_SCRIPTS.size} required SDKMAN scripts are present."
+                } else {
+                    "Missing or unsafe: ${missingScripts.joinToString()}."
+                },
+            ),
+            IntegrityCheck(
+                id = IntegrityCheckId.CandidatesDirectory,
+                title = "Candidates directory",
+                status = if (fileSystem.metadataOrNull(candidatesPath)?.isDirectory == true) {
+                    IntegrityStatus.Passed
+                } else {
+                    IntegrityStatus.Failed
+                },
+                detail = if (fileSystem.metadataOrNull(candidatesPath)?.isDirectory == true) {
+                    "The SDKMAN candidates directory is available."
+                } else {
+                    "The SDKMAN candidates directory is missing or unreadable."
+                },
+            ),
+            integrityEntryCheck(
+                id = IntegrityCheckId.CandidateEntries,
+                title = "Candidate entries",
+                invalid = invalidCandidates.map(Path::name),
+                successDetail = "${validCandidates.size} candidate director${if (validCandidates.size == 1) "y" else "ies"} passed validation.",
+            ),
+            integrityEntryCheck(
+                id = IntegrityCheckId.VersionEntries,
+                title = "Version entries",
+                invalid = invalidVersions,
+                successDetail = "Installed version directories use valid identifiers and do not escape through symlinks.",
+            ),
+            IntegrityCheck(
+                id = IntegrityCheckId.DefaultLinks,
+                title = "Default links",
+                status = if (invalidDefaultLinks.isEmpty()) IntegrityStatus.Passed else IntegrityStatus.Failed,
+                detail = if (invalidDefaultLinks.isEmpty()) {
+                    "Every current link resolves to a local version directory."
+                } else {
+                    "Broken or escaping current links: ${invalidDefaultLinks.take(MAX_INTEGRITY_DETAIL_ITEMS).joinToString()}."
+                },
+            ),
+        )
     }
 
     override suspend fun estimateDiskImpact(transaction: SdkmanTransaction): DiskImpactEstimate {
@@ -434,15 +517,23 @@ class JvmSdkmanRepository(
 
     private fun defaultVersionFor(candidate: String): String? {
         validateCandidate(candidate)
-        val currentPath = home() / "candidates" / candidate / "current"
-        val metadata = fileSystem.metadataOrNull(currentPath) ?: return null
-        val version = metadata.symlinkTarget?.name?.takeIf(::isValidVersion) ?: return null
-        val versionPath = home() / "candidates" / candidate / version
-        return version.takeIf {
-            fileSystem.metadataOrNull(versionPath)?.let { target ->
-                target.isDirectory && target.symlinkTarget == null
-            } == true
+        val candidatePath = home() / "candidates" / candidate
+        return currentLinkTargetVersion(candidatePath, candidatePath / "current")
+    }
+
+    private fun currentLinkTargetVersion(candidatePath: Path, currentPath: Path): String? {
+        val symlinkTarget = fileSystem.metadataOrNull(currentPath)?.symlinkTarget ?: return null
+        val candidateNio = java.nio.file.Path.of(candidatePath.toString()).toAbsolutePath().normalize()
+        val rawTarget = java.nio.file.Path.of(symlinkTarget.toString())
+        val resolvedTarget = if (rawTarget.isAbsolute) {
+            rawTarget.normalize()
+        } else {
+            java.nio.file.Path.of(currentPath.parent!!.toString()).resolve(rawTarget).normalize()
         }
+        if (resolvedTarget.parent != candidateNio) return null
+        val version = resolvedTarget.fileName?.toString()?.takeIf(::isValidVersion) ?: return null
+        val targetMetadata = fileSystem.metadataOrNull(candidatePath / version) ?: return null
+        return version.takeIf { targetMetadata.isDirectory && targetMetadata.symlinkTarget == null }
     }
 
     private fun locateHome(): Path = sdkmanHomeResolver()
@@ -495,6 +586,24 @@ private fun medianSize(sortedSizes: List<Long>): Long {
     }
 }
 
+private fun integrityEntryCheck(
+    id: IntegrityCheckId,
+    title: String,
+    invalid: List<String>,
+    successDetail: String,
+): IntegrityCheck =
+    IntegrityCheck(
+        id = id,
+        title = title,
+        status = if (invalid.isEmpty()) IntegrityStatus.Passed else IntegrityStatus.Warning,
+        detail = if (invalid.isEmpty()) {
+            successDetail
+        } else {
+            "Ignored ${invalid.size} malformed or symlinked entr${if (invalid.size == 1) "y" else "ies"}: " +
+                "${invalid.take(MAX_INTEGRITY_DETAIL_ITEMS).joinToString()}."
+        },
+    )
+
 private suspend fun probeSdkmanService(): Boolean = withContext(Dispatchers.IO) {
     Socket().use { socket ->
         socket.connect(InetSocketAddress(SDKMAN_SERVICE_HOST, HTTPS_PORT), CONNECTIVITY_TIMEOUT_MILLIS)
@@ -506,6 +615,17 @@ private const val MAX_DISK_ESTIMATE_ENTRIES = 1_000_000
 private const val SDKMAN_SERVICE_HOST = "api.sdkman.io"
 private const val HTTPS_PORT = 443
 private const val CONNECTIVITY_TIMEOUT_MILLIS = 1_500
+private const val MAX_INTEGRITY_DETAIL_ITEMS = 5
+private val REQUIRED_SDKMAN_SCRIPTS = listOf(
+    "bin/sdkman-init.sh",
+    "src/sdkman-main.sh",
+    "src/sdkman-list.sh",
+    "src/sdkman-install.sh",
+    "src/sdkman-uninstall.sh",
+    "src/sdkman-default.sh",
+    "src/sdkman-update.sh",
+    "src/sdkman-selfupdate.sh",
+)
 
 private fun defaultSdkmanHome(): Path {
     val configured = System.getenv("SDKMAN_DIR")?.takeIf { it.isNotBlank() }

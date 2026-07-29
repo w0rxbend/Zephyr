@@ -13,6 +13,7 @@ import com.worxbend.zephyr.domain.ConnectivityStatus
 import com.worxbend.zephyr.domain.DiskImpactEstimate
 import com.worxbend.zephyr.domain.DiskImpactKind
 import com.worxbend.zephyr.domain.EstimateConfidence
+import com.worxbend.zephyr.domain.IntegrityCheck
 import com.worxbend.zephyr.domain.OperationJournalEntry
 import com.worxbend.zephyr.domain.OperationStatus
 import com.worxbend.zephyr.domain.ProtectedVersion
@@ -73,6 +74,7 @@ sealed interface ZephyrUiState {
         val journalExportInProgress: Boolean = false,
         val protectedVersions: Set<ProtectedVersion> = emptySet(),
         val connectivityStatus: ConnectivityStatus = ConnectivityStatus(ConnectivityState.Unknown),
+        val integrityChecks: List<IntegrityCheck> = emptyList(),
     ) : ZephyrUiState
 }
 
@@ -108,6 +110,7 @@ class ZephyrViewModel(
                     val status = detected.copy(cliVersion = version)
                     val candidates = repository.installedCandidates()
                     val protectedVersions = loadProtectedVersions()
+                    val integrityChecks = loadIntegrityChecks()
                     _state.value = ZephyrUiState.Ready(
                         sdkmanStatus = status,
                         route = ZephyrRoute.Overview,
@@ -121,6 +124,7 @@ class ZephyrViewModel(
                         errorMessage = null,
                         lastOutcome = "Loaded ${candidates.size} installed SDKMAN package(s).",
                         protectedVersions = protectedVersions,
+                        integrityChecks = integrityChecks,
                     )
                     refreshConnectivity()
                 }
@@ -142,6 +146,7 @@ class ZephyrViewModel(
                             errorMessage = "SDKMAN catalog failed: ${failure.message}",
                             lastOutcome = null,
                             protectedVersions = loadProtectedVersions(),
+                            integrityChecks = loadIntegrityChecks(),
                         )
                         refreshConnectivity()
                     } else {
@@ -241,6 +246,27 @@ class ZephyrViewModel(
         }
         scope.launch {
             checkOnline()
+        }
+    }
+
+    fun refreshIntegrity() {
+        launchOperation {
+            if (!beginRefresh()) return@launchOperation
+            runCatchingCancellable {
+                repository.integrityChecks()
+            }.onSuccess { checks ->
+                _state.updateReady {
+                    it.copy(
+                        integrityChecks = checks,
+                        isRefreshing = false,
+                        lastOutcome = "SDKMAN integrity checks completed.",
+                        errorMessage = null,
+                    )
+                }
+            }.onFailure { failure ->
+                ZephyrLogger.warn("SDKMAN integrity checks failed.", failure)
+                fail("SDKMAN integrity checks failed: ${failure.message}")
+            }
         }
     }
 
@@ -648,6 +674,14 @@ class ZephyrViewModel(
         }.getOrElse { failure ->
             ZephyrLogger.warn("Unable to load protected SDKMAN versions.", failure)
             emptySet()
+        }
+
+    private suspend fun loadIntegrityChecks(): List<IntegrityCheck> =
+        runCatchingCancellable {
+            repository.integrityChecks()
+        }.getOrElse { failure ->
+            ZephyrLogger.warn("Unable to run SDKMAN integrity checks.", failure)
+            emptyList()
         }
 
     private suspend fun checkOnline(): Boolean {
