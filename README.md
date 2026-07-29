@@ -184,6 +184,12 @@ Navigation is grouped into Workspace, Discover, Maintenance, and application sec
 - Import updates only the portable allowlist and preserves machine-local cleanup observations.
 - SDKMAN paths, proxy coordinates and credentials, caches, operation history, and other machine state do not exist in the portable model.
 
+### Plugin-ready actions
+
+- Command-palette operations dispatch through a versioned `ZephyrActionRequest` contract instead of exposing ViewModel or Compose state.
+- Stable action IDs distinguish immediate reads from review-only operations; integrations cannot bypass typed transaction confirmation.
+- Unknown versions, IDs, parameters, control characters, and oversized values are rejected. The compatibility policy is documented in [`ACTION_CONTRACT.md`](ACTION_CONTRACT.md).
+
 ### Local-only cleanup grace
 
 - Settings provides opt-in Off, 7-day, 30-day, and 90-day review thresholds.

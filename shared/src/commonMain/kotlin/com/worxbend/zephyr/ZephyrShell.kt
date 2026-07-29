@@ -59,6 +59,9 @@ import com.worxbend.zephyr.domain.SdkmanTransaction
 import com.worxbend.zephyr.domain.formatByteSize
 import com.worxbend.zephyr.domain.copyableCommand
 import com.worxbend.zephyr.domain.requiresNetwork
+import com.worxbend.zephyr.actions.ZephyrActionHandler
+import com.worxbend.zephyr.actions.ZephyrActionIds
+import com.worxbend.zephyr.actions.validationError
 import com.worxbend.zephyr.data.currentEpochMillis
 import com.worxbend.zephyr.settings.AppSettings
 import com.worxbend.zephyr.settings.MetadataRefreshSchedule
@@ -74,6 +77,24 @@ import zephyr.shared.generated.resources.Res
 import zephyr.shared.generated.resources.ic_arrow_left
 import zephyr.shared.generated.resources.ic_moon
 import zephyr.shared.generated.resources.ic_sun
+
+private fun zephyrActionHandler(viewModel: ZephyrViewModel): ZephyrActionHandler =
+    ZephyrActionHandler { request ->
+        if (request.validationError() != null) {
+            false
+        } else {
+            when (request.id) {
+                ZephyrActionIds.RefreshInstalled -> viewModel.refreshInstalled()
+                ZephyrActionIds.ScanLocalOnly -> viewModel.scanLocalOnly()
+                ZephyrActionIds.RefreshConnectivity -> viewModel.refreshConnectivity()
+                ZephyrActionIds.RefreshMetadata ->
+                    viewModel.requestTransaction(SdkmanTransaction.RefreshMetadata)
+                ZephyrActionIds.CheckSdkmanUpdates ->
+                    viewModel.requestTransaction(SdkmanTransaction.SelfUpdate)
+            }
+            true
+        }
+    }
 
 @Composable
 internal fun ZephyrScreen(
@@ -99,17 +120,7 @@ internal fun ZephyrScreen(
         commandPaletteOpen = false
         when (target) {
             is GlobalSearchTarget.Navigate -> viewModel.navigate(target.route)
-            is GlobalSearchTarget.Execute -> when (target.action) {
-                GlobalSearchAction.RefreshInstalled -> viewModel.refreshInstalled()
-                GlobalSearchAction.ScanLocalOnly -> viewModel.scanLocalOnly()
-                GlobalSearchAction.RefreshConnectivity -> viewModel.refreshConnectivity()
-                GlobalSearchAction.RefreshMetadata -> {
-                    viewModel.requestTransaction(SdkmanTransaction.RefreshMetadata)
-                }
-                GlobalSearchAction.CheckUpdates -> {
-                    viewModel.requestTransaction(SdkmanTransaction.SelfUpdate)
-                }
-            }
+            is GlobalSearchTarget.Execute -> zephyrActionHandler(viewModel).handle(target.request)
         }
     }
 
@@ -181,13 +192,13 @@ internal fun ZephyrScreen(
                         }
                         event.key == Key.R && event.isShiftPressed -> {
                             activateSearchTarget(
-                                GlobalSearchTarget.Execute(GlobalSearchAction.RefreshInstalled),
+                                GlobalSearchTarget.Execute(com.worxbend.zephyr.actions.ZephyrActionRequest(ZephyrActionIds.RefreshInstalled)),
                             )
                             true
                         }
                         event.key == Key.L && event.isShiftPressed -> {
                             activateSearchTarget(
-                                GlobalSearchTarget.Execute(GlobalSearchAction.ScanLocalOnly),
+                                GlobalSearchTarget.Execute(com.worxbend.zephyr.actions.ZephyrActionRequest(ZephyrActionIds.ScanLocalOnly)),
                             )
                             true
                         }

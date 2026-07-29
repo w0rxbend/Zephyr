@@ -4,6 +4,8 @@ import com.worxbend.zephyr.domain.Candidate
 import com.worxbend.zephyr.domain.CandidateCatalogItem
 import com.worxbend.zephyr.domain.CandidateKind
 import com.worxbend.zephyr.viewmodel.ZephyrRoute
+import com.worxbend.zephyr.actions.ZephyrActionIds
+import com.worxbend.zephyr.actions.ZephyrActionRequest
 
 internal enum class GlobalSearchKind(val label: String) {
     Page("Page"),
@@ -13,17 +15,9 @@ internal enum class GlobalSearchKind(val label: String) {
     Action("Action"),
 }
 
-internal enum class GlobalSearchAction {
-    RefreshInstalled,
-    ScanLocalOnly,
-    RefreshConnectivity,
-    RefreshMetadata,
-    CheckUpdates,
-}
-
 internal sealed interface GlobalSearchTarget {
     data class Navigate(val route: ZephyrRoute) : GlobalSearchTarget
-    data class Execute(val action: GlobalSearchAction) : GlobalSearchTarget
+    data class Execute(val request: ZephyrActionRequest) : GlobalSearchTarget
 }
 
 internal data class GlobalSearchItem(
@@ -171,34 +165,34 @@ private fun MutableList<GlobalSearchItem>.addActionItems() {
         CommandDefinition(
             "Refresh local state",
             "Reload installed SDKMAN candidates",
-            GlobalSearchAction.RefreshInstalled,
+            ZephyrActionRequest(ZephyrActionIds.RefreshInstalled),
             "Ctrl/⌘ Shift R",
         ),
         CommandDefinition(
             "Scan local-only versions",
             "Audit installed versions against SDKMAN",
-            GlobalSearchAction.ScanLocalOnly,
+            ZephyrActionRequest(ZephyrActionIds.ScanLocalOnly),
             "Ctrl/⌘ Shift L",
         ),
         CommandDefinition(
             "Check connectivity",
             "Probe SDKMAN service reachability",
-            GlobalSearchAction.RefreshConnectivity,
+            ZephyrActionRequest(ZephyrActionIds.RefreshConnectivity),
         ),
         CommandDefinition(
             "Refresh SDKMAN metadata",
             "Review a remote metadata refresh",
-            GlobalSearchAction.RefreshMetadata,
+            ZephyrActionRequest(ZephyrActionIds.RefreshMetadata),
         ),
         CommandDefinition(
             "Check for SDKMAN updates",
             "Review an SDKMAN self-update check",
-            GlobalSearchAction.CheckUpdates,
+            ZephyrActionRequest(ZephyrActionIds.CheckSdkmanUpdates),
         ),
     ).forEach { definition ->
         add(
             GlobalSearchItem(
-                id = "action:${definition.action.name}",
+                id = "action:${definition.action.id}",
                 title = definition.title,
                 subtitle = definition.subtitle,
                 kind = GlobalSearchKind.Action,
@@ -212,7 +206,7 @@ private fun MutableList<GlobalSearchItem>.addActionItems() {
 private data class CommandDefinition(
     val title: String,
     val subtitle: String,
-    val action: GlobalSearchAction,
+    val action: ZephyrActionRequest,
     val shortcut: String? = null,
 )
 
