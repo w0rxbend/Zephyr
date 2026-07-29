@@ -693,6 +693,14 @@ private fun WorkbenchStatusBar(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            state.readRetryStatus?.let { retry ->
+                Text("•", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    "Retrying ${retry.operation.label} (${retry.nextAttempt}/${retry.maximumAttempts})",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.tertiary,
+                )
+            }
             Spacer(Modifier.weight(1f))
             if (showSdkmanHome) {
                 Text(

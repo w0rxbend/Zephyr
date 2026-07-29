@@ -69,6 +69,42 @@ class ZephyrViewModelTest {
     }
 
     @Test
+    fun transientCatalogReadIsRetriedUntilItSucceeds() {
+        val repository = FakeSdkmanRepository(catalogFailuresBeforeSuccess = 2)
+        val viewModel = ZephyrViewModel(
+            repository = repository,
+            dispatcher = testScope(),
+            readRetryDelaysMillis = listOf(0, 0),
+        )
+
+        viewModel.navigate(ZephyrRoute.BrowseSdks)
+
+        assertEquals(3, repository.catalogCalls)
+        assertEquals(null, assertIs<ZephyrUiState.Ready>(viewModel.state.value).readRetryStatus)
+        viewModel.close()
+    }
+
+    @Test
+    fun mutatingInstallIsNeverAutomaticallyRetried() {
+        val repository = FakeSdkmanRepository(installFailure = IllegalStateException("connection reset"))
+        val viewModel = ZephyrViewModel(
+            repository = repository,
+            dispatcher = testScope(),
+            readRetryDelaysMillis = listOf(0, 0),
+        )
+
+        viewModel.requestTransaction(SdkmanTransaction.Install("java", "21-tem"))
+        viewModel.confirmTransaction()
+
+        assertEquals(listOf("install:java:21-tem"), repository.mutationCalls)
+        assertEquals(
+            OperationStatus.Failed,
+            assertIs<ZephyrUiState.Ready>(viewModel.state.value).operationJournal.single().status,
+        )
+        viewModel.close()
+    }
+
+    @Test
     fun metadataFailureLeavesTheUiInteractiveAndReportsTheError() {
         val repository = FakeSdkmanRepository(catalogFailure = IllegalStateException("network unavailable"))
         val viewModel = ZephyrViewModel(repository, testScope())
@@ -512,6 +548,7 @@ private fun remoteCandidate(name: String, kind: CandidateKind = CandidateKind.Sd
 
 private class FakeSdkmanRepository(
     private val catalogFailure: Throwable? = null,
+    private var catalogFailuresBeforeSuccess: Int = 0,
     private val selfUpdateFailure: Throwable? = null,
     private val remoteDetail: Candidate? = null,
     private val installedCandidate: Candidate? = null,
@@ -521,6 +558,7 @@ private class FakeSdkmanRepository(
     private val detailGate: CompletableDeferred<Unit>? = null,
     private val detailCompleted: CompletableDeferred<Unit>? = null,
     private val installOutcome: CommandOutcome = CommandOutcome(true, "Installed"),
+    private val installFailure: Throwable? = null,
     private var connectivity: ConnectivityStatus = ConnectivityStatus(ConnectivityState.Online),
 ) : SdkmanRepository {
     var installedCandidatesCalls: Int = 0
@@ -550,6 +588,10 @@ private class FakeSdkmanRepository(
         catalogCalls += 1
         catalogRefreshRequests += refreshMetadata
         catalogFailure?.let { throw it }
+        if (catalogFailuresBeforeSuccess > 0) {
+            catalogFailuresBeforeSuccess -= 1
+            throw IllegalStateException("temporary catalog failure")
+        }
         return emptyList()
     }
 
@@ -609,6 +651,7 @@ private class FakeSdkmanRepository(
 
     override suspend fun install(candidate: String, version: String): CommandOutcome {
         mutationCalls += "install:$candidate:$version"
+        installFailure?.let { throw it }
         return installOutcome
     }
 

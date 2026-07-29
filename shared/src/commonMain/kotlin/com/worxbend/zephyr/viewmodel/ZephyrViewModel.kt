@@ -23,6 +23,8 @@ import com.worxbend.zephyr.domain.IntegrityCheck
 import com.worxbend.zephyr.domain.OperationJournalEntry
 import com.worxbend.zephyr.domain.OperationStatus
 import com.worxbend.zephyr.domain.ProtectedVersion
+import com.worxbend.zephyr.domain.ReadRetryStatus
+import com.worxbend.zephyr.domain.RetryableReadOperation
 import com.worxbend.zephyr.domain.SdkmanSelfUpdateStatus
 import com.worxbend.zephyr.domain.SdkmanCommandAction
 import com.worxbend.zephyr.domain.SdkmanStatus
@@ -40,6 +42,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -94,6 +97,7 @@ sealed interface ZephyrUiState {
         val protectedVersions: Set<ProtectedVersion> = emptySet(),
         val connectivityStatus: ConnectivityStatus = ConnectivityStatus(ConnectivityState.Unknown),
         val integrityChecks: List<IntegrityCheck> = emptyList(),
+        val readRetryStatus: ReadRetryStatus? = null,
     ) : ZephyrUiState
 }
 
@@ -102,6 +106,7 @@ class ZephyrViewModel(
     dispatcher: CoroutineDispatcher = Dispatchers.Default,
     private val journalExporter: OperationJournalExporter = createOperationJournalExporter(),
     private val diagnosticsExporter: DiagnosticsExporter = createDiagnosticsExporter(),
+    private val readRetryDelaysMillis: List<Long> = listOf(500L, 1_500L),
     private val clock: () -> Long = ::currentEpochMillis,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
@@ -274,7 +279,9 @@ class ZephyrViewModel(
         launchOperation {
             if (!beginRefresh()) return@launchOperation
             runCatchingCancellable {
-                repository.integrityChecks()
+                retryRead(RetryableReadOperation.IntegrityChecks) {
+                    repository.integrityChecks()
+                }
             }.onSuccess { checks ->
                 _state.updateReady {
                     it.copy(
@@ -438,7 +445,9 @@ class ZephyrViewModel(
         launchOperation {
             if (!beginRefresh()) return@launchOperation
             runCatchingCancellable {
-                val candidates = repository.installedCandidates()
+                val candidates = retryRead(RetryableReadOperation.InstalledCandidates) {
+                    repository.installedCandidates()
+                }
                 _state.updateReady {
                     it.copy(
                         candidates = candidates,
@@ -718,7 +727,9 @@ class ZephyrViewModel(
                 return@launchQueuedOperation
             }
             runCatchingCancellable {
-                val catalog = repository.catalog(refreshMetadata = true)
+                val catalog = retryRead(RetryableReadOperation.CandidateCatalog) {
+                    repository.catalog(refreshMetadata = true)
+                }
                 _state.updateReady { it.copy(catalog = catalog, isCatalogLoading = false, lastOutcome = "Loaded ${catalog.size} SDKMAN packages.") }
             }.onFailure {
                 ZephyrLogger.warn("Catalog load failed.", it)
@@ -744,7 +755,9 @@ class ZephyrViewModel(
                 return@launchQueuedOperation
             }
             runCatchingCancellable {
-                val merged = repository.mergedCandidate(candidate)
+                val merged = retryRead(RetryableReadOperation.CandidateDetail) {
+                    repository.mergedCandidate(candidate)
+                }
                 _state.updateReady {
                     if (it.displaysCandidate(candidate)) {
                         it.copy(
@@ -885,6 +898,36 @@ class ZephyrViewModel(
             ZephyrLogger.warn("Unable to run SDKMAN integrity checks.", failure)
             emptyList()
         }
+
+    private suspend fun <T> retryRead(
+        operation: RetryableReadOperation,
+        block: suspend () -> T,
+    ): T {
+        val maximumAttempts = readRetryDelaysMillis.size + 1
+        var lastFailure: Exception? = null
+        repeat(maximumAttempts) { index ->
+            try {
+                val result = block()
+                _state.updateReady { it.copy(readRetryStatus = null) }
+                return result
+            } catch (exception: CancellationException) {
+                throw exception
+            } catch (exception: Exception) {
+                lastFailure = exception
+                val nextAttempt = index + 2
+                if (nextAttempt <= maximumAttempts) {
+                    _state.updateReady {
+                        it.copy(
+                            readRetryStatus = ReadRetryStatus(operation, nextAttempt, maximumAttempts),
+                        )
+                    }
+                    delay(readRetryDelaysMillis[index])
+                }
+            }
+        }
+        _state.updateReady { it.copy(readRetryStatus = null) }
+        throw requireNotNull(lastFailure)
+    }
 
     private suspend fun checkOnline(): Boolean {
         val status = runCatchingCancellable {

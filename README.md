@@ -142,6 +142,12 @@ Navigation is grouped into Workspace, Discover, Maintenance, and application sec
 - The default long-operation threshold is ten seconds, and each completed journal entry is notified at most once.
 - Desktop text reports only status and reviewed step counts; command output and filesystem paths stay inside Zephyr.
 
+### Safe read retry queue
+
+- Failed installed-state, catalog, candidate-detail, and integrity reads retry twice with bounded backoff.
+- The status bar shows the queued read and next attempt while retrying, then clears it on success or terminal failure.
+- The retry API accepts only typed read operations; installs, default changes, removals, cleanup, metadata writes, and self-update execute once and remain user-controlled.
+
 ### Local-only cleanup grace
 
 - Settings provides opt-in Off, 7-day, 30-day, and 90-day review thresholds.
