@@ -18,3 +18,9 @@ data class BatchUninstallProgress(
     val status: BatchItemStatus = BatchItemStatus.Pending,
     val outcome: String? = null,
 )
+
+data class SnapshotRestoreProgress(
+    val command: PlannedSdkmanCommand,
+    val status: BatchItemStatus = BatchItemStatus.Pending,
+    val outcome: String? = null,
+)

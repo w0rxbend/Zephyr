@@ -23,6 +23,8 @@ import com.worxbend.zephyr.domain.JournalExportResult
 import com.worxbend.zephyr.domain.OperationJournalEntry
 import com.worxbend.zephyr.domain.OperationStatus
 import com.worxbend.zephyr.domain.ProtectedVersion
+import com.worxbend.zephyr.domain.PlannedSdkmanCommand
+import com.worxbend.zephyr.domain.SdkmanCommandAction
 import com.worxbend.zephyr.domain.SdkmanSelfUpdateStatus
 import com.worxbend.zephyr.domain.SdkmanStatus
 import com.worxbend.zephyr.domain.SdkmanTransaction
@@ -305,6 +307,33 @@ class ZephyrViewModelTest {
         assertEquals(
             listOf(BatchItemStatus.Succeeded, BatchItemStatus.Succeeded),
             ready.batchInstallProgress.map { it.status },
+        )
+        assertEquals(OperationStatus.Succeeded, ready.operationJournal.single().status)
+        viewModel.close()
+    }
+
+    @Test
+    fun snapshotRestoreRunsInstallsBeforeDefaultsAndRetainsProgress() {
+        val repository = FakeSdkmanRepository()
+        val viewModel = ZephyrViewModel(repository, testScope())
+        val transaction = SdkmanTransaction.SnapshotRestore(
+            listOf(
+                PlannedSdkmanCommand(SdkmanCommandAction.Install, "java", "21-tem"),
+                PlannedSdkmanCommand(SdkmanCommandAction.SetDefault, "java", "21-tem"),
+            ),
+        )
+
+        viewModel.requestTransaction(transaction)
+        viewModel.confirmTransaction()
+
+        assertEquals(
+            listOf("install:java:21-tem", "default:java:21-tem"),
+            repository.mutationCalls,
+        )
+        val ready = assertIs<ZephyrUiState.Ready>(viewModel.state.value)
+        assertEquals(
+            listOf(BatchItemStatus.Succeeded, BatchItemStatus.Succeeded),
+            ready.snapshotRestoreProgress.map { it.status },
         )
         assertEquals(OperationStatus.Succeeded, ready.operationJournal.single().status)
         viewModel.close()

@@ -98,7 +98,8 @@ The first product slice delivers:
 | AUTO-03 Cleanup policy | Delivered | Opt-in 7/30/90-day first-seen tracking flags overdue local-only versions while preserving manual review and repository safety checks. |
 | AUTO-04 CLI launch integration | Delivered | Installed versions can open in a supported terminal with `sdk use` scoped to that child shell and values passed outside shell text. |
 | AUTO-05 Environment snapshot | Delivered | A first-class workspace captures, compares, parses, and exports installed versions and defaults in a deterministic versioned format. |
-| AUTO-06 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
+| AUTO-06 Snapshot restore plan | Delivered | Imported snapshots become typed install/default previews, run sequentially with per-step results, and recalculate unfinished work for safe resume. |
+| AUTO-07 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
 
 ## Groomed feature backlog
 

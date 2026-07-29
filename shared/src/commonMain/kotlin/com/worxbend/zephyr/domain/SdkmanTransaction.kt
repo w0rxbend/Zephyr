@@ -55,6 +55,30 @@ sealed interface SdkmanTransaction {
         }
     }
 
+    data class SnapshotRestore(
+        override val commands: List<PlannedSdkmanCommand>,
+    ) : SdkmanTransaction {
+        init {
+            require(commands.isNotEmpty()) { "A snapshot restore requires at least one step." }
+            require(commands.all {
+                it.action == SdkmanCommandAction.Install || it.action == SdkmanCommandAction.SetDefault
+            }) { "Snapshot restore supports only install and default steps." }
+            commands.forEach {
+                requireValidTarget(
+                    requireNotNull(it.candidate) { "Snapshot restore candidate is required." },
+                    requireNotNull(it.version) { "Snapshot restore version is required." },
+                )
+            }
+            require(commands.distinct().size == commands.size) { "Snapshot restore steps must be unique." }
+        }
+
+        override val title = "Restore ${commands.size} snapshot step(s)?"
+        override val description =
+            "Zephyr will run missing installs first, then restore persisted defaults. Completed steps remain applied if a later step fails."
+        override val confirmationLabel = "Restore snapshot"
+        override val destructive = false
+    }
+
     data class Uninstall(
         val candidate: String,
         val version: String,

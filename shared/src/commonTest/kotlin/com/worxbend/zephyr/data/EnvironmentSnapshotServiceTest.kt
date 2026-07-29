@@ -3,6 +3,8 @@ package com.worxbend.zephyr.data
 import com.worxbend.zephyr.domain.Candidate
 import com.worxbend.zephyr.domain.CandidateKind
 import com.worxbend.zephyr.domain.CandidateVersion
+import com.worxbend.zephyr.domain.PlannedSdkmanCommand
+import com.worxbend.zephyr.domain.SdkmanCommandAction
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -42,6 +44,40 @@ class EnvironmentSnapshotServiceTest {
                 ),
             ),
             diffEnvironmentSnapshots(previous, current),
+        )
+    }
+
+    @Test
+    fun restorePlanInstallsMissingVersionsBeforeChangingDefaultsAndCanResume() {
+        val snapshot = captureEnvironmentSnapshot(
+            listOf(
+                candidate("java", "21-tem", "17-tem", "21-tem"),
+                candidate("gradle", "8.14", "8.14"),
+            ),
+            1,
+        )
+        val current = listOf(candidate("java", "17-tem", "17-tem"))
+
+        assertEquals(
+            listOf(
+                PlannedSdkmanCommand(SdkmanCommandAction.Install, "gradle", "8.14"),
+                PlannedSdkmanCommand(SdkmanCommandAction.Install, "java", "21-tem"),
+                PlannedSdkmanCommand(SdkmanCommandAction.SetDefault, "gradle", "8.14"),
+                PlannedSdkmanCommand(SdkmanCommandAction.SetDefault, "java", "21-tem"),
+            ),
+            planSnapshotRestore(snapshot, current),
+        )
+
+        val afterPartialRun = listOf(
+            candidate("java", "17-tem", "17-tem", "21-tem"),
+            candidate("gradle", null, "8.14"),
+        )
+        assertEquals(
+            listOf(
+                PlannedSdkmanCommand(SdkmanCommandAction.SetDefault, "gradle", "8.14"),
+                PlannedSdkmanCommand(SdkmanCommandAction.SetDefault, "java", "21-tem"),
+            ),
+            planSnapshotRestore(snapshot, afterPartialRun),
         )
     }
 

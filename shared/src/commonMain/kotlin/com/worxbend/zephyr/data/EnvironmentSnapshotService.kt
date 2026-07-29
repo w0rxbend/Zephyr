@@ -1,6 +1,8 @@
 package com.worxbend.zephyr.data
 
 import com.worxbend.zephyr.domain.Candidate
+import com.worxbend.zephyr.domain.PlannedSdkmanCommand
+import com.worxbend.zephyr.domain.SdkmanCommandAction
 import com.worxbend.zephyr.domain.isValidSdkmanCandidateName
 import com.worxbend.zephyr.domain.isValidSdkmanVersion
 
@@ -88,6 +90,39 @@ fun diffEnvironmentSnapshots(
         .filter(SnapshotCandidateDiff::hasChanges)
 }
 
+fun planSnapshotRestore(
+    snapshot: EnvironmentSnapshot,
+    currentCandidates: List<Candidate>,
+): List<PlannedSdkmanCommand> {
+    val currentByName = currentCandidates.associateBy(Candidate::name)
+    val installs = snapshot.candidates
+        .sortedBy(SnapshotCandidate::candidate)
+        .flatMap { target ->
+            val installed = currentByName[target.candidate]
+                ?.installedVersions
+                .orEmpty()
+                .filter { it.isInstalled }
+                .map { it.version }
+                .toSet()
+            target.installedVersions
+                .filterNot { it in installed }
+                .sorted()
+                .map { version ->
+                    PlannedSdkmanCommand(SdkmanCommandAction.Install, target.candidate, version)
+                }
+        }
+    val defaults = snapshot.candidates
+        .sortedBy(SnapshotCandidate::candidate)
+        .mapNotNull { target ->
+            target.defaultVersion
+                ?.takeIf { it != currentByName[target.candidate]?.defaultVersion }
+                ?.let { version ->
+                    PlannedSdkmanCommand(SdkmanCommandAction.SetDefault, target.candidate, version)
+                }
+        }
+    return installs + defaults
+}
+
 fun renderEnvironmentSnapshot(snapshot: EnvironmentSnapshot): String =
     buildString {
         appendLine("zephyr-environment-snapshot=${snapshot.schemaVersion}")
@@ -126,6 +161,9 @@ fun parseEnvironmentSnapshot(content: String): EnvironmentSnapshot {
             "Line ${index + 3}: invalid default version."
         }
         require(versions.all(::isValidSdkmanVersion)) { "Line ${index + 3}: invalid installed version." }
+        require(defaultVersion == null || defaultVersion in versions) {
+            "Line ${index + 3}: default version is not included in installed versions."
+        }
         SnapshotCandidate(candidate, defaultVersion, versions.distinct().sorted())
     }
     require(candidates.distinctBy(SnapshotCandidate::candidate).size == candidates.size) {

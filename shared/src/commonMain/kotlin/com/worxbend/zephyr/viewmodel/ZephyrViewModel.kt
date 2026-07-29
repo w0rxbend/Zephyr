@@ -24,8 +24,10 @@ import com.worxbend.zephyr.domain.OperationJournalEntry
 import com.worxbend.zephyr.domain.OperationStatus
 import com.worxbend.zephyr.domain.ProtectedVersion
 import com.worxbend.zephyr.domain.SdkmanSelfUpdateStatus
+import com.worxbend.zephyr.domain.SdkmanCommandAction
 import com.worxbend.zephyr.domain.SdkmanStatus
 import com.worxbend.zephyr.domain.SdkmanTransaction
+import com.worxbend.zephyr.domain.SnapshotRestoreProgress
 import com.worxbend.zephyr.domain.requiresNetwork
 import com.worxbend.zephyr.domain.withInstalledCandidates
 import com.worxbend.zephyr.logging.ZephyrLogger
@@ -88,6 +90,7 @@ sealed interface ZephyrUiState {
         val diagnosticsExportInProgress: Boolean = false,
         val batchInstallProgress: List<BatchInstallProgress> = emptyList(),
         val batchUninstallProgress: List<BatchUninstallProgress> = emptyList(),
+        val snapshotRestoreProgress: List<SnapshotRestoreProgress> = emptyList(),
         val protectedVersions: Set<ProtectedVersion> = emptySet(),
         val connectivityStatus: ConnectivityStatus = ConnectivityStatus(ConnectivityState.Unknown),
         val integrityChecks: List<IntegrityCheck> = emptyList(),
@@ -332,6 +335,7 @@ class ZephyrViewModel(
         when (transaction) {
             is SdkmanTransaction.Install -> install(transaction.candidate, transaction.version, journalId)
             is SdkmanTransaction.BatchInstall -> batchInstall(transaction, journalId)
+            is SdkmanTransaction.SnapshotRestore -> restoreSnapshot(transaction, journalId)
             is SdkmanTransaction.Uninstall -> uninstall(transaction.candidate, transaction.version, journalId)
             is SdkmanTransaction.BatchUninstall -> batchUninstall(transaction, journalId)
             is SdkmanTransaction.SetDefault -> setDefault(transaction.candidate, transaction.version, journalId)
@@ -646,6 +650,51 @@ class ZephyrViewModel(
         }
     }
 
+    private fun restoreSnapshot(transaction: SdkmanTransaction.SnapshotRestore, journalId: Long) {
+        launchOperation {
+            if (!beginRefresh()) return@launchOperation
+            var progress = transaction.commands.map { SnapshotRestoreProgress(it) }
+            _state.updateReady { it.copy(snapshotRestoreProgress = progress) }
+            transaction.commands.forEachIndexed { index, command ->
+                progress = progress.updateSnapshotRestoreItem(index, BatchItemStatus.Running)
+                _state.updateReady { it.copy(snapshotRestoreProgress = progress) }
+                val outcome = runCatchingCancellable {
+                    when (command.action) {
+                        SdkmanCommandAction.Install ->
+                            repository.install(requireNotNull(command.candidate), requireNotNull(command.version))
+                        SdkmanCommandAction.SetDefault ->
+                            repository.setDefault(requireNotNull(command.candidate), requireNotNull(command.version))
+                        else -> error("Unsupported snapshot restore action.")
+                    }
+                }.getOrElse { failure ->
+                    CommandOutcome(false, failure.message ?: "Snapshot restore step failed.")
+                }
+                progress = progress.updateSnapshotRestoreItem(
+                    index = index,
+                    status = if (outcome.success) BatchItemStatus.Succeeded else BatchItemStatus.Failed,
+                    outcome = outcome.message,
+                )
+                _state.updateReady { it.copy(snapshotRestoreProgress = progress) }
+            }
+            val candidates = runCatchingCancellable { repository.installedCandidates() }
+                .getOrElse { (_state.value as? ZephyrUiState.Ready)?.candidates.orEmpty() }
+            val succeeded = progress.count { it.status == BatchItemStatus.Succeeded }
+            val summary = "$succeeded of ${progress.size} snapshot restore steps succeeded."
+            val allSucceeded = succeeded == progress.size
+            completeJournalEntry(journalId, allSucceeded, summary)
+            _state.updateReady {
+                it.copy(
+                    candidates = candidates,
+                    catalog = it.catalog.withInstalledCandidates(candidates),
+                    snapshotRestoreProgress = progress,
+                    isRefreshing = false,
+                    lastOutcome = summary,
+                    errorMessage = if (allSucceeded) null else "$summary Review and resume the remaining plan.",
+                )
+            }
+        }
+    }
+
     fun uninstall(candidate: String, version: String, journalId: Long? = null) = mutate(journalId) {
         repository.uninstall(candidate, version)
     }
@@ -902,6 +951,15 @@ private fun List<BatchUninstallProgress>.updateBatchUninstallItem(
     status: BatchItemStatus,
     outcome: String? = null,
 ): List<BatchUninstallProgress> =
+    mapIndexed { itemIndex, item ->
+        if (itemIndex == index) item.copy(status = status, outcome = outcome) else item
+    }
+
+private fun List<SnapshotRestoreProgress>.updateSnapshotRestoreItem(
+    index: Int,
+    status: BatchItemStatus,
+    outcome: String? = null,
+): List<SnapshotRestoreProgress> =
     mapIndexed { itemIndex, item ->
         if (itemIndex == index) item.copy(status = status, outcome = outcome) else item
     }

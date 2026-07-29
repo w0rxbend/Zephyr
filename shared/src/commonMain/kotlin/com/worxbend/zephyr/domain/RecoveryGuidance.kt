@@ -41,6 +41,15 @@ fun SdkmanTransaction.recoveryGuidance(): RecoveryGuidance =
                 RecoveryAction.Retry,
             ),
         )
+        is SdkmanTransaction.SnapshotRestore -> RecoveryGuidance(
+            title = "The snapshot restore was incomplete",
+            steps = listOf(
+                "Keep successful installs and default changes in place.",
+                "Return to Environment Snapshot to recalculate the remaining steps from current local state.",
+                "Review the reduced transaction before resuming.",
+            ),
+            actions = listOf(RecoveryAction.RefreshInstalled, RecoveryAction.OpenDiagnostics),
+        )
         is SdkmanTransaction.Uninstall -> RecoveryGuidance(
             title = "The installed version was not removed",
             steps = listOf(

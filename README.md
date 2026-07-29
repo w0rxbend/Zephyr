@@ -153,6 +153,8 @@ Navigation is grouped into Workspace, Discover, Maintenance, and application sec
 - The Environment Snapshot workspace captures every installed SDKMAN version and persisted default.
 - Exports use a versioned, deterministic `.zephyr-snapshot` format with native save selection and explicit overwrite confirmation.
 - A session baseline exposes stable candidate-level differences in defaults and added or removed versions.
+- Imported snapshots produce a typed restore preview with missing installs ordered before default changes.
+- Restore runs sequentially and retains per-step results; importing the same snapshot again recalculates a smaller plan from the versions and defaults already completed.
 
 ### Favorites
 

@@ -38,6 +38,7 @@ import com.worxbend.zephyr.domain.InstallTarget
 import com.worxbend.zephyr.domain.OperationJournalEntry
 import com.worxbend.zephyr.domain.OperationStatus
 import com.worxbend.zephyr.domain.RecoveryAction
+import com.worxbend.zephyr.domain.SdkmanCommandAction
 import com.worxbend.zephyr.domain.SdkmanSelfUpdateStatus
 import com.worxbend.zephyr.domain.SdkmanTransaction
 import com.worxbend.zephyr.domain.displayNameFor
@@ -49,6 +50,7 @@ import com.worxbend.zephyr.data.captureEnvironmentSnapshot
 import com.worxbend.zephyr.data.createEnvironmentSnapshotService
 import com.worxbend.zephyr.data.currentEpochMillis
 import com.worxbend.zephyr.data.diffEnvironmentSnapshots
+import com.worxbend.zephyr.data.planSnapshotRestore
 import com.worxbend.zephyr.data.SdkmanRcDocument
 import com.worxbend.zephyr.data.createProjectToolchainService
 import com.worxbend.zephyr.settings.AppSettings
@@ -981,10 +983,13 @@ internal fun EnvironmentSnapshotScreen(
         captureEnvironmentSnapshot(state.candidates, currentEpochMillis())
     }
     var baseline by remember { mutableStateOf<com.worxbend.zephyr.data.EnvironmentSnapshot?>(null) }
+    var restoreSnapshot by remember { mutableStateOf<com.worxbend.zephyr.data.EnvironmentSnapshot?>(null) }
+    var choosingSnapshot by remember { mutableStateOf(false) }
     var exporting by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     val changes = baseline?.let { diffEnvironmentSnapshots(it, current) }.orEmpty()
+    val restorePlan = restoreSnapshot?.let { planSnapshotRestore(it, state.candidates) }.orEmpty()
     val versionCount = current.candidates.sumOf { it.installedVersions.size }
 
     Column(
@@ -1002,6 +1007,41 @@ internal fun EnvironmentSnapshotScreen(
                     "Capture installed SDKMAN versions and persisted defaults in a deterministic, portable file.",
                 )
             }
+            ZephyrToolbarButton(
+                label = if (choosingSnapshot) "Choosing…" else "Import restore…",
+                onClick = {
+                    scope.launch {
+                        choosingSnapshot = true
+                        error = null
+                        message = null
+                        runCatching { service.chooseAndRead() }
+                            .onSuccess { selected ->
+                                if (selected != null) {
+                                    restoreSnapshot = selected
+                                    message = "Loaded snapshot with ${selected.candidates.size} candidate(s)."
+                                }
+                            }
+                            .onFailure { failure ->
+                                error = failure.message ?: "Unable to read the environment snapshot."
+                            }
+                        choosingSnapshot = false
+                    }
+                },
+                enabled = !choosingSnapshot && !state.isRefreshing,
+            )
+            ZephyrToolbarButton(
+                label = when {
+                    restoreSnapshot == null -> "Review restore"
+                    restorePlan.isEmpty() -> "Already restored"
+                    state.snapshotRestoreProgress.any { it.status == BatchItemStatus.Failed } ->
+                        "Resume ${restorePlan.size} step(s)"
+                    else -> "Restore ${restorePlan.size} step(s)"
+                },
+                onClick = {
+                    viewModel.requestTransaction(SdkmanTransaction.SnapshotRestore(restorePlan))
+                },
+                enabled = restorePlan.isNotEmpty() && !state.isRefreshing,
+            )
             ZephyrToolbarButton(
                 label = "Capture baseline",
                 onClick = {
@@ -1035,6 +1075,49 @@ internal fun EnvironmentSnapshotScreen(
         }
         message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        restoreSnapshot?.let {
+            ZephyrPanel(Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(metrics.panelPadding),
+                    verticalArrangement = Arrangement.spacedBy(7.dp),
+                ) {
+                    PanelHeading(
+                        "Restore preview",
+                        if (restorePlan.isEmpty()) {
+                            "This environment already matches every version and default in the imported snapshot."
+                        } else {
+                            "${restorePlan.count { command -> command.action == SdkmanCommandAction.Install }} install(s) and " +
+                                "${restorePlan.count { command -> command.action == SdkmanCommandAction.SetDefault }} default change(s)"
+                        },
+                    )
+                    restorePlan.forEach { command ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Badge(command.action.label, BadgeTone.Primary)
+                            Text(
+                                "${command.candidate} ${command.version}",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                    }
+                    if (state.snapshotRestoreProgress.isNotEmpty()) {
+                        Text(
+                            "Last run: " + state.snapshotRestoreProgress
+                                .groupingBy { progress -> progress.status }
+                                .eachCount()
+                                .entries
+                                .sortedBy { entry -> entry.key.ordinal }
+                                .joinToString { entry -> "${entry.value} ${entry.key.label.lowercase()}" },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
         if (current.candidates.isEmpty()) {
             EmptyState(
                 "Nothing to capture",

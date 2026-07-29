@@ -15,6 +15,7 @@ import com.worxbend.zephyr.domain.IntegrityCheckId
 import com.worxbend.zephyr.domain.IntegrityStatus
 import com.worxbend.zephyr.domain.ProtectedVersion
 import com.worxbend.zephyr.domain.SdkmanSelfUpdateStatus
+import com.worxbend.zephyr.domain.SdkmanCommandAction
 import com.worxbend.zephyr.domain.SdkmanStatus
 import com.worxbend.zephyr.domain.SdkmanTransaction
 import com.worxbend.zephyr.domain.candidateKindFor
@@ -335,6 +336,41 @@ class JvmSdkmanRepository(
                         "Combined estimate for ${transaction.targets.size} sequential installs."
                     } else {
                         "One or more selected candidates have no local sibling size evidence."
+                    },
+                )
+            }
+            is SdkmanTransaction.SnapshotRestore -> {
+                val installCommands = transaction.commands.filter { it.action == SdkmanCommandAction.Install }
+                val estimates = installCommands.map { command ->
+                    estimateDiskImpact(
+                        SdkmanTransaction.Install(
+                            requireNotNull(command.candidate),
+                            requireNotNull(command.version),
+                        ),
+                    )
+                }
+                val knownBytes = estimates.mapNotNull { it.bytes }
+                DiskImpactEstimate(
+                    kind = when {
+                        estimates.isEmpty() -> DiskImpactKind.None
+                        knownBytes.size == estimates.size -> DiskImpactKind.Required
+                        else -> DiskImpactKind.Unknown
+                    },
+                    bytes = when {
+                        estimates.isEmpty() -> 0
+                        knownBytes.size == estimates.size -> knownBytes.sum()
+                        else -> null
+                    },
+                    availableBytes = available,
+                    confidence = when {
+                        estimates.isEmpty() -> EstimateConfidence.Exact
+                        knownBytes.size == estimates.size -> EstimateConfidence.Estimated
+                        else -> EstimateConfidence.Unknown
+                    },
+                    explanation = when {
+                        estimates.isEmpty() -> "Restoring persisted defaults does not add or remove versions."
+                        knownBytes.size == estimates.size -> "Combined estimate for ${installCommands.size} snapshot install(s)."
+                        else -> "One or more snapshot installs have no local sibling size evidence."
                     },
                 )
             }
