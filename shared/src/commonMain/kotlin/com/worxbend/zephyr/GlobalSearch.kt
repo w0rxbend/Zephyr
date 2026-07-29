@@ -127,6 +127,7 @@ private fun MutableList<GlobalSearchItem>.addPageItems() {
         Triple("Toolchain Profiles", ZephyrRoute.Profiles, null),
         Triple("Import .sdkmanrc", ZephyrRoute.ProjectImport, null),
         Triple("Export .sdkmanrc", ZephyrRoute.ProjectExport, null),
+        Triple("Candidate Comparison", ZephyrRoute.Comparison, null),
         Triple("Diagnostics", ZephyrRoute.Diagnostics, "Ctrl/⌘ Shift D"),
         Triple("Operation history", ZephyrRoute.History, null),
         Triple("Settings", ZephyrRoute.Settings, null),

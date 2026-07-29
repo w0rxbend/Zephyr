@@ -101,6 +101,7 @@ internal fun Content(
             ZephyrRoute.Profiles -> ToolchainProfilesScreen(state, viewModel, settings, onSettingsChange)
             ZephyrRoute.ProjectImport -> ProjectToolchainImportScreen(state)
             ZephyrRoute.ProjectExport -> ProjectToolchainExportScreen(state)
+            ZephyrRoute.Comparison -> CandidateComparisonScreen(state)
             ZephyrRoute.Diagnostics -> DiagnosticsScreen(
                 state,
                 viewModel::refreshIntegrity,

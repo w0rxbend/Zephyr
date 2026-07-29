@@ -931,6 +931,124 @@ internal fun ProjectToolchainExportScreen(state: ZephyrUiState.Ready) {
     }
 }
 
+@Composable
+internal fun CandidateComparisonScreen(state: ZephyrUiState.Ready) {
+    val metrics = LocalZephyrMetrics.current
+    val candidates = state.candidates.filter { it.installedVersions.size >= 2 }
+    val candidateKeys = candidates.map { it.name }
+    var candidateName by remember(candidateKeys) { mutableStateOf(candidateKeys.firstOrNull()) }
+    val candidate = candidates.firstOrNull { it.name == candidateName }
+    val versions = candidate?.installedVersions.orEmpty()
+    var selected by remember(candidateName, versions) {
+        mutableStateOf(versions.take(2).map { it.version }.toSet())
+    }
+
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(metrics.spacing * 2),
+    ) {
+        PageTitle(
+            "Candidate Comparison",
+            "Select two or more versions and compare runtime, availability, and safety status.",
+        )
+        if (candidates.isEmpty()) {
+            EmptyState(
+                "Nothing to compare",
+                "At least one candidate needs two loaded versions. Open Browse or a candidate detail first.",
+            )
+            return@Column
+        }
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            candidates.forEach { item ->
+                ZephyrToolbarButton(
+                    label = item.displayName,
+                    detail = item.installedVersions.size.toString(),
+                    onClick = { candidateName = item.name },
+                )
+            }
+        }
+        ZephyrPanel(Modifier.fillMaxWidth()) {
+            FlowRow(
+                modifier = Modifier.fillMaxWidth().padding(metrics.panelPadding),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                versions.forEach { version ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(
+                            checked = version.version in selected,
+                            onCheckedChange = { checked ->
+                                selected = if (checked) selected + version.version else selected - version.version
+                            },
+                        )
+                        Text(version.version)
+                    }
+                }
+            }
+        }
+        if (selected.size < 2) {
+            EmptyState(
+                "Select at least two versions",
+                "Comparison remains hidden until two or more versions are selected.",
+            )
+            return@Column
+        }
+        val rows = candidate?.comparisonRows(selected, state.protectedVersions).orEmpty()
+        ZephyrPanel(Modifier.fillMaxSize()) {
+            Column(Modifier.fillMaxSize().padding(metrics.panelPadding)) {
+                ComparisonTableRow(
+                    values = listOf("Version", "Vendor", "Installed", "Default", "Available", "Local-only", "Protected"),
+                    header = true,
+                )
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    items(rows, key = VersionComparisonRow::version) { row ->
+                        ComparisonTableRow(
+                            values = listOf(
+                                row.version,
+                                row.vendor,
+                                row.installed.yesNo(),
+                                row.default.yesNo(),
+                                row.available.yesNo(),
+                                row.localOnly.yesNo(),
+                                row.protected.yesNo(),
+                            ),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ComparisonTableRow(
+    values: List<String>,
+    header: Boolean = false,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 7.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        values.forEachIndexed { index, value ->
+            Text(
+                value,
+                modifier = Modifier.weight(if (index < 2) 1.45f else 1f),
+                style = if (header) MaterialTheme.typography.labelMedium else MaterialTheme.typography.bodySmall,
+                fontWeight = if (header || index == 0) FontWeight.SemiBold else FontWeight.Normal,
+            )
+        }
+    }
+}
+
+private fun Boolean.yesNo(): String = if (this) "Yes" else "No"
+
 private fun batchStatusTone(status: BatchItemStatus): BadgeTone =
     when (status) {
         BatchItemStatus.Succeeded -> BadgeTone.Success

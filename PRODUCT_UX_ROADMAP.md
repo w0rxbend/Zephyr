@@ -50,6 +50,7 @@ The first product slice delivers:
 28. Persistent named toolchain profiles captured from defaults, compared with local installs, and applicable through reviewed batches.
 29. Native `.sdkmanrc` import with strict parsing, ignored-line warnings, and a read-only local-state diff.
 30. Selectable `.sdkmanrc` export with deterministic output, native destination selection, and explicit overwrite confirmation.
+31. Multi-version candidate comparison with explicit vendor, install, default, availability, local-only, and protection columns.
 
 ## Delivery log
 
@@ -74,7 +75,8 @@ The first product slice delivers:
 | FLOW-08 Toolchain profiles | Delivered | Named default-version sets persist, report installed/missing targets, and install only missing entries through batch review. |
 | FLOW-09 Project toolchain import | Delivered | Native file selection parses candidate/version entries and classifies current, default-change, and install requirements without mutation. |
 | FLOW-10 Project toolchain export | Delivered | Selected defaults render deterministically and native saving never replaces an existing file without explicit confirmation. |
-| FLOW-11 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
+| FLOW-11 Candidate comparison | Delivered | Two or more loaded versions render in a compact table with vendor and explicit lifecycle/safety status. |
+| FLOW-12 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
 
 ## Groomed feature backlog
 

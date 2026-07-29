@@ -505,6 +505,12 @@ private fun WorkbenchSidebar(
         ZephyrSectionLabel("Discover", Modifier.padding(top = 7.dp))
         ZephyrNavigationItem("+J", "Browse JDKs", state.route is ZephyrRoute.BrowseJdks, { onNavigate(ZephyrRoute.BrowseJdks) })
         ZephyrNavigationItem("+S", "Browse SDKs", state.route is ZephyrRoute.BrowseSdks, { onNavigate(ZephyrRoute.BrowseSdks) })
+        ZephyrNavigationItem(
+            "≡",
+            "Compare versions",
+            state.route is ZephyrRoute.Comparison,
+            { onNavigate(ZephyrRoute.Comparison) },
+        )
 
         ZephyrSectionLabel("Maintenance", Modifier.padding(top = 7.dp))
         ZephyrNavigationItem(

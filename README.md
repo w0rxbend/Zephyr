@@ -124,6 +124,13 @@ Navigation is grouped into Workspace, Discover, Maintenance, and application sec
 - Cancelling either the save dialog or overwrite confirmation leaves the filesystem unchanged.
 - The success message displays only the destination file name and exported target count.
 
+### Candidate comparison
+
+- Compare any candidate that currently has at least two loaded versions.
+- Select two or more versions; the table stays hidden until the comparison is meaningful.
+- Columns cover identifier, JDK vendor, installed/default/available state, local-only status, and protection.
+- Every boolean status uses explicit Yes/No text, so the comparison never relies on color alone.
+
 ### Installed JDK screen
 
 Displays installed Java versions as cards. Supports:

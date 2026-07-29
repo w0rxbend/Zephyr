@@ -142,6 +142,7 @@ internal fun headerTitle(state: ZephyrUiState.Ready): String =
         ZephyrRoute.Profiles -> "Toolchain Profiles"
         ZephyrRoute.ProjectImport -> "Project Toolchain Import"
         ZephyrRoute.ProjectExport -> "Project Toolchain Export"
+        ZephyrRoute.Comparison -> "Candidate Comparison"
         is ZephyrRoute.JdkDetail -> state.selectedCandidate?.displayName ?: "JDK"
         is ZephyrRoute.SdkDetail -> state.selectedCandidate?.displayName ?: displayNameFor(route.candidate)
     }
