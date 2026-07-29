@@ -112,6 +112,12 @@ Navigation is grouped into Workspace, Discover, Maintenance, and application sec
 - Full and Reduced settings provide persisted explicit overrides.
 - Reduced mode replaces all indeterminate spinning progress indicators with a static, semantically labeled progress marker.
 
+### Guided empty states
+
+- Empty pages explain what is missing and provide a context-specific primary action.
+- Recovery paths include refreshing metadata, clearing filters, browsing candidates, choosing another file, capturing a profile, and selecting comparison rows.
+- The shared empty-state layout keeps guidance centered and readable at larger text scales.
+
 ### Favorites
 
 - Favorite any SDK from Browse SDKs; favorites sort before other matching catalog results.

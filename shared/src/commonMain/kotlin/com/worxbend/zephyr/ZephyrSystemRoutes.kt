@@ -573,6 +573,18 @@ internal fun ToolchainProfilesScreen(
     val currentDefaults = state.candidates.mapNotNull { candidate ->
         candidate.defaultVersion?.let { InstallTarget(candidate.name, it) }
     }
+    val saveProfile: (String) -> Unit = { name ->
+        val profile = ToolchainProfile(name.trim(), currentDefaults)
+        onSettingsChange {
+            it.copy(
+                toolchainProfiles = (
+                    it.toolchainProfiles.filterNot { existing ->
+                        existing.name.equals(profile.name, ignoreCase = true)
+                    } + profile
+                    ).sortedBy { saved -> saved.name.lowercase() },
+            )
+        }
+    }
 
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -607,16 +619,7 @@ internal fun ToolchainProfilesScreen(
                 ZephyrToolbarButton(
                     label = "Save profile",
                     onClick = {
-                        val profile = ToolchainProfile(profileName.trim(), currentDefaults)
-                        onSettingsChange {
-                            it.copy(
-                                toolchainProfiles = (
-                                    it.toolchainProfiles.filterNot { existing ->
-                                        existing.name.equals(profile.name, ignoreCase = true)
-                                    } + profile
-                                    ).sortedBy { saved -> saved.name.lowercase() },
-                            )
-                        }
+                        saveProfile(profileName)
                         profileName = ""
                     },
                     enabled = profileName.isNotBlank() && currentDefaults.isNotEmpty(),
@@ -626,8 +629,19 @@ internal fun ToolchainProfilesScreen(
         if (settings.toolchainProfiles.isEmpty()) {
             EmptyState(
                 "No profiles saved",
-                "Name the current defaults to create a reusable toolchain profile.",
-            )
+                if (currentDefaults.isEmpty()) {
+                    "Set at least one SDKMAN default before capturing a reusable toolchain profile."
+                } else {
+                    "Capture the ${currentDefaults.size} current default(s) as a reusable starting point."
+                },
+                if (currentDefaults.isEmpty()) "Browse SDKs" else "Save Current toolchain",
+            ) {
+                if (currentDefaults.isEmpty()) {
+                    viewModel.navigate(ZephyrRoute.BrowseSdks)
+                } else {
+                    saveProfile("Current toolchain")
+                }
+            }
             return@Column
         }
         LazyColumn(
@@ -709,6 +723,17 @@ internal fun ProjectToolchainImportScreen(
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val diff = document?.let { compareProjectToolchain(it.targets, state.candidates) }.orEmpty()
+    val chooseDocument: () -> Unit = choose@{
+        if (loading) return@choose
+        scope.launch {
+            loading = true
+            error = null
+            runCatching { service.chooseAndRead() }
+                .onSuccess { selected -> if (selected != null) document = selected }
+                .onFailure { failure -> error = failure.message ?: "Unable to read the selected file." }
+            loading = false
+        }
+    }
 
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -727,16 +752,7 @@ internal fun ProjectToolchainImportScreen(
             }
             ZephyrToolbarButton(
                 label = if (loading) "Choosing…" else "Choose .sdkmanrc",
-                onClick = {
-                    scope.launch {
-                        loading = true
-                        error = null
-                        runCatching { service.chooseAndRead() }
-                            .onSuccess { selected -> if (selected != null) document = selected }
-                            .onFailure { failure -> error = failure.message ?: "Unable to read the selected file." }
-                        loading = false
-                    }
-                },
+                onClick = chooseDocument,
                 enabled = !loading,
             )
         }
@@ -746,6 +762,8 @@ internal fun ProjectToolchainImportScreen(
             EmptyState(
                 "Choose a project toolchain",
                 "Zephyr reads candidate=version entries locally and shows a reviewable diff.",
+                "Choose .sdkmanrc",
+                chooseDocument,
             )
             return@Column
         }
@@ -779,7 +797,12 @@ internal fun ProjectToolchainImportScreen(
             }
         }
         if (diff.isEmpty()) {
-            EmptyState("No valid targets", "The selected file contains no valid candidate=version entries.")
+            EmptyState(
+                "No valid targets",
+                "The selected file contains no valid candidate=version entries.",
+                "Choose another file",
+                chooseDocument,
+            )
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
@@ -821,7 +844,10 @@ internal fun ProjectToolchainImportScreen(
 }
 
 @Composable
-internal fun ProjectToolchainExportScreen(state: ZephyrUiState.Ready) {
+internal fun ProjectToolchainExportScreen(
+    state: ZephyrUiState.Ready,
+    viewModel: ZephyrViewModel,
+) {
     val metrics = LocalZephyrMetrics.current
     val service = remember { createProjectToolchainService() }
     val scope = rememberCoroutineScope()
@@ -880,7 +906,10 @@ internal fun ProjectToolchainExportScreen(state: ZephyrUiState.Ready) {
             EmptyState(
                 "No defaults to export",
                 "Set a persisted default for at least one installed candidate first.",
-            )
+                "Browse SDKs",
+            ) {
+                viewModel.navigate(ZephyrRoute.BrowseSdks)
+            }
             return@Column
         }
         Row(
@@ -934,7 +963,10 @@ internal fun ProjectToolchainExportScreen(state: ZephyrUiState.Ready) {
 }
 
 @Composable
-internal fun CandidateComparisonScreen(state: ZephyrUiState.Ready) {
+internal fun CandidateComparisonScreen(
+    state: ZephyrUiState.Ready,
+    viewModel: ZephyrViewModel,
+) {
     val metrics = LocalZephyrMetrics.current
     val candidates = state.candidates.filter { it.installedVersions.size >= 2 }
     val candidateKeys = candidates.map { it.name }
@@ -957,7 +989,10 @@ internal fun CandidateComparisonScreen(state: ZephyrUiState.Ready) {
             EmptyState(
                 "Nothing to compare",
                 "At least one candidate needs two loaded versions. Open Browse or a candidate detail first.",
-            )
+                "Browse SDKs",
+            ) {
+                viewModel.navigate(ZephyrRoute.BrowseSdks)
+            }
             return@Column
         }
         FlowRow(
@@ -995,7 +1030,10 @@ internal fun CandidateComparisonScreen(state: ZephyrUiState.Ready) {
             EmptyState(
                 "Select at least two versions",
                 "Comparison remains hidden until two or more versions are selected.",
-            )
+                "Select first two",
+            ) {
+                selected = versions.take(2).map { it.version }.toSet()
+            }
             return@Column
         }
         val rows = candidate?.comparisonRows(selected, state.protectedVersions).orEmpty()
@@ -1218,6 +1256,8 @@ internal fun OperationHistoryScreen(
             state.operationJournal.isEmpty() -> EmptyState(
                 title = "No operations yet",
                 text = "Confirmed installs, default changes, removals, and maintenance actions will appear here.",
+                action = "Open Update Center",
+                onAction = { viewModel.navigate(ZephyrRoute.UpdateCenter) },
             )
             entries.isEmpty() -> EmptyState(
                 title = "No matching operations",

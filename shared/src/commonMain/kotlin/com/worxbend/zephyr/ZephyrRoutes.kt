@@ -107,14 +107,15 @@ internal fun Content(
                     }
                 },
                 onOpen = { viewModel.navigate(ZephyrRoute.SdkDetail(it.name)) },
+                onRefresh = { viewModel.requestTransaction(SdkmanTransaction.RefreshMetadata) },
             )
             ZephyrRoute.LocalOnly -> LocalOnlyScreen(state, viewModel::navigate, viewModel::scanLocalOnly, onClean)
             ZephyrRoute.UpdateCenter -> UpdateCenterScreen(state, viewModel)
             ZephyrRoute.BatchUninstall -> BatchUninstallScreen(state, viewModel)
             ZephyrRoute.Profiles -> ToolchainProfilesScreen(state, viewModel, settings, onSettingsChange)
             ZephyrRoute.ProjectImport -> ProjectToolchainImportScreen(state)
-            ZephyrRoute.ProjectExport -> ProjectToolchainExportScreen(state)
-            ZephyrRoute.Comparison -> CandidateComparisonScreen(state)
+            ZephyrRoute.ProjectExport -> ProjectToolchainExportScreen(state, viewModel)
+            ZephyrRoute.Comparison -> CandidateComparisonScreen(state, viewModel)
             ZephyrRoute.Diagnostics -> DiagnosticsScreen(
                 state,
                 viewModel::refreshIntegrity,
@@ -269,6 +270,7 @@ private fun BrowseScreen(
     onViewModeChange: (CollectionViewMode) -> Unit,
     onFavoriteChange: (String, Boolean) -> Unit,
     onOpen: (CandidateCatalogItem) -> Unit,
+    onRefresh: () -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
     var catalogFilter by remember { mutableStateOf(CatalogFilter.All) }
@@ -317,13 +319,22 @@ private fun BrowseScreen(
         }
         if (loading) ZephyrProgressIndicator()
         if (!loading && filtered.isEmpty()) {
+            val hasActiveFilters = query.isNotBlank() || catalogFilter != CatalogFilter.All
             EmptyState(
-                if (query.isBlank()) "Catalog Empty" else "No Results",
-                if (query.isBlank()) "No packages match the selected filter." else "No packages match \"$query\".",
-                "Reset filters",
+                if (hasActiveFilters) "No matching SDKs" else "SDK catalog unavailable",
+                if (hasActiveFilters) {
+                    "No SDKMAN packages match the active search and status filters."
+                } else {
+                    "Refresh SDKMAN metadata to load packages available for installation."
+                },
+                if (hasActiveFilters) "Clear filters" else "Refresh metadata",
             ) {
-                query = ""
-                catalogFilter = CatalogFilter.All
+                if (hasActiveFilters) {
+                    query = ""
+                    catalogFilter = CatalogFilter.All
+                } else {
+                    onRefresh()
+                }
             }
         } else if (!loading) {
             if (viewMode == CollectionViewMode.Cards) {
@@ -560,7 +571,13 @@ private fun BrowseScreen(
             return@Column
         }
         if (jdkPackage == null) {
-            EmptyState("JDK Versions Unavailable", "Refresh metadata and try Browse JDKs again.")
+            EmptyState(
+                "JDK versions unavailable",
+                "Refresh SDKMAN metadata to load Java distributions and versions.",
+                "Refresh metadata",
+            ) {
+                viewModel.requestTransaction(SdkmanTransaction.RefreshMetadata)
+            }
             return@Column
         }
 
@@ -777,11 +794,14 @@ private fun JdkDetailVersions(
         )
     }
     if (groups.isEmpty()) {
+        val filteredOut = query.isNotBlank()
         EmptyState(
-            if (query.isBlank()) "No versions available" else "No matching versions",
-            if (query.isBlank()) "SDKMAN did not return any JDK versions." else "No JDK versions match \"$query\".",
-            if (query.isBlank()) null else "Clear search",
-            if (query.isBlank()) null else ({ query = "" }),
+            if (filteredOut) "No matching versions" else "No versions available",
+            if (filteredOut) "No JDK versions match \"$query\"." else "Refresh SDKMAN metadata to load JDK versions.",
+            if (filteredOut) "Clear search" else "Refresh metadata",
+            if (filteredOut) ({ query = "" }) else ({
+                viewModel.requestTransaction(SdkmanTransaction.RefreshMetadata)
+            }),
         )
         return
     }
@@ -831,11 +851,14 @@ private fun VersionList(
         SearchField(query, { query = it }, "Search versions", Modifier.width(280.dp))
     }
     if (versions.isEmpty()) {
+        val filteredOut = query.isNotBlank()
         EmptyState(
-            if (query.isBlank()) "No versions available" else "No matching versions",
-            if (query.isBlank()) "SDKMAN did not return any versions for this candidate." else "No versions match \"$query\".",
-            if (query.isBlank()) null else "Clear search",
-            if (query.isBlank()) null else ({ query = "" }),
+            if (filteredOut) "No matching versions" else "No versions available",
+            if (filteredOut) "No versions match \"$query\"." else "Refresh SDKMAN metadata to load candidate versions.",
+            if (filteredOut) "Clear search" else "Refresh metadata",
+            if (filteredOut) ({ query = "" }) else ({
+                viewModel.requestTransaction(SdkmanTransaction.RefreshMetadata)
+            }),
         )
         return
     }

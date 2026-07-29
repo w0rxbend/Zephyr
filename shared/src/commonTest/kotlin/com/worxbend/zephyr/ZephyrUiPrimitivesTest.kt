@@ -35,6 +35,28 @@ import kotlin.test.Test
 class ZephyrUiPrimitivesTest {
     @OptIn(ExperimentalTestApi::class)
     @Test
+    fun emptyStateOffersAnInteractiveNextAction() = runComposeUiTest {
+        setContent {
+            ZephyrTheme(darkTheme = false) {
+                var acted by remember { mutableStateOf(false) }
+                Box {
+                    EmptyState(
+                        title = "Nothing here",
+                        text = "Take the next useful step.",
+                        action = "Continue",
+                        onAction = { acted = true },
+                    )
+                    Text(if (acted) "acted" else "waiting", Modifier.testTag("empty-action-state"))
+                }
+            }
+        }
+
+        onNodeWithText("Continue").performClick()
+        onNodeWithTag("empty-action-state").assertTextEquals("acted")
+    }
+
+    @OptIn(ExperimentalTestApi::class)
+    @Test
     fun reducedMotionUsesStaticProgressSemantics() = runComposeUiTest {
         setContent {
             ZephyrTheme(darkTheme = false, reducedMotion = true) {
