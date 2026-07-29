@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import com.worxbend.zephyr.domain.CandidateKind
 import com.worxbend.zephyr.domain.BatchItemStatus
 import com.worxbend.zephyr.domain.OperationStatus
+import com.worxbend.zephyr.data.createClipboardService
 import com.worxbend.zephyr.viewmodel.ZephyrUiState
 import org.jetbrains.compose.resources.painterResource
 import zephyr.shared.generated.resources.Res
@@ -113,6 +114,30 @@ internal fun SearchField(
             }
         },
     )
+}
+
+@Composable
+internal fun CopyTextButton(
+    text: String,
+    label: String = "Copy",
+    modifier: Modifier = Modifier,
+) {
+    val clipboard = remember { createClipboardService() }
+    var result by remember(text) { mutableStateOf<Boolean?>(null) }
+    TextButton(
+        onClick = {
+            result = clipboard.copy(text)
+        },
+        modifier = modifier,
+    ) {
+        Text(
+            when (result) {
+                true -> "Copied"
+                false -> "Copy failed"
+                null -> label
+            },
+        )
+    }
 }
 
 @Composable

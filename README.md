@@ -131,6 +131,13 @@ Navigation is grouped into Workspace, Discover, Maintenance, and application sec
 - Columns cover identifier, JDK vendor, installed/default/available state, local-only status, and protection.
 - Every boolean status uses explicit Yes/No text, so the comparison never relies on color alone.
 
+### Copy actions
+
+- Candidate cards and detail headers can copy SDKMAN keys; version cards and rows can copy exact identifiers.
+- Diagnostics rows can copy their currently visible values.
+- Every typed transaction command can copy its validated equivalent `sdk …` command from the preview.
+- Copy commands are rendered from typed fields rather than shell expressions, and clipboard success/failure is shown inline.
+
 ### Installed JDK screen
 
 Displays installed Java versions as cards. Supports:

@@ -1463,5 +1463,6 @@ private fun DiagnosticRow(label: String, value: String, healthy: Boolean) {
         StatusDot(if (healthy) StatusTone.Success else StatusTone.Warning)
         Text(label, modifier = Modifier.weight(1f))
         Text(value, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Medium)
+        CopyTextButton(value)
     }
 }

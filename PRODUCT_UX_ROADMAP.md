@@ -51,6 +51,7 @@ The first product slice delivers:
 29. Native `.sdkmanrc` import with strict parsing, ignored-line warnings, and a read-only local-state diff.
 30. Selectable `.sdkmanrc` export with deterministic output, native destination selection, and explicit overwrite confirmation.
 31. Multi-version candidate comparison with explicit vendor, install, default, availability, local-only, and protection columns.
+32. Shared native clipboard actions for candidate keys, versions, diagnostics, and validated equivalent SDKMAN commands.
 
 ## Delivery log
 
@@ -76,7 +77,8 @@ The first product slice delivers:
 | FLOW-09 Project toolchain import | Delivered | Native file selection parses candidate/version entries and classifies current, default-change, and install requirements without mutation. |
 | FLOW-10 Project toolchain export | Delivered | Selected defaults render deterministically and native saving never replaces an existing file without explicit confirmation. |
 | FLOW-11 Candidate comparison | Delivered | Two or more loaded versions render in a compact table with vendor and explicit lifecycle/safety status. |
-| FLOW-12 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
+| FLOW-12 Copy actions | Delivered | Technical identifiers, visible diagnostics, and typed equivalent commands expose reusable native clipboard actions with outcome feedback. |
+| UX-01 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
 
 ## Groomed feature backlog
 

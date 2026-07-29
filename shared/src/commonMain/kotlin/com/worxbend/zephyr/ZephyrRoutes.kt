@@ -505,6 +505,7 @@ private fun CandidateDetailScreen(
                 candidate?.websiteUrl?.let { LinkText(it) }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Badge("SDKMAN key: $candidateName")
+                    CopyTextButton(candidateName, "Copy key")
                     candidate?.defaultVersion?.let { Badge("Default: $it", BadgeTone.Primary) }
                     candidate?.installedVersions?.count { it.isInstalled }?.let { Badge("$it installed", BadgeTone.Success) }
                     if (candidate?.hasLocalOnlyVersions == true) {
@@ -674,6 +675,7 @@ private fun VersionRow(
                 if (isProtected) Badge("Protected", BadgeTone.Primary)
             }
         }
+        CopyTextButton(version.version, "Copy version")
         if (!version.isInstalled && version.isRemoteAvailable) {
             FilledTonalButton(
                 onClick = { viewModel.requestTransaction(SdkmanTransaction.Install(candidateName, version.version)) },

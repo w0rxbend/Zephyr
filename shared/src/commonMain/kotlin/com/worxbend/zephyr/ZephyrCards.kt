@@ -77,6 +77,7 @@ internal fun CandidateCard(
                     Text(candidate.displayName, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text("SDKMAN key: ${candidate.name}", style = MaterialTheme.typography.bodySmall)
                 }
+                CopyTextButton(candidate.name, "Copy key")
             }
             LinkText(
                 text = candidate.description ?: "${candidate.installedVersions.count { it.isInstalled }} installed version(s)",
@@ -127,6 +128,7 @@ internal fun PackageCard(
                     Text(item.displayName, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text("SDKMAN key: ${item.name}", style = MaterialTheme.typography.bodySmall)
                 }
+                CopyTextButton(item.name, "Copy key")
             }
             LinkText(item.description ?: "Available from SDKMAN.", Modifier.weight(1f, fill = false), maxLines = 2)
             Spacer(Modifier.weight(1f))
@@ -173,6 +175,7 @@ internal fun JdkVersionCard(
                     if (isProtected) Badge("Protected", BadgeTone.Primary)
                 }
             }
+            CopyTextButton(version.identifier, "Copy version")
             OutlinedButton(onClick = onToggleProtected) { Text(if (isProtected) "Unpin" else "Protect") }
             if (!version.isRemoteAvailable && version.identifier != default && !isProtected) {
                 OutlinedButton(onClick = onClean) { Text("Clean") }

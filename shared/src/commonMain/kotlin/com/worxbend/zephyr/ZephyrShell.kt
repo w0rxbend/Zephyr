@@ -52,6 +52,7 @@ import com.worxbend.zephyr.domain.DiskImpactKind
 import com.worxbend.zephyr.domain.PlannedSdkmanCommand
 import com.worxbend.zephyr.domain.SdkmanTransaction
 import com.worxbend.zephyr.domain.formatByteSize
+import com.worxbend.zephyr.domain.copyableCommand
 import com.worxbend.zephyr.domain.requiresNetwork
 import com.worxbend.zephyr.settings.AppSettings
 import com.worxbend.zephyr.settings.recordRecentCandidate
@@ -333,6 +334,7 @@ private fun PlannedCommandRow(
         Text(command.action.label, modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
         command.candidate?.let { Badge(it, BadgeTone.Primary) }
         command.version?.let { Badge(it) }
+        CopyTextButton(command.copyableCommand(), "Copy command")
     }
 }
 
