@@ -149,7 +149,14 @@ private fun String.withLinks(linkColor: Color): AnnotatedString {
 }
 
 @Composable
-internal fun AccordionHeader(title: String, count: Int, collapsed: Boolean, onClick: () -> Unit) {
+internal fun AccordionHeader(
+    title: String,
+    count: Int,
+    collapsed: Boolean,
+    onClick: () -> Unit,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
+) {
     val metrics = LocalZephyrMetrics.current
     Row(
         Modifier
@@ -165,6 +172,18 @@ internal fun AccordionHeader(title: String, count: Int, collapsed: Boolean, onCl
         Text(if (collapsed) "›" else "⌄", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
         Text(title, modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
         Badge("$count")
+        if (actionLabel != null && onAction != null) {
+            Text(
+                actionLabel,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(5.dp))
+                    .clickable(onClick = onAction)
+                    .padding(horizontal = 7.dp, vertical = 3.dp),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
     }
 }
 

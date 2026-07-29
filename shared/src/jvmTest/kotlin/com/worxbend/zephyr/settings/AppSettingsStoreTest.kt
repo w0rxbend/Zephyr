@@ -15,6 +15,8 @@ class AppSettingsStoreTest {
             themePreference = ThemePreference.Dark,
             uiDensity = UiDensity.Comfortable,
             showSdkmanHome = false,
+            favoriteCandidates = setOf("gradle", "kotlin"),
+            favoriteJdkVendors = setOf("tem", "zulu"),
         )
         val saved = CompletableDeferred<AppSettings>()
         val repository = FakeAppSettingsRepository(initial) { saved.complete(it) }
@@ -28,6 +30,26 @@ class AppSettingsStoreTest {
         assertEquals(updated, withTimeout(1_000) { saved.await() })
         assertEquals(updated, store.state.value)
         store.close()
+    }
+
+    @Test
+    fun jvmRepositoryPersistsFavoriteSets() = runBlocking {
+        val preferences = java.util.prefs.Preferences.userRoot()
+            .node("/com/worxbend/zephyr/tests/favorites-${System.nanoTime()}")
+        try {
+            val repository = JvmAppSettingsRepository(preferences)
+            val expected = AppSettings(
+                favoriteCandidates = setOf("kotlin", "gradle"),
+                favoriteJdkVendors = setOf("zulu", "tem"),
+            )
+
+            repository.save(expected)
+
+            assertEquals(expected, repository.load())
+        } finally {
+            preferences.removeNode()
+            preferences.flush()
+        }
     }
 }
 

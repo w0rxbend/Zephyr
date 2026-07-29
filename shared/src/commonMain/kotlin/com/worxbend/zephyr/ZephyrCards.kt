@@ -109,7 +109,12 @@ internal fun CandidateCard(
 }
 
 @Composable
-internal fun PackageCard(item: CandidateCatalogItem, onClick: () -> Unit) {
+internal fun PackageCard(
+    item: CandidateCatalogItem,
+    isFavorite: Boolean = false,
+    onToggleFavorite: (() -> Unit)? = null,
+    onClick: () -> Unit,
+) {
     val metrics = LocalZephyrMetrics.current
     ZephyrClickablePanel(
         onClick = onClick,
@@ -128,6 +133,14 @@ internal fun PackageCard(item: CandidateCatalogItem, onClick: () -> Unit) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 item.stableVersion?.let { Badge("Stable: $it", BadgeTone.Success) }
                 if (item.isInstalled) Badge("Installed", BadgeTone.Primary)
+                if (isFavorite) Badge("Favorite", BadgeTone.Primary)
+            }
+            if (onToggleFavorite != null) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    OutlinedButton(onClick = onToggleFavorite, modifier = Modifier.height(34.dp)) {
+                        Text(if (isFavorite) "★ Favorited" else "☆ Favorite")
+                    }
+                }
             }
         }
     }

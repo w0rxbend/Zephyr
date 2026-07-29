@@ -63,6 +63,13 @@ Navigation is grouped into Workspace, Discover, Maintenance, and application sec
 - Frequent commands also have direct shortcuts: `Ctrl/Cmd+Shift+R` refreshes local state, `Ctrl/Cmd+Shift+L` scans local-only versions, and `Ctrl/Cmd+Shift+D` opens Diagnostics.
 - Command shortcuts route through the same ViewModel operations as visible controls, preserving busy-state and transaction safeguards.
 
+### Favorites
+
+- Favorite any SDK from Browse SDKs; favorites sort before other matching catalog results.
+- In Browse JDKs, open **Favorite vendors** to switch to provider grouping, then pin or unpin a vendor from its group header.
+- Favorite SDKs and JDK vendors persist with the desktop preferences and appear as direct shortcuts on Overview.
+- Favorites store SDKMAN candidate keys and JDK provider codes only; they do not store machine paths or remote content.
+
 ### Installed JDK screen
 
 Displays installed Java versions as cards. Supports:

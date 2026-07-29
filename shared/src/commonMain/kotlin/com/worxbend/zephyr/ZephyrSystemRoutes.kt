@@ -32,6 +32,8 @@ import com.worxbend.zephyr.domain.OperationStatus
 import com.worxbend.zephyr.domain.RecoveryAction
 import com.worxbend.zephyr.domain.SdkmanSelfUpdateStatus
 import com.worxbend.zephyr.domain.SdkmanTransaction
+import com.worxbend.zephyr.domain.displayNameFor
+import com.worxbend.zephyr.domain.javaProviderName
 import com.worxbend.zephyr.domain.recoveryGuidance
 import com.worxbend.zephyr.domain.searchOperationJournal
 import com.worxbend.zephyr.data.formatLocalTimestamp
@@ -46,6 +48,7 @@ import com.worxbend.zephyr.viewmodel.ZephyrViewModel
 internal fun OverviewScreen(
     state: ZephyrUiState.Ready,
     viewModel: ZephyrViewModel,
+    settings: AppSettings,
 ) {
     val metrics = LocalZephyrMetrics.current
     val jdk = state.candidates.firstOrNull { it.kind == CandidateKind.Jdk }
@@ -121,6 +124,35 @@ internal fun OverviewScreen(
                         label = "Open diagnostics",
                         onClick = { viewModel.navigate(ZephyrRoute.Diagnostics) },
                     )
+                    PanelHeading("Favorites", "Pinned SDKs and JDK vendors")
+                    if (settings.favoriteCandidates.isEmpty() && settings.favoriteJdkVendors.isEmpty()) {
+                        Text(
+                            "Pin SDKs or JDK vendors from Browse to keep them close.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    } else {
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            settings.favoriteCandidates.sorted().forEach { candidate ->
+                                val label = state.catalog.firstOrNull { it.name == candidate }?.displayName
+                                    ?: state.candidates.firstOrNull { it.name == candidate }?.displayName
+                                    ?: displayNameFor(candidate)
+                                ZephyrToolbarButton(
+                                    label = "★ $label",
+                                    onClick = { viewModel.navigate(ZephyrRoute.SdkDetail(candidate)) },
+                                )
+                            }
+                            settings.favoriteJdkVendors.sorted().forEach { vendor ->
+                                ZephyrToolbarButton(
+                                    label = "★ ${javaProviderName(vendor) ?: vendor}",
+                                    onClick = { viewModel.navigate(ZephyrRoute.BrowseJdks) },
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }

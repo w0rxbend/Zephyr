@@ -43,6 +43,7 @@ import com.worxbend.zephyr.domain.Candidate
 import com.worxbend.zephyr.domain.CandidateCatalogItem
 import com.worxbend.zephyr.domain.CandidateKind
 import com.worxbend.zephyr.domain.CandidateVersion
+import com.worxbend.zephyr.domain.JavaVersion
 import com.worxbend.zephyr.domain.ProtectedVersion
 import com.worxbend.zephyr.domain.SdkmanTransaction
 import com.worxbend.zephyr.domain.displayNameFor
@@ -64,7 +65,7 @@ internal fun Content(
     val metrics = LocalZephyrMetrics.current
     Box(Modifier.fillMaxSize().padding(metrics.pagePadding)) {
         when (val route = state.route) {
-            ZephyrRoute.Overview -> OverviewScreen(state, viewModel)
+            ZephyrRoute.Overview -> OverviewScreen(state, viewModel, settings)
             ZephyrRoute.InstalledJdk -> InstalledJdkScreen(
                 state,
                 viewModel::navigate,
@@ -75,6 +76,8 @@ internal fun Content(
             ZephyrRoute.BrowseJdks -> BrowseScreen(
                 state = state,
                 viewModel = viewModel,
+                settings = settings,
+                onSettingsChange = onSettingsChange,
                 onClean = onClean,
                 onUninstall = onUninstall,
             )
@@ -82,6 +85,14 @@ internal fun Content(
                 title = "Browse SDKs",
                 items = state.catalog.filter { it.kind == CandidateKind.Sdk },
                 loading = state.isCatalogLoading,
+                favoriteCandidates = settings.favoriteCandidates,
+                onFavoriteChange = { candidate, favorite ->
+                    onSettingsChange {
+                        it.copy(
+                            favoriteCandidates = it.favoriteCandidates.updated(candidate, favorite),
+                        )
+                    }
+                },
                 onOpen = { viewModel.navigate(ZephyrRoute.SdkDetail(it.name)) },
             )
             ZephyrRoute.LocalOnly -> LocalOnlyScreen(state, viewModel::navigate, viewModel::scanLocalOnly, onClean)
@@ -215,22 +226,29 @@ private fun BrowseScreen(
     title: String,
     items: List<CandidateCatalogItem>,
     loading: Boolean,
+    favoriteCandidates: Set<String>,
+    onFavoriteChange: (String, Boolean) -> Unit,
     onOpen: (CandidateCatalogItem) -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
     var catalogFilter by remember { mutableStateOf(CatalogFilter.All) }
-    val filtered = items.filter { item ->
-        val matchesQuery = query.isBlank() ||
-            item.displayName.contains(query, ignoreCase = true) ||
-            item.name.contains(query, ignoreCase = true) ||
-            item.description.orEmpty().contains(query, ignoreCase = true)
-        val matchesFilter = when (catalogFilter) {
-            CatalogFilter.All -> true
-            CatalogFilter.Installed -> item.isInstalled
-            CatalogFilter.Available -> !item.isInstalled
+    val filtered = items
+        .filter { item ->
+            val matchesQuery = query.isBlank() ||
+                item.displayName.contains(query, ignoreCase = true) ||
+                item.name.contains(query, ignoreCase = true) ||
+                item.description.orEmpty().contains(query, ignoreCase = true)
+            val matchesFilter = when (catalogFilter) {
+                CatalogFilter.All -> true
+                CatalogFilter.Installed -> item.isInstalled
+                CatalogFilter.Available -> !item.isInstalled
+            }
+            matchesQuery && matchesFilter
         }
-        matchesQuery && matchesFilter
-    }
+        .sortedWith(
+            compareByDescending<CandidateCatalogItem> { it.name in favoriteCandidates }
+                .thenBy { it.displayName.lowercase() },
+        )
     Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxSize()) {
         PageTitle(title, "Explore ${items.size} SDKMAN package(s), then inspect available versions.")
         Row(
@@ -269,7 +287,13 @@ private fun BrowseScreen(
                 horizontalArrangement = Arrangement.spacedBy(spacing),
             ) {
                 items(filtered, key = { it.name }) { item ->
-                    PackageCard(item, onClick = { onOpen(item) })
+                    val favorite = item.name in favoriteCandidates
+                    PackageCard(
+                        item = item,
+                        isFavorite = favorite,
+                        onToggleFavorite = { onFavoriteChange(item.name, !favorite) },
+                        onClick = { onOpen(item) },
+                    )
                 }
             }
         }
@@ -280,6 +304,8 @@ private fun BrowseScreen(
 private fun BrowseScreen(
     state: ZephyrUiState.Ready,
     viewModel: ZephyrViewModel,
+    settings: AppSettings,
+    onSettingsChange: ((AppSettings) -> AppSettings) -> Unit,
     onClean: (String, List<String>) -> Unit,
     onUninstall: (String, String) -> Unit,
 ) {
@@ -302,6 +328,11 @@ private fun BrowseScreen(
                 label = JavaVersionGrouping::label,
                 onSelected = { grouping = it },
             )
+            ZephyrToolbarButton(
+                label = "Favorite vendors",
+                detail = settings.favoriteJdkVendors.size.takeIf { it > 0 }?.toString(),
+                onClick = { grouping = JavaVersionGrouping.Provider },
+            )
         }
 
         if (state.detailLoadingCandidate == "java" && jdkPackage == null) {
@@ -321,6 +352,15 @@ private fun BrowseScreen(
             return@Column
         }
         val groups = filteredVersions.groupBy(grouping)
+        val orderedGroups = if (grouping == JavaVersionGrouping.Provider) {
+            groups.entries.sortedWith(
+                compareByDescending<Map.Entry<String, List<JavaVersion>>> { entry ->
+                    entry.value.firstOrNull()?.providerCode in settings.favoriteJdkVendors
+                }.thenBy { it.key },
+            )
+        } else {
+            groups.entries.toList()
+        }
         val updateTargets = remember(jdkPackage.installedVersions) { jdkPackage.installedVersions.updateTargets() }
 
         val listState = rememberLazyListState()
@@ -330,9 +370,12 @@ private fun BrowseScreen(
                 modifier = Modifier.fillMaxSize().padding(end = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                groups.forEach { (title, groupVersions) ->
+                orderedGroups.forEach { (title, groupVersions) ->
                     if (title.isNotBlank()) {
                         item {
+                            val providerCode = groupVersions.firstOrNull()?.providerCode
+                                .takeIf { grouping == JavaVersionGrouping.Provider }
+                            val favorite = providerCode in settings.favoriteJdkVendors
                             AccordionHeader(
                                 title = title,
                                 count = groupVersions.size,
@@ -342,6 +385,18 @@ private fun BrowseScreen(
                                         collapsedGroups - title
                                     } else {
                                         collapsedGroups + title
+                                    }
+                                },
+                                actionLabel = providerCode?.let {
+                                    if (favorite) "★ Favorite" else "☆ Favorite"
+                                },
+                                onAction = providerCode?.let { code ->
+                                    {
+                                        onSettingsChange {
+                                            it.copy(
+                                                favoriteJdkVendors = it.favoriteJdkVendors.updated(code, !favorite),
+                                            )
+                                        }
                                     }
                                 },
                             )
@@ -369,6 +424,9 @@ private fun BrowseScreen(
         }
     }
 }
+
+private fun Set<String>.updated(value: String, included: Boolean): Set<String> =
+    if (included) this + value else this - value
 
 @Composable
 private fun LocalOnlyScreen(

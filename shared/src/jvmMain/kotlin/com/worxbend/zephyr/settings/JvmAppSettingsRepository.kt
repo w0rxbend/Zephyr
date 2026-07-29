@@ -12,6 +12,8 @@ internal class JvmAppSettingsRepository(
             themePreference = preferences.enumValue(THEME_KEY, ThemePreference.System),
             uiDensity = preferences.enumValue(DENSITY_KEY, UiDensity.Compact),
             showSdkmanHome = preferences.getBoolean(SHOW_SDKMAN_HOME_KEY, true),
+            favoriteCandidates = preferences.stringSet(FAVORITE_CANDIDATES_KEY),
+            favoriteJdkVendors = preferences.stringSet(FAVORITE_JDK_VENDORS_KEY),
         )
     }
 
@@ -19,6 +21,8 @@ internal class JvmAppSettingsRepository(
         preferences.put(THEME_KEY, settings.themePreference.name)
         preferences.put(DENSITY_KEY, settings.uiDensity.name)
         preferences.putBoolean(SHOW_SDKMAN_HOME_KEY, settings.showSdkmanHome)
+        preferences.put(FAVORITE_CANDIDATES_KEY, settings.favoriteCandidates.encode())
+        preferences.put(FAVORITE_JDK_VENDORS_KEY, settings.favoriteJdkVendors.encode())
         preferences.flush()
     }
 
@@ -27,10 +31,27 @@ internal class JvmAppSettingsRepository(
             .let { stored -> enumValues<T>().firstOrNull { it.name == stored } }
             ?: fallback
 
+    private fun Preferences.stringSet(key: String): Set<String> =
+        get(key, "")
+            .lineSequence()
+            .map(String::trim)
+            .filter(String::isNotEmpty)
+            .toSet()
+
+    private fun Set<String>.encode(): String =
+        asSequence()
+            .map(String::trim)
+            .filter(String::isNotEmpty)
+            .distinct()
+            .sorted()
+            .joinToString("\n")
+
     private companion object {
         const val THEME_KEY = "theme"
         const val DENSITY_KEY = "density"
         const val SHOW_SDKMAN_HOME_KEY = "show-sdkman-home"
+        const val FAVORITE_CANDIDATES_KEY = "favorite-candidates"
+        const val FAVORITE_JDK_VENDORS_KEY = "favorite-jdk-vendors"
     }
 }
 

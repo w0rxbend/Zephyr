@@ -42,6 +42,7 @@ The first product slice delivers:
 20. Redacted support-bundle export with platform/runtime details, SDKMAN health, integrity results, inventory counts, and session operations.
 21. Keyboard-first global search across workspace destinations, candidates, installed versions, settings, and maintenance actions.
 22. Searchable command palette with direct keyboard shortcuts for frequent navigation and safe maintenance actions.
+23. Persistent SDK and JDK-vendor favorites, prioritized in Browse and available as shortcuts from Overview.
 
 ## Delivery log
 
@@ -58,7 +59,8 @@ The first product slice delivers:
 | SAFE-08 Exportable diagnostics | Delivered | Diagnostics writes a collision-safe support report while redacting user-home and custom SDKMAN paths by default. |
 | FLOW-01 Global search | Delivered | Ctrl/Cmd+K opens a ranked search that navigates or invokes typed maintenance actions entirely from the keyboard. |
 | FLOW-02 Command palette | Delivered | Ctrl/Cmd+Shift+P opens command-only search; documented shortcuts invoke refresh, scan, and Diagnostics directly. |
-| FLOW-03 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
+| FLOW-03 Favorites | Delivered | SDK and JDK-vendor pins persist locally, sort first in Browse, and render as direct Overview destinations. |
+| FLOW-04 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
 
 ## Groomed feature backlog
 
