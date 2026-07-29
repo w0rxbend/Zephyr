@@ -40,6 +40,7 @@ The first product slice delivers:
 18. SDKMAN service reachability state with explicit network requirements and offline preflight behavior.
 19. Independent SDKMAN integrity checks for scripts, directories, malformed entries, and broken or escaping default links.
 20. Redacted support-bundle export with platform/runtime details, SDKMAN health, integrity results, inventory counts, and session operations.
+21. Keyboard-first global search across workspace destinations, candidates, installed versions, settings, and maintenance actions.
 
 ## Delivery log
 
@@ -54,7 +55,8 @@ The first product slice delivers:
 | SAFE-06 Offline awareness | Delivered | Toolbar, status bar, Overview, and Diagnostics show reachability; network operations preflight while local mutations remain available offline. |
 | SAFE-07 SDKMAN integrity check | Delivered | Diagnostics independently reports required scripts, candidate storage, malformed entries, version entries, and default-link safety. |
 | SAFE-08 Exportable diagnostics | Delivered | Diagnostics writes a collision-safe support report while redacting user-home and custom SDKMAN paths by default. |
-| FLOW-01 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
+| FLOW-01 Global search | Delivered | Ctrl/Cmd+K opens a ranked search that navigates or invokes typed maintenance actions entirely from the keyboard. |
+| FLOW-02 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
 
 ## Groomed feature backlog
 

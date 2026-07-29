@@ -26,8 +26,19 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -58,6 +69,8 @@ internal fun ZephyrScreen(
     darkTheme: Boolean,
     onToggleTheme: () -> Unit,
 ) {
+    var globalSearchOpen by remember { mutableStateOf(false) }
+
     state.pendingTransaction?.let { transaction ->
         TransactionPreviewDialog(
             transaction = transaction,
@@ -67,12 +80,48 @@ internal fun ZephyrScreen(
         )
     }
 
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    if (globalSearchOpen) {
+        GlobalSearchDialog(
+            state = state,
+            onDismiss = { globalSearchOpen = false },
+            onSelect = { target ->
+                globalSearchOpen = false
+                when (target) {
+                    is GlobalSearchTarget.Navigate -> viewModel.navigate(target.route)
+                    is GlobalSearchTarget.Execute -> when (target.action) {
+                        GlobalSearchAction.RefreshInstalled -> viewModel.refreshInstalled()
+                        GlobalSearchAction.ScanLocalOnly -> viewModel.scanLocalOnly()
+                        GlobalSearchAction.RefreshConnectivity -> viewModel.refreshConnectivity()
+                        GlobalSearchAction.RefreshMetadata -> {
+                            viewModel.requestTransaction(SdkmanTransaction.RefreshMetadata)
+                        }
+                        GlobalSearchAction.CheckUpdates -> {
+                            viewModel.requestTransaction(SdkmanTransaction.SelfUpdate)
+                        }
+                    }
+                }
+            },
+        )
+    }
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .onPreviewKeyEvent { event ->
+                val opensSearch = event.type == KeyEventType.KeyDown &&
+                    event.key == Key.K &&
+                    (event.isCtrlPressed || event.isMetaPressed)
+                if (opensSearch) globalSearchOpen = true
+                opensSearch
+            },
+    ) {
         WorkbenchToolbar(
             state = state,
             darkTheme = darkTheme,
             showSdkmanHome = settings.showSdkmanHome,
             onBack = viewModel::goBack,
+            onOpenSearch = { globalSearchOpen = true },
             onToggleTheme = onToggleTheme,
             onRefresh = viewModel::refreshInstalled,
             onRefreshConnectivity = viewModel::refreshConnectivity,
@@ -239,6 +288,7 @@ private fun WorkbenchToolbar(
     darkTheme: Boolean,
     showSdkmanHome: Boolean,
     onBack: () -> Unit,
+    onOpenSearch: () -> Unit,
     onToggleTheme: () -> Unit,
     onRefresh: () -> Unit,
     onRefreshConnectivity: () -> Unit,
@@ -293,6 +343,7 @@ private fun WorkbenchToolbar(
                 )
             }
             Spacer(Modifier.weight(1f))
+            GlobalSearchButton(onClick = onOpenSearch)
             HeaderThemeButton(darkTheme = darkTheme, onClick = onToggleTheme)
             ZephyrToolbarButton(
                 label = "Network",
@@ -317,6 +368,33 @@ private fun WorkbenchToolbar(
         }
     }
     Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
+}
+
+@Composable
+private fun GlobalSearchButton(onClick: () -> Unit) {
+    val metrics = LocalZephyrMetrics.current
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.width(190.dp).height(metrics.controlHeight),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(metrics.cornerRadius),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
+        ) {
+            Text("⌕", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                "Search Zephyr",
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Badge("Ctrl/⌘ K")
+        }
+    }
 }
 
 @Composable

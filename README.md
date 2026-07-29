@@ -49,6 +49,13 @@ Zephyr uses user-facing labels instead of SDKMAN's internal "candidate" term:
 
 Navigation is grouped into Workspace, Discover, Maintenance, and application sections. A compact toolbar exposes global maintenance actions, while the bottom status bar reports background work, candidate count, default JDK, and SDKMAN state.
 
+### Global search
+
+- Open search from the toolbar or press `Ctrl+K` on Windows/Linux and `Cmd+K` on macOS.
+- Search workspace pages, installed and previously loaded catalog candidates, installed versions, settings, and maintenance actions from one field.
+- Use Up/Down to select a result, Enter to open or run it, and Escape to close.
+- SDKMAN mutations selected from search still use the same network preflight and typed transaction preview as their visible toolbar controls.
+
 ### Installed JDK screen
 
 Displays installed Java versions as cards. Supports:
