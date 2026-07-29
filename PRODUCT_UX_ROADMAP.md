@@ -106,7 +106,8 @@ The first product slice delivers:
 | ECO-03 Release notes links | Delivered | Update Center resolves known candidates to validated upstream HTTPS release histories through a browser boundary that rejects unsafe URLs. |
 | ECO-04 Proxy configuration | Delivered | Explicit proxy coordinates apply only to SDKMAN children; passwords use Linux Secret Service and are rejected when secure storage is unavailable. |
 | ECO-05 Custom SDKMAN home | Delivered | Native directory selection persists only normalized paths containing the required init script and candidates directory, with a clear automatic-discovery reset. |
-| ECO-06 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
+| ECO-06 Portable preferences | Delivered | A deterministic native import/export format serializes an explicit non-sensitive allowlist while preserving and excluding all machine-local state. |
+| ECO-07 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
 
 ## Groomed feature backlog
 

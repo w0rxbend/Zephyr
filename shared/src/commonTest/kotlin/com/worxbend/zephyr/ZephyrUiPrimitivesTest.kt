@@ -176,9 +176,9 @@ class ZephyrUiPrimitivesTest {
         onNodeWithText("Comfortable").performClick()
         onNodeWithText("150%").performClick()
         onNodeWithText("Reduced").performClick()
-        onNodeWithText("Every 6 hours").performClick()
-        onNodeWithText("Updates only").performClick()
-        onNodeWithText("Long operations").performClick()
+        onNodeWithText("Every 6 hours").performScrollTo().performClick()
+        onNodeWithText("Updates only").performScrollTo().performClick()
+        onNodeWithText("Long operations").performScrollTo().performClick()
         onNodeWithText("30 days").performScrollTo().performClick()
 
         onNodeWithTag("appearance-settings").assertTextEquals(

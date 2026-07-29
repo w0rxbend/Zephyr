@@ -58,6 +58,7 @@ import com.worxbend.zephyr.data.createProjectToolchainService
 import com.worxbend.zephyr.data.ProxyConfiguration
 import com.worxbend.zephyr.data.createProxyConfigurationService
 import com.worxbend.zephyr.data.createSdkmanHomeConfigurationService
+import com.worxbend.zephyr.data.createPortablePreferencesService
 import com.worxbend.zephyr.settings.AppSettings
 import com.worxbend.zephyr.settings.CleanupGracePeriod
 import com.worxbend.zephyr.settings.MetadataRefreshSchedule
@@ -68,6 +69,8 @@ import com.worxbend.zephyr.settings.TextScale
 import com.worxbend.zephyr.settings.ToolchainProfile
 import com.worxbend.zephyr.settings.UiDensity
 import com.worxbend.zephyr.settings.UpdateNotificationPolicy
+import com.worxbend.zephyr.settings.applyPortablePreferences
+import com.worxbend.zephyr.settings.portablePreferences
 import com.worxbend.zephyr.viewmodel.ZephyrRoute
 import com.worxbend.zephyr.viewmodel.ZephyrUiState
 import com.worxbend.zephyr.viewmodel.ZephyrViewModel
@@ -1653,6 +1656,7 @@ internal fun SettingsScreen(
     val metrics = LocalZephyrMetrics.current
     val proxyService = remember { createProxyConfigurationService() }
     val sdkmanHomeService = remember { createSdkmanHomeConfigurationService() }
+    val portablePreferencesService = remember { createPortablePreferencesService() }
     val scope = rememberCoroutineScope()
     var proxyConfiguration by remember { mutableStateOf(ProxyConfiguration()) }
     var proxyPort by remember { mutableStateOf("8080") }
@@ -1660,6 +1664,7 @@ internal fun SettingsScreen(
     var proxyMessage by remember { mutableStateOf<String?>(null) }
     var customSdkmanHome by remember { mutableStateOf<String?>(null) }
     var sdkmanHomeMessage by remember { mutableStateOf<String?>(null) }
+    var portablePreferencesMessage by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(proxyService) {
         proxyConfiguration = proxyService.load()
         proxyPort = proxyConfiguration.port.toString()
@@ -1733,6 +1738,58 @@ internal fun SettingsScreen(
                         onClick = { onSettingsChange { it.copy(navigationWidthDp = 0) } },
                         enabled = settings.navigationWidthDp != 0,
                     )
+                }
+            }
+        }
+        ZephyrPanel(Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(metrics.panelPadding),
+                verticalArrangement = Arrangement.spacedBy(9.dp),
+            ) {
+                PanelHeading(
+                    "Portable preferences",
+                    "Move non-sensitive appearance, workflow, favorites, profiles, and filter choices between Zephyr installations.",
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ZephyrToolbarButton(
+                        label = "Export preferences…",
+                        onClick = {
+                            scope.launch {
+                                runCatching {
+                                    portablePreferencesService.chooseAndWrite(settings.portablePreferences())
+                                }.onSuccess { file ->
+                                    if (file != null) portablePreferencesMessage = "Exported portable preferences to $file."
+                                }.onFailure {
+                                    portablePreferencesMessage = it.message ?: "Preferences export failed."
+                                }
+                            }
+                        },
+                    )
+                    ZephyrToolbarButton(
+                        label = "Import preferences…",
+                        onClick = {
+                            scope.launch {
+                                runCatching { portablePreferencesService.chooseAndRead() }
+                                    .onSuccess { portable ->
+                                        if (portable != null) {
+                                            onSettingsChange { it.applyPortablePreferences(portable) }
+                                            portablePreferencesMessage = "Imported portable preferences."
+                                        }
+                                    }
+                                    .onFailure {
+                                        portablePreferencesMessage = it.message ?: "Preferences import failed."
+                                    }
+                            }
+                        },
+                    )
+                }
+                Text(
+                    "Excluded by design: machine paths, proxy settings and passwords, local observations, caches, and operation history.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                portablePreferencesMessage?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }

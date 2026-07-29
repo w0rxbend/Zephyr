@@ -178,6 +178,12 @@ Navigation is grouped into Workspace, Discover, Maintenance, and application sec
 - Zephyr validates that `bin/sdkman-init.sh` is a regular file and `candidates/` is a directory before saving the normalized path.
 - Clearing the override returns startup discovery to `SDKMAN_DIR` and then the standard user-home location; changes apply after restart.
 
+### Portable preferences
+
+- Settings exports and imports a deterministic, versioned `.zephyr-prefs` file with appearance, automation policy, favorites, recents, profiles, view modes, navigation width, and saved filters.
+- Import updates only the portable allowlist and preserves machine-local cleanup observations.
+- SDKMAN paths, proxy coordinates and credentials, caches, operation history, and other machine state do not exist in the portable model.
+
 ### Local-only cleanup grace
 
 - Settings provides opt-in Off, 7-day, 30-day, and 90-day review thresholds.
