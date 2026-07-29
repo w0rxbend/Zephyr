@@ -1,5 +1,8 @@
 package com.worxbend.zephyr.sdkman
 
+import com.worxbend.zephyr.domain.DiskImpactKind
+import com.worxbend.zephyr.domain.EstimateConfidence
+import com.worxbend.zephyr.domain.SdkmanTransaction
 import okio.FileSystem
 import okio.Path
 import okio.Path.Companion.toPath
@@ -124,6 +127,39 @@ class JvmSdkmanRepositoryTest {
             assertEquals("Only versions confirmed as local-only can be cleaned.", unverified.message)
             assertTrue(verified.success)
             assertEquals(listOf(SdkmanCommand.Uninstall("java", "17.0.1-tem")), runner.commands.filterIsInstance<SdkmanCommand.Uninstall>())
+        } finally {
+            FileSystem.SYSTEM.deleteRecursively(home, mustExist = false)
+        }
+    }
+
+    @Test
+    fun estimatesExactCleanupAndMedianInstallDiskImpact() = runBlocking {
+        val home = Files.createTempDirectory("zephyr-sdkman-test-").toString().toPath()
+        try {
+            createSdkmanHome(home)
+            val fileSystem = FileSystem.SYSTEM
+            fileSystem.write(home / "candidates" / "java" / "17.0.1-tem" / "runtime.bin") {
+                write(ByteArray(1_024))
+            }
+            fileSystem.write(home / "candidates" / "java" / "21.0.5-tem" / "runtime.bin") {
+                write(ByteArray(3_072))
+            }
+            val repository = JvmSdkmanRepository(fileSystem, { home }) { RecordingRunner() }
+
+            val cleanup = repository.estimateDiskImpact(
+                SdkmanTransaction.CleanLocalOnly("java", listOf("17.0.1-tem", "21.0.5-tem")),
+            )
+            val install = repository.estimateDiskImpact(
+                SdkmanTransaction.Install("java", "25.0.1-tem"),
+            )
+
+            assertEquals(DiskImpactKind.Reclaimable, cleanup.kind)
+            assertEquals(4_096L, cleanup.bytes)
+            assertEquals(EstimateConfidence.Exact, cleanup.confidence)
+            assertEquals(DiskImpactKind.Required, install.kind)
+            assertEquals(2_048L, install.bytes)
+            assertEquals(EstimateConfidence.Estimated, install.confidence)
+            assertTrue((install.availableBytes ?: 0) > 0)
         } finally {
             FileSystem.SYSTEM.deleteRecursively(home, mustExist = false)
         }

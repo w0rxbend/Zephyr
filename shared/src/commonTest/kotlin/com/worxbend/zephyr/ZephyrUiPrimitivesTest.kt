@@ -22,6 +22,9 @@ import com.worxbend.zephyr.settings.AppSettings
 import com.worxbend.zephyr.settings.ThemePreference
 import com.worxbend.zephyr.settings.UiDensity
 import com.worxbend.zephyr.domain.SdkmanTransaction
+import com.worxbend.zephyr.domain.DiskImpactEstimate
+import com.worxbend.zephyr.domain.DiskImpactKind
+import com.worxbend.zephyr.domain.EstimateConfidence
 import kotlin.test.Test
 
 class ZephyrUiPrimitivesTest {
@@ -88,6 +91,13 @@ class ZephyrUiPrimitivesTest {
                             candidate = "java",
                             versions = listOf("17.0.1-tem", "19.0.2-tem"),
                         ),
+                        diskImpact = DiskImpactEstimate(
+                            kind = DiskImpactKind.Reclaimable,
+                            bytes = 4_096,
+                            availableBytes = 8_192,
+                            confidence = EstimateConfidence.Exact,
+                            explanation = "Calculated from two installed version directories.",
+                        ),
                         onConfirm = { visible = false },
                         onDismiss = { visible = false },
                     )
@@ -99,6 +109,8 @@ class ZephyrUiPrimitivesTest {
         onNodeWithText("Typed command plan").assertTextEquals("Typed command plan")
         onNodeWithText("17.0.1-tem").assertTextEquals("17.0.1-tem")
         onNodeWithText("19.0.2-tem").assertTextEquals("19.0.2-tem")
+        onNodeWithText("Reclaimable disk space").assertTextEquals("Reclaimable disk space")
+        onNodeWithText("4.0 KiB").assertTextEquals("4.0 KiB")
         onAllNodesWithText("sdk uninstall java 17.0.1-tem").assertCountEquals(0)
         onNodeWithText("Cancel").performClick()
         onNodeWithTag("transaction-state").assertTextEquals("dismissed")

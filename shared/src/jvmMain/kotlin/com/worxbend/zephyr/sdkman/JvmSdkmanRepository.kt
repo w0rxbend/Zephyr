@@ -5,8 +5,12 @@ import com.worxbend.zephyr.domain.Candidate
 import com.worxbend.zephyr.domain.CandidateCatalogItem
 import com.worxbend.zephyr.domain.CandidateVersion
 import com.worxbend.zephyr.domain.CommandOutcome
+import com.worxbend.zephyr.domain.DiskImpactEstimate
+import com.worxbend.zephyr.domain.DiskImpactKind
+import com.worxbend.zephyr.domain.EstimateConfidence
 import com.worxbend.zephyr.domain.SdkmanSelfUpdateStatus
 import com.worxbend.zephyr.domain.SdkmanStatus
+import com.worxbend.zephyr.domain.SdkmanTransaction
 import com.worxbend.zephyr.domain.candidateKindFor
 import com.worxbend.zephyr.domain.displayNameFor
 import com.worxbend.zephyr.domain.isValidSdkmanCandidateName
@@ -173,6 +177,56 @@ class JvmSdkmanRepository(
         )
     }
 
+    override suspend fun estimateDiskImpact(transaction: SdkmanTransaction): DiskImpactEstimate {
+        val available = availableDiskBytes()
+        return when (transaction) {
+            is SdkmanTransaction.Install -> {
+                validateCandidate(transaction.candidate)
+                val siblingSizes = installedVersionsFor(transaction.candidate)
+                    .mapNotNull { version -> directorySize(home() / "candidates" / transaction.candidate / version) }
+                    .filter { it > 0 }
+                    .sorted()
+                val estimatedBytes = siblingSizes.takeIf { it.isNotEmpty() }?.let(::medianSize)
+                DiskImpactEstimate(
+                    kind = if (estimatedBytes == null) DiskImpactKind.Unknown else DiskImpactKind.Required,
+                    bytes = estimatedBytes,
+                    availableBytes = available,
+                    confidence = if (estimatedBytes == null) EstimateConfidence.Unknown else EstimateConfidence.Estimated,
+                    explanation = if (estimatedBytes == null) {
+                        "No local sibling installation is available for a size estimate."
+                    } else {
+                        "Estimated from the median size of ${siblingSizes.size} installed ${displayNameFor(transaction.candidate)} version(s)."
+                    },
+                )
+            }
+            is SdkmanTransaction.Uninstall -> reclaimableEstimate(
+                versions = listOf(transaction.version),
+                candidate = transaction.candidate,
+                availableBytes = available,
+            )
+            is SdkmanTransaction.CleanLocalOnly -> reclaimableEstimate(
+                versions = transaction.versions,
+                candidate = transaction.candidate,
+                availableBytes = available,
+            )
+            is SdkmanTransaction.SetDefault,
+            SdkmanTransaction.RefreshMetadata,
+            -> DiskImpactEstimate(
+                kind = DiskImpactKind.None,
+                bytes = 0,
+                availableBytes = available,
+                confidence = EstimateConfidence.Exact,
+                explanation = "This operation does not add or remove an installed candidate version.",
+            )
+            SdkmanTransaction.SelfUpdate -> DiskImpactEstimate(
+                kind = DiskImpactKind.Unknown,
+                availableBytes = available,
+                confidence = EstimateConfidence.Unknown,
+                explanation = "SDKMAN does not publish the size of its own update before execution.",
+            )
+        }
+    }
+
     override suspend fun refreshCandidateMetadata(): CommandOutcome {
         catalogCache = null
         return runner().run(SdkmanCommand.UpdateCandidateMetadata, 30.seconds).toOutcome("Candidate metadata refreshed.")
@@ -258,6 +312,61 @@ class JvmSdkmanRepository(
             .sorted()
     }
 
+    private fun reclaimableEstimate(
+        versions: List<String>,
+        candidate: String,
+        availableBytes: Long?,
+    ): DiskImpactEstimate {
+        validateCandidate(candidate)
+        require(versions.all(::isValidVersion)) { "Invalid SDKMAN version identifier." }
+        val sizes = versions.map { version ->
+            directorySize(home() / "candidates" / candidate / version)
+        }
+        val total = sizes.filterNotNull().fold(0L, ::safeAdd)
+        val exact = sizes.all { it != null }
+        return DiskImpactEstimate(
+            kind = if (exact) DiskImpactKind.Reclaimable else DiskImpactKind.Unknown,
+            bytes = total.takeIf { exact },
+            availableBytes = availableBytes,
+            confidence = if (exact) EstimateConfidence.Exact else EstimateConfidence.Unknown,
+            explanation = if (exact) {
+                "Calculated from ${versions.size} installed version director${if (versions.size == 1) "y" else "ies"}."
+            } else {
+                "One or more installed version directories could not be measured."
+            },
+        )
+    }
+
+    private fun directorySize(root: Path): Long? {
+        val rootMetadata = fileSystem.metadataOrNull(root) ?: return null
+        if (!rootMetadata.isDirectory || rootMetadata.symlinkTarget != null) return null
+        val pending = ArrayDeque<Path>()
+        pending.add(root)
+        var total = 0L
+        var visited = 0
+        while (pending.isNotEmpty()) {
+            val directory = pending.removeLast()
+            val children = fileSystem.listOrNull(directory) ?: return null
+            children.forEach { child ->
+                visited += 1
+                if (visited > MAX_DISK_ESTIMATE_ENTRIES) return null
+                val metadata = fileSystem.metadataOrNull(child) ?: return null
+                if (metadata.symlinkTarget != null) return@forEach
+                if (metadata.isDirectory) {
+                    pending.add(child)
+                } else {
+                    total = safeAdd(total, metadata.size ?: 0L)
+                }
+            }
+        }
+        return total
+    }
+
+    private fun availableDiskBytes(): Long? =
+        runCatching {
+            java.nio.file.Files.getFileStore(java.nio.file.Path.of(home().toString())).usableSpace
+        }.getOrNull()
+
     private fun defaultVersionFor(candidate: String): String? {
         validateCandidate(candidate)
         val currentPath = home() / "candidates" / candidate / "current"
@@ -306,6 +415,22 @@ class JvmSdkmanRepository(
             CommandOutcome(false, output.ifBlank { "SDKMAN command failed." })
         }
 }
+
+private fun safeAdd(left: Long, right: Long): Long =
+    if (Long.MAX_VALUE - left < right) Long.MAX_VALUE else left + right
+
+private fun medianSize(sortedSizes: List<Long>): Long {
+    val middle = sortedSizes.size / 2
+    return if (sortedSizes.size % 2 == 1) {
+        sortedSizes[middle]
+    } else {
+        val lower = sortedSizes[middle - 1]
+        val upper = sortedSizes[middle]
+        lower + (upper - lower) / 2
+    }
+}
+
+private const val MAX_DISK_ESTIMATE_ENTRIES = 1_000_000
 
 private fun defaultSdkmanHome(): Path {
     val configured = System.getenv("SDKMAN_DIR")?.takeIf { it.isNotBlank() }

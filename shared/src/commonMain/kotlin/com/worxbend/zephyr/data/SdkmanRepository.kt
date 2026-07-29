@@ -4,8 +4,10 @@ import com.worxbend.zephyr.domain.Candidate
 import com.worxbend.zephyr.domain.CandidateCatalogItem
 import com.worxbend.zephyr.domain.CandidateVersion
 import com.worxbend.zephyr.domain.CommandOutcome
+import com.worxbend.zephyr.domain.DiskImpactEstimate
 import com.worxbend.zephyr.domain.SdkmanSelfUpdateStatus
 import com.worxbend.zephyr.domain.SdkmanStatus
+import com.worxbend.zephyr.domain.SdkmanTransaction
 
 interface SdkmanRepository {
     suspend fun detect(): SdkmanStatus
@@ -14,6 +16,7 @@ interface SdkmanRepository {
     suspend fun catalog(refreshMetadata: Boolean = false): List<CandidateCatalogItem>
     suspend fun versions(candidate: String): List<CandidateVersion>
     suspend fun mergedCandidate(candidate: String): Candidate?
+    suspend fun estimateDiskImpact(transaction: SdkmanTransaction): DiskImpactEstimate
     suspend fun refreshCandidateMetadata(): CommandOutcome
     suspend fun selfUpdate(): SdkmanSelfUpdateStatus
     suspend fun install(candidate: String, version: String): CommandOutcome

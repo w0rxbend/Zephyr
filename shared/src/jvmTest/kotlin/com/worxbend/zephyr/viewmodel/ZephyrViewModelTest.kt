@@ -7,6 +7,9 @@ import com.worxbend.zephyr.domain.CandidateCatalogItem
 import com.worxbend.zephyr.domain.CandidateKind
 import com.worxbend.zephyr.domain.CandidateVersion
 import com.worxbend.zephyr.domain.CommandOutcome
+import com.worxbend.zephyr.domain.DiskImpactEstimate
+import com.worxbend.zephyr.domain.DiskImpactKind
+import com.worxbend.zephyr.domain.EstimateConfidence
 import com.worxbend.zephyr.domain.JournalExportResult
 import com.worxbend.zephyr.domain.OperationJournalEntry
 import com.worxbend.zephyr.domain.OperationStatus
@@ -202,7 +205,9 @@ class ZephyrViewModelTest {
 
         viewModel.requestTransaction(transaction)
 
-        assertEquals(transaction, assertIs<ZephyrUiState.Ready>(viewModel.state.value).pendingTransaction)
+        val pending = assertIs<ZephyrUiState.Ready>(viewModel.state.value)
+        assertEquals(transaction, pending.pendingTransaction)
+        assertEquals(DiskImpactKind.None, pending.pendingTransactionDiskImpact?.kind)
         assertTrue(repository.mutationCalls.isEmpty())
 
         viewModel.confirmTransaction()
@@ -350,6 +355,14 @@ private class FakeSdkmanRepository(
         }
         return remoteDetail?.takeIf { it.name == candidate }
     }
+
+    override suspend fun estimateDiskImpact(transaction: SdkmanTransaction): DiskImpactEstimate =
+        DiskImpactEstimate(
+            kind = DiskImpactKind.None,
+            bytes = 0,
+            confidence = EstimateConfidence.Exact,
+            explanation = "No test disk impact.",
+        )
 
     override suspend fun refreshCandidateMetadata(): CommandOutcome {
         metadataRefreshCalls += 1

@@ -91,6 +91,9 @@ Every SDKMAN mutation is reviewed before execution:
 
 - Install, make-default, uninstall, cleanup, metadata refresh, and SDKMAN self-update actions create a typed command plan.
 - The confirmation shows the exact action, candidate, and version fields without constructing or exposing shell expressions.
+- Uninstall and cleanup previews calculate exact reclaimable bytes from local version directories.
+- Install previews estimate required space from the median size of installed sibling versions and clearly label the confidence and evidence.
+- Current free space appears beside the estimate when the platform can measure it.
 - Candidate and version identifiers are validated both when the plan is created and again at the repository boundary.
 - Destructive transactions use distinct warning styling and remain cancellable.
 - Confirmed transactions are recorded from start through success or failure in the session operation journal.

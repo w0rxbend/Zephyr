@@ -8,6 +8,9 @@ import com.worxbend.zephyr.domain.Candidate
 import com.worxbend.zephyr.domain.CandidateCatalogItem
 import com.worxbend.zephyr.domain.CandidateMetadataStatus
 import com.worxbend.zephyr.domain.CommandOutcome
+import com.worxbend.zephyr.domain.DiskImpactEstimate
+import com.worxbend.zephyr.domain.DiskImpactKind
+import com.worxbend.zephyr.domain.EstimateConfidence
 import com.worxbend.zephyr.domain.OperationJournalEntry
 import com.worxbend.zephyr.domain.OperationStatus
 import com.worxbend.zephyr.domain.SdkmanSelfUpdateStatus
@@ -60,6 +63,8 @@ sealed interface ZephyrUiState {
         val errorMessage: String?,
         val lastOutcome: String?,
         val pendingTransaction: SdkmanTransaction? = null,
+        val pendingTransactionDiskImpact: DiskImpactEstimate? = null,
+        val transactionPreviewLoading: Boolean = false,
         val operationJournal: List<OperationJournalEntry> = emptyList(),
         val journalExportInProgress: Boolean = false,
     ) : ZephyrUiState
@@ -180,11 +185,31 @@ class ZephyrViewModel(
     }
 
     fun requestTransaction(transaction: SdkmanTransaction) {
-        _state.updateReady { ready ->
-            if (ready.hasActiveOperation() || ready.pendingTransaction != null) {
-                ready
-            } else {
-                ready.copy(pendingTransaction = transaction)
+        val ready = _state.value as? ZephyrUiState.Ready ?: return
+        if (ready.hasActiveOperation() || ready.pendingTransaction != null) return
+        _state.updateReady {
+            it.copy(
+                transactionPreviewLoading = true,
+                pendingTransactionDiskImpact = null,
+            )
+        }
+        scope.launch {
+            val estimate = runCatchingCancellable {
+                repository.estimateDiskImpact(transaction)
+            }.getOrElse { failure ->
+                ZephyrLogger.warn("Unable to estimate transaction disk impact.", failure)
+                DiskImpactEstimate(
+                    kind = DiskImpactKind.Unknown,
+                    confidence = EstimateConfidence.Unknown,
+                    explanation = "Disk impact could not be measured: ${failure.message ?: "unknown error"}.",
+                )
+            }
+            _state.updateReady {
+                it.copy(
+                    pendingTransaction = transaction,
+                    pendingTransactionDiskImpact = estimate,
+                    transactionPreviewLoading = false,
+                )
             }
         }
     }
@@ -212,12 +237,23 @@ class ZephyrViewModel(
     }
 
     fun dismissTransaction() {
-        _state.updateReady { it.copy(pendingTransaction = null) }
+        _state.updateReady {
+            it.copy(
+                pendingTransaction = null,
+                pendingTransactionDiskImpact = null,
+                transactionPreviewLoading = false,
+            )
+        }
     }
 
     fun confirmTransaction() {
         val transaction = (_state.value as? ZephyrUiState.Ready)?.pendingTransaction ?: return
-        _state.updateReady { it.copy(pendingTransaction = null) }
+        _state.updateReady {
+            it.copy(
+                pendingTransaction = null,
+                pendingTransactionDiskImpact = null,
+            )
+        }
         val journalId = startJournalEntry(transaction)
         when (transaction) {
             is SdkmanTransaction.Install -> install(transaction.candidate, transaction.version, journalId)
@@ -587,4 +623,9 @@ private fun ZephyrUiState.Ready.displaysCandidate(candidate: String): Boolean =
     }
 
 private fun ZephyrUiState.Ready.hasActiveOperation(): Boolean =
-    isRefreshing || isCatalogLoading || localOnlyScanInProgress || detailLoadingCandidate != null || journalExportInProgress
+    isRefreshing ||
+        isCatalogLoading ||
+        localOnlyScanInProgress ||
+        detailLoadingCandidate != null ||
+        journalExportInProgress ||
+        transactionPreviewLoading

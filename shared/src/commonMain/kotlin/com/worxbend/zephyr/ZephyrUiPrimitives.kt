@@ -267,6 +267,7 @@ internal fun BusyOverlay(state: ZephyrUiState.Ready) {
         state.localOnlyScanInProgress -> "Scanning local-only versions"
         state.isCatalogLoading -> "Loading SDKMAN catalog"
         state.detailLoadingCandidate != null -> "Loading package details"
+        state.transactionPreviewLoading -> "Calculating disk impact"
         state.isRefreshing -> "Refreshing"
         else -> return
     }

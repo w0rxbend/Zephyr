@@ -32,8 +32,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.worxbend.zephyr.domain.CandidateKind
+import com.worxbend.zephyr.domain.DiskImpactEstimate
+import com.worxbend.zephyr.domain.DiskImpactKind
 import com.worxbend.zephyr.domain.PlannedSdkmanCommand
 import com.worxbend.zephyr.domain.SdkmanTransaction
+import com.worxbend.zephyr.domain.formatByteSize
 import com.worxbend.zephyr.settings.AppSettings
 import com.worxbend.zephyr.viewmodel.ZephyrRoute
 import com.worxbend.zephyr.viewmodel.ZephyrUiState
@@ -56,6 +59,7 @@ internal fun ZephyrScreen(
     state.pendingTransaction?.let { transaction ->
         TransactionPreviewDialog(
             transaction = transaction,
+            diskImpact = state.pendingTransactionDiskImpact,
             onConfirm = viewModel::confirmTransaction,
             onDismiss = viewModel::dismissTransaction,
         )
@@ -103,6 +107,7 @@ internal fun ZephyrScreen(
 @Composable
 internal fun TransactionPreviewDialog(
     transaction: SdkmanTransaction,
+    diskImpact: DiskImpactEstimate? = null,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -115,6 +120,7 @@ internal fun TransactionPreviewDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text(transaction.description)
+                diskImpact?.let { DiskImpactSummary(it) }
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
                         "Typed command plan",
@@ -150,6 +156,57 @@ internal fun TransactionPreviewDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
+}
+
+@Composable
+private fun DiskImpactSummary(estimate: DiskImpactEstimate) {
+    val label = when (estimate.kind) {
+        DiskImpactKind.Required -> "Required disk space"
+        DiskImpactKind.Reclaimable -> "Reclaimable disk space"
+        DiskImpactKind.None -> "Disk impact"
+        DiskImpactKind.Unknown -> "Disk impact unavailable"
+    }
+    val value = when (estimate.kind) {
+        DiskImpactKind.None -> "No material change"
+        else -> estimate.bytes?.let(::formatByteSize) ?: "Not measurable"
+    }
+    ZephyrPanel(Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(LocalZephyrMetrics.current.panelPadding),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(label, fontWeight = FontWeight.SemiBold)
+                Text(value, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    estimate.confidence.label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                estimate.availableBytes?.let {
+                    Text(
+                        "${formatByteSize(it)} currently available",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            Text(
+                estimate.explanation,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
 }
 
 @Composable
@@ -390,6 +447,7 @@ private fun ZephyrUiState.Ready.busyLabel(): String? =
         isCatalogLoading -> "Loading SDKMAN catalog"
         detailLoadingCandidate != null -> "Loading package details"
         journalExportInProgress -> "Exporting operation journal"
+        transactionPreviewLoading -> "Calculating disk impact"
         isRefreshing -> "Refreshing SDKMAN state"
         else -> null
     }

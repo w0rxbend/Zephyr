@@ -35,6 +35,7 @@ The first product slice delivers:
 13. Typed transaction previews for every SDKMAN mutation, with validated command fields and affected versions shown before execution.
 14. Searchable session operation history with timestamps, outcomes, structured command details, and CSV export.
 15. Transaction-specific recovery guidance with safe refresh, rescan, diagnostics, and reviewed-retry actions.
+16. Filesystem-backed disk-impact summaries in transaction previews, including exact reclaimable bytes and evidence-labeled install estimates.
 
 ## Delivery log
 
@@ -44,7 +45,8 @@ The first product slice delivers:
 | SAFE-01 Transaction preview | Delivered | Install, default, uninstall, cleanup, metadata, and self-update actions require confirmation of a typed command plan. |
 | SAFE-02 Operation journal | Delivered | Confirmed operations record running/success/failure state, remain searchable in-session, and export to redacted CSV. |
 | SAFE-03 Rollback guidance | Delivered | Failed journal entries explain verified next steps and expose safe recovery actions; cleanup retries include only re-verified versions. |
-| SAFE-04 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
+| SAFE-04 Disk-impact estimate | Delivered | Previews show exact removable bytes, median-based install estimates, confidence, evidence, and current free space. |
+| SAFE-05 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
 
 ## Groomed feature backlog
 
