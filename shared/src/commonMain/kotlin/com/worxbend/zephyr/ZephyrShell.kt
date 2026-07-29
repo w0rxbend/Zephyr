@@ -36,6 +36,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
@@ -70,6 +71,25 @@ internal fun ZephyrScreen(
     onToggleTheme: () -> Unit,
 ) {
     var globalSearchOpen by remember { mutableStateOf(false) }
+    var commandPaletteOpen by remember { mutableStateOf(false) }
+    val activateSearchTarget: (GlobalSearchTarget) -> Unit = { target ->
+        globalSearchOpen = false
+        commandPaletteOpen = false
+        when (target) {
+            is GlobalSearchTarget.Navigate -> viewModel.navigate(target.route)
+            is GlobalSearchTarget.Execute -> when (target.action) {
+                GlobalSearchAction.RefreshInstalled -> viewModel.refreshInstalled()
+                GlobalSearchAction.ScanLocalOnly -> viewModel.scanLocalOnly()
+                GlobalSearchAction.RefreshConnectivity -> viewModel.refreshConnectivity()
+                GlobalSearchAction.RefreshMetadata -> {
+                    viewModel.requestTransaction(SdkmanTransaction.RefreshMetadata)
+                }
+                GlobalSearchAction.CheckUpdates -> {
+                    viewModel.requestTransaction(SdkmanTransaction.SelfUpdate)
+                }
+            }
+        }
+    }
 
     state.pendingTransaction?.let { transaction ->
         TransactionPreviewDialog(
@@ -84,23 +104,15 @@ internal fun ZephyrScreen(
         GlobalSearchDialog(
             state = state,
             onDismiss = { globalSearchOpen = false },
-            onSelect = { target ->
-                globalSearchOpen = false
-                when (target) {
-                    is GlobalSearchTarget.Navigate -> viewModel.navigate(target.route)
-                    is GlobalSearchTarget.Execute -> when (target.action) {
-                        GlobalSearchAction.RefreshInstalled -> viewModel.refreshInstalled()
-                        GlobalSearchAction.ScanLocalOnly -> viewModel.scanLocalOnly()
-                        GlobalSearchAction.RefreshConnectivity -> viewModel.refreshConnectivity()
-                        GlobalSearchAction.RefreshMetadata -> {
-                            viewModel.requestTransaction(SdkmanTransaction.RefreshMetadata)
-                        }
-                        GlobalSearchAction.CheckUpdates -> {
-                            viewModel.requestTransaction(SdkmanTransaction.SelfUpdate)
-                        }
-                    }
-                }
-            },
+            onSelect = activateSearchTarget,
+        )
+    }
+    if (commandPaletteOpen) {
+        GlobalSearchDialog(
+            state = state,
+            mode = SearchOverlayMode.CommandPalette,
+            onDismiss = { commandPaletteOpen = false },
+            onSelect = activateSearchTarget,
         )
     }
 
@@ -109,11 +121,39 @@ internal fun ZephyrScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
             .onPreviewKeyEvent { event ->
-                val opensSearch = event.type == KeyEventType.KeyDown &&
-                    event.key == Key.K &&
-                    (event.isCtrlPressed || event.isMetaPressed)
-                if (opensSearch) globalSearchOpen = true
-                opensSearch
+                if (event.type != KeyEventType.KeyDown || (!event.isCtrlPressed && !event.isMetaPressed)) {
+                    false
+                } else {
+                    when {
+                        event.key == Key.K && !event.isShiftPressed -> {
+                            commandPaletteOpen = false
+                            globalSearchOpen = true
+                            true
+                        }
+                        event.key == Key.P && event.isShiftPressed -> {
+                            globalSearchOpen = false
+                            commandPaletteOpen = true
+                            true
+                        }
+                        event.key == Key.R && event.isShiftPressed -> {
+                            activateSearchTarget(
+                                GlobalSearchTarget.Execute(GlobalSearchAction.RefreshInstalled),
+                            )
+                            true
+                        }
+                        event.key == Key.L && event.isShiftPressed -> {
+                            activateSearchTarget(
+                                GlobalSearchTarget.Execute(GlobalSearchAction.ScanLocalOnly),
+                            )
+                            true
+                        }
+                        event.key == Key.D && event.isShiftPressed -> {
+                            activateSearchTarget(GlobalSearchTarget.Navigate(ZephyrRoute.Diagnostics))
+                            true
+                        }
+                        else -> false
+                    }
+                }
             },
     ) {
         WorkbenchToolbar(
@@ -387,7 +427,7 @@ private fun GlobalSearchButton(onClick: () -> Unit) {
         ) {
             Text("⌕", color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(
-                "Search Zephyr",
+                "Search / commands",
                 modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

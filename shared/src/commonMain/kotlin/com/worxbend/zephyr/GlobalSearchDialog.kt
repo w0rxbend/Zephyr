@@ -37,15 +37,22 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.worxbend.zephyr.viewmodel.ZephyrUiState
 
+internal enum class SearchOverlayMode {
+    GlobalSearch,
+    CommandPalette,
+}
+
 @Composable
 internal fun GlobalSearchDialog(
     state: ZephyrUiState.Ready,
+    mode: SearchOverlayMode = SearchOverlayMode.GlobalSearch,
     onDismiss: () -> Unit,
     onSelect: (GlobalSearchTarget) -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
-    val index = remember(state.candidates, state.catalog) {
-        buildGlobalSearchIndex(state.candidates, state.catalog)
+    val index = remember(state.candidates, state.catalog, mode) {
+        val allItems = buildGlobalSearchIndex(state.candidates, state.catalog)
+        if (mode == SearchOverlayMode.CommandPalette) commandPaletteItems(allItems) else allItems
     }
     val results = remember(index, query) { searchGlobalIndex(index, query) }
     var selectedIndex by remember(query) { mutableIntStateOf(0) }
@@ -75,13 +82,21 @@ internal fun GlobalSearchDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("Search Zephyr", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        if (mode == SearchOverlayMode.CommandPalette) "Command palette" else "Search Zephyr",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
                     Badge("ESC")
                 }
                 SearchField(
                     value = query,
                     onValueChange = { query = it },
-                    placeholder = "Candidates, versions, settings, and actions",
+                    placeholder = if (mode == SearchOverlayMode.CommandPalette) {
+                        "Search commands and destinations"
+                    } else {
+                        "Candidates, versions, settings, and actions"
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .focusRequester(focusRequester)
@@ -114,7 +129,11 @@ internal fun GlobalSearchDialog(
                         },
                 )
                 Text(
-                    if (query.isBlank()) "Quick access" else "${results.size} result(s)",
+                    if (query.isBlank()) {
+                        if (mode == SearchOverlayMode.CommandPalette) "Available commands" else "Quick access"
+                    } else {
+                        "${results.size} result(s)"
+                    },
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -126,7 +145,11 @@ internal fun GlobalSearchDialog(
                     ) {
                         Text("No matching destination", fontWeight = FontWeight.SemiBold)
                         Text(
-                            "Try a candidate key, version, setting, or maintenance action.",
+                            if (mode == SearchOverlayMode.CommandPalette) {
+                                "Try a workspace destination or maintenance action."
+                            } else {
+                                "Try a candidate key, version, setting, or maintenance action."
+                            },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -149,7 +172,11 @@ internal fun GlobalSearchDialog(
                     }
                 }
                 Text(
-                    "↑↓ Move  •  Enter Open  •  Esc Close",
+                    if (mode == SearchOverlayMode.CommandPalette) {
+                        "↑↓ Move  •  Enter Run  •  Esc Close"
+                    } else {
+                        "↑↓ Move  •  Enter Open  •  Ctrl/⌘ Shift P Commands  •  Esc Close"
+                    },
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -199,7 +226,9 @@ private fun GlobalSearchResultRow(
                 },
             )
         }
-        if (selected) {
+        if (item.shortcut != null) {
+            Badge(item.shortcut, if (selected) BadgeTone.Primary else BadgeTone.Neutral)
+        } else if (selected) {
             Badge("Enter", BadgeTone.Primary)
         }
     }

@@ -33,6 +33,7 @@ internal data class GlobalSearchItem(
     val kind: GlobalSearchKind,
     val target: GlobalSearchTarget,
     val terms: List<String> = emptyList(),
+    val shortcut: String? = null,
 )
 
 internal fun buildGlobalSearchIndex(
@@ -110,19 +111,22 @@ internal fun searchGlobalIndex(
         .map(Pair<Int, GlobalSearchItem>::second)
 }
 
+internal fun commandPaletteItems(items: List<GlobalSearchItem>): List<GlobalSearchItem> =
+    items.filter { it.kind == GlobalSearchKind.Action || it.kind == GlobalSearchKind.Page }
+
 private fun MutableList<GlobalSearchItem>.addPageItems() {
     listOf(
-        "Overview" to ZephyrRoute.Overview,
-        "Installed JDK" to ZephyrRoute.InstalledJdk,
-        "Installed SDKs" to ZephyrRoute.InstalledSdks,
-        "Browse JDKs" to ZephyrRoute.BrowseJdks,
-        "Browse SDKs" to ZephyrRoute.BrowseSdks,
-        "Local-only versions" to ZephyrRoute.LocalOnly,
-        "Diagnostics" to ZephyrRoute.Diagnostics,
-        "Operation history" to ZephyrRoute.History,
-        "Settings" to ZephyrRoute.Settings,
-        "About Zephyr" to ZephyrRoute.About,
-    ).forEach { (title, route) ->
+        Triple("Overview", ZephyrRoute.Overview, null),
+        Triple("Installed JDK", ZephyrRoute.InstalledJdk, null),
+        Triple("Installed SDKs", ZephyrRoute.InstalledSdks, null),
+        Triple("Browse JDKs", ZephyrRoute.BrowseJdks, null),
+        Triple("Browse SDKs", ZephyrRoute.BrowseSdks, null),
+        Triple("Local-only versions", ZephyrRoute.LocalOnly, null),
+        Triple("Diagnostics", ZephyrRoute.Diagnostics, "Ctrl/⌘ Shift D"),
+        Triple("Operation history", ZephyrRoute.History, null),
+        Triple("Settings", ZephyrRoute.Settings, null),
+        Triple("About Zephyr", ZephyrRoute.About, null),
+    ).forEach { (title, route, shortcut) ->
         add(
             GlobalSearchItem(
                 id = "page:${title.lowercase()}",
@@ -130,6 +134,7 @@ private fun MutableList<GlobalSearchItem>.addPageItems() {
                 subtitle = "Open workspace destination",
                 kind = GlobalSearchKind.Page,
                 target = GlobalSearchTarget.Navigate(route),
+                shortcut = shortcut,
             ),
         )
     }
@@ -156,23 +161,53 @@ private fun MutableList<GlobalSearchItem>.addSettingItems() {
 
 private fun MutableList<GlobalSearchItem>.addActionItems() {
     listOf(
-        Triple("Refresh local state", "Reload installed SDKMAN candidates", GlobalSearchAction.RefreshInstalled),
-        Triple("Scan local-only versions", "Audit installed versions against SDKMAN", GlobalSearchAction.ScanLocalOnly),
-        Triple("Check connectivity", "Probe SDKMAN service reachability", GlobalSearchAction.RefreshConnectivity),
-        Triple("Refresh SDKMAN metadata", "Review a remote metadata refresh", GlobalSearchAction.RefreshMetadata),
-        Triple("Check for SDKMAN updates", "Review an SDKMAN self-update check", GlobalSearchAction.CheckUpdates),
-    ).forEach { (title, subtitle, action) ->
+        CommandDefinition(
+            "Refresh local state",
+            "Reload installed SDKMAN candidates",
+            GlobalSearchAction.RefreshInstalled,
+            "Ctrl/⌘ Shift R",
+        ),
+        CommandDefinition(
+            "Scan local-only versions",
+            "Audit installed versions against SDKMAN",
+            GlobalSearchAction.ScanLocalOnly,
+            "Ctrl/⌘ Shift L",
+        ),
+        CommandDefinition(
+            "Check connectivity",
+            "Probe SDKMAN service reachability",
+            GlobalSearchAction.RefreshConnectivity,
+        ),
+        CommandDefinition(
+            "Refresh SDKMAN metadata",
+            "Review a remote metadata refresh",
+            GlobalSearchAction.RefreshMetadata,
+        ),
+        CommandDefinition(
+            "Check for SDKMAN updates",
+            "Review an SDKMAN self-update check",
+            GlobalSearchAction.CheckUpdates,
+        ),
+    ).forEach { definition ->
         add(
             GlobalSearchItem(
-                id = "action:${action.name}",
-                title = title,
-                subtitle = subtitle,
+                id = "action:${definition.action.name}",
+                title = definition.title,
+                subtitle = definition.subtitle,
                 kind = GlobalSearchKind.Action,
-                target = GlobalSearchTarget.Execute(action),
+                target = GlobalSearchTarget.Execute(definition.action),
+                shortcut = definition.shortcut,
             ),
         )
     }
 }
+
+private data class CommandDefinition(
+    val title: String,
+    val subtitle: String,
+    val action: GlobalSearchAction,
+    val shortcut: String? = null,
+)
 
 private fun GlobalSearchItem.matchScore(query: String): Int? {
     val normalizedTitle = title.lowercase()

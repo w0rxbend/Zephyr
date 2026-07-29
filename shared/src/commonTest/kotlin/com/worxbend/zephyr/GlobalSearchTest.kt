@@ -67,4 +67,17 @@ class GlobalSearchTest {
         assertEquals("SDKMAN path privacy", result.title)
         assertEquals(ZephyrRoute.Settings, assertIs<GlobalSearchTarget.Navigate>(result.target).route)
     }
+
+    @Test
+    fun commandPaletteContainsOnlyExecutableOrNavigationCommands() {
+        val commands = commandPaletteItems(buildGlobalSearchIndex(listOf(java), listOf(gradle)))
+
+        assertTrue(commands.isNotEmpty())
+        assertTrue(commands.all { it.kind == GlobalSearchKind.Action || it.kind == GlobalSearchKind.Page })
+        assertTrue(commands.none { it.kind == GlobalSearchKind.Candidate || it.kind == GlobalSearchKind.Version })
+        assertEquals(
+            "Ctrl/⌘ Shift R",
+            commands.single { it.title == "Refresh local state" }.shortcut,
+        )
+    }
 }

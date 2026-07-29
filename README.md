@@ -56,6 +56,13 @@ Navigation is grouped into Workspace, Discover, Maintenance, and application sec
 - Use Up/Down to select a result, Enter to open or run it, and Escape to close.
 - SDKMAN mutations selected from search still use the same network preflight and typed transaction preview as their visible toolbar controls.
 
+### Command palette
+
+- Press `Ctrl+Shift+P` on Windows/Linux or `Cmd+Shift+P` on macOS for a command-only view.
+- The palette searches workspace navigation and maintenance commands while excluding candidate and version results.
+- Frequent commands also have direct shortcuts: `Ctrl/Cmd+Shift+R` refreshes local state, `Ctrl/Cmd+Shift+L` scans local-only versions, and `Ctrl/Cmd+Shift+D` opens Diagnostics.
+- Command shortcuts route through the same ViewModel operations as visible controls, preserving busy-state and transaction safeguards.
+
 ### Installed JDK screen
 
 Displays installed Java versions as cards. Supports:
