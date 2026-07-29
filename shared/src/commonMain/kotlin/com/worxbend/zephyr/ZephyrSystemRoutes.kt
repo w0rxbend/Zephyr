@@ -49,6 +49,7 @@ import com.worxbend.zephyr.data.SdkmanRcDocument
 import com.worxbend.zephyr.data.createProjectToolchainService
 import com.worxbend.zephyr.settings.AppSettings
 import com.worxbend.zephyr.settings.ThemePreference
+import com.worxbend.zephyr.settings.TextScale
 import com.worxbend.zephyr.settings.ToolchainProfile
 import com.worxbend.zephyr.settings.UiDensity
 import com.worxbend.zephyr.viewmodel.ZephyrRoute
@@ -1368,6 +1369,17 @@ internal fun SettingsScreen(
                         selected = settings.uiDensity,
                         label = UiDensity::label,
                         onSelected = { selected -> onSettingsChange { it.copy(uiDensity = selected) } },
+                    )
+                }
+                ZephyrSettingsRow(
+                    title = "Text scale",
+                    description = "Scale all application text and fixed-height controls from 100% to 200%.",
+                ) {
+                    ZephyrSegmentedControl(
+                        options = TextScale.entries,
+                        selected = settings.textScale,
+                        label = TextScale::label,
+                        onSelected = { selected -> onSettingsChange { it.copy(textScale = selected) } },
                     )
                 }
                 ZephyrSettingsRow(

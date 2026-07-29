@@ -14,6 +14,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.worxbend.zephyr.settings.TextScale
 import com.worxbend.zephyr.settings.UiDensity
 
 internal data class ZephyrMetrics(
@@ -33,16 +34,58 @@ internal val LocalZephyrMetrics = staticCompositionLocalOf { CompactMetrics }
 internal fun ZephyrTheme(
     darkTheme: Boolean,
     density: UiDensity = UiDensity.Compact,
+    textScale: TextScale = TextScale.Percent100,
     content: @Composable () -> Unit,
 ) {
-    val metrics = if (density == UiDensity.Compact) CompactMetrics else ComfortableMetrics
+    val baseMetrics = if (density == UiDensity.Compact) CompactMetrics else ComfortableMetrics
+    val metrics = baseMetrics.scaledForText(textScale.factor)
     CompositionLocalProvider(LocalZephyrMetrics provides metrics) {
         MaterialTheme(
             colorScheme = if (darkTheme) ZephyrDarkColors else ZephyrLightColors,
-            typography = ZephyrTypography,
+            typography = typographyFor(textScale),
             content = content,
         )
     }
+}
+
+internal fun typographyFor(textScale: TextScale): Typography {
+    val factor = textScale.factor
+    return Typography(
+        displayLarge = ZephyrTypography.displayLarge.scaled(factor),
+        displayMedium = ZephyrTypography.displayMedium.scaled(factor),
+        displaySmall = ZephyrTypography.displaySmall.scaled(factor),
+        headlineLarge = ZephyrTypography.headlineLarge.scaled(factor),
+        headlineMedium = ZephyrTypography.headlineMedium.scaled(factor),
+        headlineSmall = ZephyrTypography.headlineSmall.scaled(factor),
+        titleLarge = ZephyrTypography.titleLarge.scaled(factor),
+        titleMedium = ZephyrTypography.titleMedium.scaled(factor),
+        titleSmall = ZephyrTypography.titleSmall.scaled(factor),
+        bodyLarge = ZephyrTypography.bodyLarge.scaled(factor),
+        bodyMedium = ZephyrTypography.bodyMedium.scaled(factor),
+        bodySmall = ZephyrTypography.bodySmall.scaled(factor),
+        labelLarge = ZephyrTypography.labelLarge.scaled(factor),
+        labelMedium = ZephyrTypography.labelMedium.scaled(factor),
+        labelSmall = ZephyrTypography.labelSmall.scaled(factor),
+    )
+}
+
+private fun TextStyle.scaled(factor: Float): TextStyle =
+    copy(
+        fontSize = fontSize * factor,
+        lineHeight = lineHeight * factor,
+    )
+
+private fun ZephyrMetrics.scaledForText(factor: Float): ZephyrMetrics {
+    val supportingScale = 1f + ((factor - 1f) * 0.35f)
+    return copy(
+        navigationWidth = navigationWidth * supportingScale,
+        toolbarHeight = toolbarHeight * factor,
+        statusBarHeight = statusBarHeight * factor,
+        panelPadding = panelPadding * supportingScale,
+        controlHeight = controlHeight * factor,
+        cornerRadius = cornerRadius * supportingScale,
+        spacing = spacing * supportingScale,
+    )
 }
 
 private val ZephyrLightColors = lightColorScheme(

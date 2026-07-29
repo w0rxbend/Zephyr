@@ -15,6 +15,7 @@ class AppSettingsStoreTest {
         val initial = AppSettings(
             themePreference = ThemePreference.Dark,
             uiDensity = UiDensity.Comfortable,
+            textScale = TextScale.Percent150,
             showSdkmanHome = false,
             favoriteCandidates = setOf("gradle", "kotlin"),
             favoriteJdkVendors = setOf("tem", "zulu"),
@@ -52,6 +53,7 @@ class AppSettingsStoreTest {
             val expected = AppSettings(
                 favoriteCandidates = setOf("kotlin", "gradle"),
                 favoriteJdkVendors = setOf("zulu", "tem"),
+                textScale = TextScale.Percent200,
                 recentCandidates = listOf("kotlin", "gradle"),
                 toolchainProfiles = listOf(
                     ToolchainProfile(

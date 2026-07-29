@@ -100,6 +100,12 @@ Navigation is grouped into Workspace, Discover, Maintenance, and application sec
 - Emphasized badges retain explicit text while pairing each tone with a consistent symbol.
 - Status markers and badges publish descriptive accessibility labels for assistive technologies.
 
+### Scalable typography
+
+- Settings offers persisted 100%, 125%, 150%, 175%, and 200% text scales.
+- Scaling is applied to the complete Material type system, including headings, body copy, labels, and dialogs.
+- Navigation, toolbar, status bar, panel, and control metrics grow with text so larger labels are not clipped.
+
 ### Favorites
 
 - Favorite any SDK from Browse SDKs; favorites sort before other matching catalog results.

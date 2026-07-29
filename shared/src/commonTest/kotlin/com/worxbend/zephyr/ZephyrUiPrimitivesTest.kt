@@ -18,8 +18,10 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.v2.runComposeUiTest
+import androidx.compose.ui.unit.sp
 import com.worxbend.zephyr.settings.AppSettings
 import com.worxbend.zephyr.settings.ThemePreference
+import com.worxbend.zephyr.settings.TextScale
 import com.worxbend.zephyr.settings.UiDensity
 import com.worxbend.zephyr.domain.SdkmanTransaction
 import com.worxbend.zephyr.domain.DiskImpactEstimate
@@ -29,6 +31,14 @@ import kotlin.test.assertEquals
 import kotlin.test.Test
 
 class ZephyrUiPrimitivesTest {
+    @Test
+    fun typographyScalesThroughTwoHundredPercent() {
+        assertEquals(13.sp, typographyFor(TextScale.Percent100).bodyMedium.fontSize)
+        assertEquals(19.5.sp, typographyFor(TextScale.Percent150).bodyMedium.fontSize)
+        assertEquals(26.sp, typographyFor(TextScale.Percent200).bodyMedium.fontSize)
+        assertEquals(38.sp, typographyFor(TextScale.Percent200).bodyMedium.lineHeight)
+    }
+
     @Test
     fun statusTonesHaveDistinctNonColorSignals() {
         assertEquals("•", statusSymbol(StatusTone.Neutral))
@@ -87,7 +97,7 @@ class ZephyrUiPrimitivesTest {
                         onSettingsChange = { transform -> settings = transform(settings) },
                     )
                     Text(
-                        "${settings.themePreference}:${settings.uiDensity}",
+                        "${settings.themePreference}:${settings.uiDensity}:${settings.textScale}",
                         modifier = Modifier.testTag("appearance-settings"),
                     )
                 }
@@ -96,9 +106,10 @@ class ZephyrUiPrimitivesTest {
 
         onNodeWithText("Dark").performClick()
         onNodeWithText("Comfortable").performClick()
+        onNodeWithText("150%").performClick()
 
         onNodeWithTag("appearance-settings").assertTextEquals(
-            "${ThemePreference.Dark}:${UiDensity.Comfortable}",
+            "${ThemePreference.Dark}:${UiDensity.Comfortable}:${TextScale.Percent150}",
         )
     }
 

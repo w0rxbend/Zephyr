@@ -5,6 +5,7 @@ import com.worxbend.zephyr.domain.InstallTarget
 data class AppSettings(
     val themePreference: ThemePreference = ThemePreference.System,
     val uiDensity: UiDensity = UiDensity.Compact,
+    val textScale: TextScale = TextScale.Percent100,
     val showSdkmanHome: Boolean = true,
     val favoriteCandidates: Set<String> = emptySet(),
     val favoriteJdkVendors: Set<String> = emptySet(),
@@ -54,6 +55,14 @@ enum class ThemePreference(val label: String) {
 enum class UiDensity(val label: String) {
     Compact("Compact"),
     Comfortable("Comfortable"),
+}
+
+enum class TextScale(val label: String, val factor: Float) {
+    Percent100("100%", 1f),
+    Percent125("125%", 1.25f),
+    Percent150("150%", 1.5f),
+    Percent175("175%", 1.75f),
+    Percent200("200%", 2f),
 }
 
 enum class CollectionViewMode(val label: String) {

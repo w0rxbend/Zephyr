@@ -89,7 +89,8 @@ The first product slice delivers:
 | UX-04 Sort and filters | Delivered | JDK browsing composes query, installed/available/local-only state, vendor, and sort controls with visible clearable state. |
 | UX-05 Saved filters | Delivered | Named JDK query/status/vendor/sort presets persist locally, apply atomically, replace by name, and can be removed. |
 | UX-06 Accessible status language | Delivered | Status markers use distinct symbols and semantic labels; emphasized badges pair their text and color with tone-specific symbols. |
-| UX-07 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
+| UX-07 Scalable typography | Delivered | A persisted 100–200% text preference scales the complete type system and fixed-height chrome together. |
+| UX-08 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
 
 ## Groomed feature backlog
 

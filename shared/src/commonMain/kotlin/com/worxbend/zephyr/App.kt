@@ -59,7 +59,11 @@ fun App() {
         ThemePreference.Dark -> true
     }
 
-    ZephyrTheme(darkTheme = darkTheme, density = settings.uiDensity) {
+    ZephyrTheme(
+        darkTheme = darkTheme,
+        density = settings.uiDensity,
+        textScale = settings.textScale,
+    ) {
         Surface(Modifier.fillMaxSize()) {
             when (val current = state) {
                 ZephyrUiState.Loading -> LoadingScreen()
