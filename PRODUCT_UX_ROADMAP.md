@@ -43,6 +43,7 @@ The first product slice delivers:
 21. Keyboard-first global search across workspace destinations, candidates, installed versions, settings, and maintenance actions.
 22. Searchable command palette with direct keyboard shortcuts for frequent navigation and safe maintenance actions.
 23. Persistent SDK and JDK-vendor favorites, prioritized in Browse and available as shortcuts from Overview.
+24. Persistent, bounded recent-candidate history with Overview shortcuts back to the last viewed details.
 
 ## Delivery log
 
@@ -60,7 +61,8 @@ The first product slice delivers:
 | FLOW-01 Global search | Delivered | Ctrl/Cmd+K opens a ranked search that navigates or invokes typed maintenance actions entirely from the keyboard. |
 | FLOW-02 Command palette | Delivered | Ctrl/Cmd+Shift+P opens command-only search; documented shortcuts invoke refresh, scan, and Diagnostics directly. |
 | FLOW-03 Favorites | Delivered | SDK and JDK-vendor pins persist locally, sort first in Browse, and render as direct Overview destinations. |
-| FLOW-04 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
+| FLOW-04 Recent items | Delivered | Candidate detail navigation records a deduplicated six-item MRU list and exposes it on Overview across sessions. |
+| FLOW-05 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
 
 ## Groomed feature backlog
 

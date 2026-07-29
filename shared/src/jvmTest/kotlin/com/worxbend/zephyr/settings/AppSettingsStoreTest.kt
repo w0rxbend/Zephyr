@@ -17,6 +17,7 @@ class AppSettingsStoreTest {
             showSdkmanHome = false,
             favoriteCandidates = setOf("gradle", "kotlin"),
             favoriteJdkVendors = setOf("tem", "zulu"),
+            recentCandidates = listOf("kotlin", "gradle"),
         )
         val saved = CompletableDeferred<AppSettings>()
         val repository = FakeAppSettingsRepository(initial) { saved.complete(it) }
@@ -41,6 +42,7 @@ class AppSettingsStoreTest {
             val expected = AppSettings(
                 favoriteCandidates = setOf("kotlin", "gradle"),
                 favoriteJdkVendors = setOf("zulu", "tem"),
+                recentCandidates = listOf("kotlin", "gradle"),
             )
 
             repository.save(expected)
@@ -50,6 +52,15 @@ class AppSettingsStoreTest {
             preferences.removeNode()
             preferences.flush()
         }
+    }
+
+    @Test
+    fun recentCandidatesAreDeduplicatedAndBounded() {
+        val settings = AppSettings(recentCandidates = listOf("gradle", "kotlin", "maven"))
+
+        val updated = settings.recordRecentCandidate("kotlin", limit = 3)
+
+        assertEquals(listOf("kotlin", "gradle", "maven"), updated.recentCandidates)
     }
 }
 

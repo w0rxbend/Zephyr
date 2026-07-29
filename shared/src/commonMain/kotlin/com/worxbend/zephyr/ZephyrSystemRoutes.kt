@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -93,7 +95,13 @@ internal fun OverviewScreen(
             horizontalArrangement = Arrangement.spacedBy(metrics.spacing),
         ) {
             ZephyrPanel(Modifier.weight(1.25f).fillMaxSize()) {
-                Column(Modifier.padding(metrics.panelPadding), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Column(
+                    Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(metrics.panelPadding),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
                     PanelHeading("Quick actions", "Common SDKMAN workflows")
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         ZephyrToolbarButton("Browse JDKs", onClick = { viewModel.navigate(ZephyrRoute.BrowseJdks) })
@@ -106,10 +114,48 @@ internal fun OverviewScreen(
                     KeyValueRow("Default JDK", jdk?.defaultVersion ?: "Not configured")
                     KeyValueRow("Candidates", state.candidates.size.toString())
                     KeyValueRow("Catalog", if (state.catalog.isEmpty()) "Not loaded" else "${state.catalog.size} packages")
+                    PanelHeading("Recent items", "Last-viewed candidate details")
+                    if (settings.recentCandidates.isEmpty()) {
+                        Text(
+                            "Candidate details you open will appear here.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    } else {
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            settings.recentCandidates.forEach { candidate ->
+                                val installed = state.candidates.firstOrNull { it.name == candidate }
+                                val remote = state.catalog.firstOrNull { it.name == candidate }
+                                val label = installed?.displayName ?: remote?.displayName ?: displayNameFor(candidate)
+                                val kind = installed?.kind ?: remote?.kind
+                                ZephyrToolbarButton(
+                                    label = label,
+                                    onClick = {
+                                        viewModel.navigate(
+                                            if (candidate == "java" || kind == CandidateKind.Jdk) {
+                                                ZephyrRoute.JdkDetail(candidate)
+                                            } else {
+                                                ZephyrRoute.SdkDetail(candidate)
+                                            },
+                                        )
+                                    },
+                                )
+                            }
+                        }
+                    }
                 }
             }
             ZephyrPanel(Modifier.weight(0.75f).fillMaxSize()) {
-                Column(Modifier.padding(metrics.panelPadding), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Column(
+                    Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(metrics.panelPadding),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
                     PanelHeading("Environment health", "Read-only diagnostics")
                     HealthRow("SDKMAN detected", true)
                     HealthRow("SDKMAN service online", state.connectivityStatus.state == ConnectivityState.Online)

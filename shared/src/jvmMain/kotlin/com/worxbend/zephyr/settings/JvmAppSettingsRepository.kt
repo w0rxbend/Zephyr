@@ -14,6 +14,7 @@ internal class JvmAppSettingsRepository(
             showSdkmanHome = preferences.getBoolean(SHOW_SDKMAN_HOME_KEY, true),
             favoriteCandidates = preferences.stringSet(FAVORITE_CANDIDATES_KEY),
             favoriteJdkVendors = preferences.stringSet(FAVORITE_JDK_VENDORS_KEY),
+            recentCandidates = preferences.stringList(RECENT_CANDIDATES_KEY),
         )
     }
 
@@ -23,6 +24,7 @@ internal class JvmAppSettingsRepository(
         preferences.putBoolean(SHOW_SDKMAN_HOME_KEY, settings.showSdkmanHome)
         preferences.put(FAVORITE_CANDIDATES_KEY, settings.favoriteCandidates.encode())
         preferences.put(FAVORITE_JDK_VENDORS_KEY, settings.favoriteJdkVendors.encode())
+        preferences.put(RECENT_CANDIDATES_KEY, settings.recentCandidates.encode())
         preferences.flush()
     }
 
@@ -46,12 +48,28 @@ internal class JvmAppSettingsRepository(
             .sorted()
             .joinToString("\n")
 
+    private fun Preferences.stringList(key: String): List<String> =
+        get(key, "")
+            .lineSequence()
+            .map(String::trim)
+            .filter(String::isNotEmpty)
+            .distinct()
+            .toList()
+
+    private fun List<String>.encode(): String =
+        asSequence()
+            .map(String::trim)
+            .filter(String::isNotEmpty)
+            .distinct()
+            .joinToString("\n")
+
     private companion object {
         const val THEME_KEY = "theme"
         const val DENSITY_KEY = "density"
         const val SHOW_SDKMAN_HOME_KEY = "show-sdkman-home"
         const val FAVORITE_CANDIDATES_KEY = "favorite-candidates"
         const val FAVORITE_JDK_VENDORS_KEY = "favorite-jdk-vendors"
+        const val RECENT_CANDIDATES_KEY = "recent-candidates"
     }
 }
 

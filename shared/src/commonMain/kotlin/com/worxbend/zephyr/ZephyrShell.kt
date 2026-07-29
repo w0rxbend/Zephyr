@@ -26,6 +26,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,6 +53,7 @@ import com.worxbend.zephyr.domain.SdkmanTransaction
 import com.worxbend.zephyr.domain.formatByteSize
 import com.worxbend.zephyr.domain.requiresNetwork
 import com.worxbend.zephyr.settings.AppSettings
+import com.worxbend.zephyr.settings.recordRecentCandidate
 import com.worxbend.zephyr.viewmodel.ZephyrRoute
 import com.worxbend.zephyr.viewmodel.ZephyrUiState
 import com.worxbend.zephyr.viewmodel.ZephyrViewModel
@@ -88,6 +90,17 @@ internal fun ZephyrScreen(
                     viewModel.requestTransaction(SdkmanTransaction.SelfUpdate)
                 }
             }
+        }
+    }
+
+    LaunchedEffect(state.route) {
+        val candidate = when (val route = state.route) {
+            is ZephyrRoute.JdkDetail -> route.candidate
+            is ZephyrRoute.SdkDetail -> route.candidate
+            else -> null
+        }
+        if (candidate != null) {
+            onSettingsChange { it.recordRecentCandidate(candidate) }
         }
     }
 

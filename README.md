@@ -70,6 +70,12 @@ Navigation is grouped into Workspace, Discover, Maintenance, and application sec
 - Favorite SDKs and JDK vendors persist with the desktop preferences and appear as direct shortcuts on Overview.
 - Favorites store SDKMAN candidate keys and JDK provider codes only; they do not store machine paths or remote content.
 
+### Recent items
+
+- Opening a candidate detail records it in a most-recently-used list on Overview.
+- The list keeps six unique SDKMAN candidate keys, moves revisited items to the front, and persists between launches.
+- Recent entries resolve to JDK or SDK detail routes using current local/catalog metadata, with a safe key-based fallback.
+
 ### Installed JDK screen
 
 Displays installed Java versions as cards. Supports:
