@@ -19,6 +19,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 
 class ApacheCommonsSdkmanCommandRunner(
     private val sdkmanHome: Path,
+    private val proxyEnvironment: () -> Map<String, String> = ::emptyMap,
 ) : SdkmanCommandRunner {
     override suspend fun run(command: SdkmanCommand, timeout: Duration): SdkmanCommandResult =
         withContext(Dispatchers.IO) {
@@ -35,6 +36,7 @@ class ApacheCommonsSdkmanCommandRunner(
 
             val environment = mutableMapOf<String, String>()
             environment.putAll(System.getenv())
+            environment.putAll(proxyEnvironment())
             environment["SDKMAN_DIR"] = sdkmanHome.toString()
             environment.remove("BASH_ENV")
             // SDKMAN's human-readable output is parsed below. Keep its structure stable

@@ -6,10 +6,12 @@ import com.worxbend.zephyr.sdkman.JvmCandidateMetadataCacheStore
 import com.worxbend.zephyr.sdkman.PreferencesProtectedVersionStore
 import okio.FileSystem
 
-actual fun createSdkmanRepository(): SdkmanRepository =
-    JvmSdkmanRepository(
+actual fun createSdkmanRepository(): SdkmanRepository {
+    val proxy = JvmProxyConfigurationService()
+    return JvmSdkmanRepository(
         fileSystem = FileSystem.SYSTEM,
         protectedVersionStore = PreferencesProtectedVersionStore(),
         candidateCacheStore = JvmCandidateMetadataCacheStore(),
-        commandRunnerFactory = { home -> ApacheCommonsSdkmanCommandRunner(home) },
+        commandRunnerFactory = { home -> ApacheCommonsSdkmanCommandRunner(home, proxy::environment) },
     )
+}

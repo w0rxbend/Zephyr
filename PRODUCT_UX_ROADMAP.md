@@ -104,7 +104,8 @@ The first product slice delivers:
 | ECO-01 Candidate metadata cache | Delivered | Versioned catalog metadata persists in the platform cache, hydrates Browse offline, refreshes online, and exposes cached/live state plus age. |
 | ECO-02 Vendor knowledge | Delivered | Versioned JDK vendor summaries expose maintainer and support characteristics with an authoritative HTTPS source per SDKMAN code. |
 | ECO-03 Release notes links | Delivered | Update Center resolves known candidates to validated upstream HTTPS release histories through a browser boundary that rejects unsafe URLs. |
-| ECO-04 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
+| ECO-04 Proxy configuration | Delivered | Explicit proxy coordinates apply only to SDKMAN children; passwords use Linux Secret Service and are rejected when secure storage is unavailable. |
+| ECO-05 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
 
 ## Groomed feature backlog
 

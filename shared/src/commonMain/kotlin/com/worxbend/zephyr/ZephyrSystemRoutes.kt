@@ -27,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.worxbend.zephyr.domain.CandidateKind
 import com.worxbend.zephyr.domain.BatchItemStatus
@@ -54,6 +55,8 @@ import com.worxbend.zephyr.data.diffEnvironmentSnapshots
 import com.worxbend.zephyr.data.planSnapshotRestore
 import com.worxbend.zephyr.data.SdkmanRcDocument
 import com.worxbend.zephyr.data.createProjectToolchainService
+import com.worxbend.zephyr.data.ProxyConfiguration
+import com.worxbend.zephyr.data.createProxyConfigurationService
 import com.worxbend.zephyr.settings.AppSettings
 import com.worxbend.zephyr.settings.CleanupGracePeriod
 import com.worxbend.zephyr.settings.MetadataRefreshSchedule
@@ -1647,6 +1650,16 @@ internal fun SettingsScreen(
     onSettingsChange: ((AppSettings) -> AppSettings) -> Unit,
 ) {
     val metrics = LocalZephyrMetrics.current
+    val proxyService = remember { createProxyConfigurationService() }
+    val scope = rememberCoroutineScope()
+    var proxyConfiguration by remember { mutableStateOf(ProxyConfiguration()) }
+    var proxyPort by remember { mutableStateOf("8080") }
+    var proxyPassword by remember { mutableStateOf("") }
+    var proxyMessage by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(proxyService) {
+        proxyConfiguration = proxyService.load()
+        proxyPort = proxyConfiguration.port.toString()
+    }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -1771,6 +1784,103 @@ internal fun SettingsScreen(
                         onSelected = { selected ->
                             onSettingsChange { it.copy(cleanupGracePeriod = selected) }
                         },
+                    )
+                }
+            }
+        }
+        ZephyrPanel(Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(metrics.panelPadding),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                PanelHeading(
+                    "Enterprise proxy",
+                    "Coordinates stay in preferences; passwords use Linux Secret Service and never enter Zephyr settings.",
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Checkbox(
+                        checked = proxyConfiguration.enabled,
+                        onCheckedChange = { proxyConfiguration = proxyConfiguration.copy(enabled = it) },
+                    )
+                    Text("Use proxy for SDKMAN network commands")
+                    proxyConfiguration.hasStoredPassword.takeIf { it }?.let {
+                        Badge("Password stored securely", BadgeTone.Success)
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    OutlinedTextField(
+                        value = proxyConfiguration.host,
+                        onValueChange = { proxyConfiguration = proxyConfiguration.copy(host = it.take(255)) },
+                        label = { Text("Host") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                    OutlinedTextField(
+                        value = proxyPort,
+                        onValueChange = { proxyPort = it.filter(Char::isDigit).take(5) },
+                        label = { Text("Port") },
+                        singleLine = true,
+                        modifier = Modifier.width(120.dp),
+                    )
+                    OutlinedTextField(
+                        value = proxyConfiguration.username,
+                        onValueChange = { proxyConfiguration = proxyConfiguration.copy(username = it.take(128)) },
+                        label = { Text("Username (optional)") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                    OutlinedTextField(
+                        value = proxyPassword,
+                        onValueChange = { proxyPassword = it.take(512) },
+                        label = { Text(if (proxyConfiguration.hasStoredPassword) "New password (optional)" else "Password (optional)") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ZephyrToolbarButton(
+                        label = "Save proxy",
+                        onClick = {
+                            val port = proxyPort.toIntOrNull() ?: 0
+                            scope.launch {
+                                val result = proxyService.save(
+                                    proxyConfiguration.copy(port = port),
+                                    proxyPassword.takeIf(String::isNotEmpty),
+                                )
+                                proxyMessage = result.message
+                                if (result.success) {
+                                    proxyPassword = ""
+                                    proxyConfiguration = proxyService.load()
+                                    proxyPort = proxyConfiguration.port.toString()
+                                }
+                            }
+                        },
+                    )
+                    ZephyrToolbarButton(
+                        label = "Clear password",
+                        onClick = {
+                            scope.launch {
+                                val result = proxyService.clearPassword()
+                                proxyMessage = result.message
+                                proxyConfiguration = proxyService.load()
+                            }
+                        },
+                        enabled = proxyConfiguration.hasStoredPassword,
+                    )
+                }
+                proxyMessage?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }

@@ -166,6 +166,12 @@ Navigation is grouped into Workspace, Discover, Maintenance, and application sec
 - Version-specific links are used where upstreams publish stable URL patterns; otherwise Zephyr opens the official release history.
 - Both registry resolution and the native browser boundary reject non-HTTPS, credential-bearing, malformed, whitespace, and control-character URLs.
 
+### Enterprise proxy
+
+- Settings accepts an explicit proxy hostname, port, and optional username for SDKMAN network commands.
+- Proxy passwords are stored and retrieved only through Linux Secret Service via `secret-tool`; if it is unavailable, Zephyr refuses to persist the password.
+- Credentials never enter app preferences or shell command text. They are URL-encoded and scoped to the SDKMAN child-process environment.
+
 ### Local-only cleanup grace
 
 - Settings provides opt-in Off, 7-day, 30-day, and 90-day review thresholds.
