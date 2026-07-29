@@ -1,5 +1,8 @@
 package com.worxbend.zephyr.settings
 
+import com.worxbend.zephyr.domain.InstallTarget
+import java.nio.charset.StandardCharsets
+import java.util.Base64
 import java.util.prefs.Preferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -15,6 +18,7 @@ internal class JvmAppSettingsRepository(
             favoriteCandidates = preferences.stringSet(FAVORITE_CANDIDATES_KEY),
             favoriteJdkVendors = preferences.stringSet(FAVORITE_JDK_VENDORS_KEY),
             recentCandidates = preferences.stringList(RECENT_CANDIDATES_KEY),
+            toolchainProfiles = preferences.profiles(PROFILES_KEY),
         )
     }
 
@@ -25,6 +29,7 @@ internal class JvmAppSettingsRepository(
         preferences.put(FAVORITE_CANDIDATES_KEY, settings.favoriteCandidates.encode())
         preferences.put(FAVORITE_JDK_VENDORS_KEY, settings.favoriteJdkVendors.encode())
         preferences.put(RECENT_CANDIDATES_KEY, settings.recentCandidates.encode())
+        preferences.put(PROFILES_KEY, settings.toolchainProfiles.encodeProfiles())
         preferences.flush()
     }
 
@@ -63,6 +68,39 @@ internal class JvmAppSettingsRepository(
             .distinct()
             .joinToString("\n")
 
+    private fun Preferences.profiles(key: String): List<ToolchainProfile> =
+        get(key, "")
+            .lineSequence()
+            .mapNotNull { encoded ->
+                runCatching {
+                    val decoded = String(PROFILE_DECODER.decode(encoded), StandardCharsets.UTF_8)
+                    val fields = decoded.split(PROFILE_FIELD_SEPARATOR)
+                    val name = fields.firstOrNull()?.trim().orEmpty()
+                    val targets = fields.drop(1).mapNotNull { target ->
+                        val parts = target.split(TARGET_FIELD_SEPARATOR, limit = 2)
+                        if (parts.size == 2 && parts.all(String::isNotBlank)) {
+                            InstallTarget(parts[0], parts[1])
+                        } else {
+                            null
+                        }
+                    }
+                    ToolchainProfile(name, targets).takeIf { name.isNotEmpty() && targets.isNotEmpty() }
+                }.getOrNull()
+            }
+            .toList()
+
+    private fun List<ToolchainProfile>.encodeProfiles(): String =
+        asSequence()
+            .filter { it.name.isNotBlank() && it.targets.isNotEmpty() }
+            .map { profile ->
+                buildList {
+                    add(profile.name.trim())
+                    addAll(profile.targets.map { "${it.candidate}$TARGET_FIELD_SEPARATOR${it.version}" })
+                }.joinToString(PROFILE_FIELD_SEPARATOR.toString())
+            }
+            .map { PROFILE_ENCODER.encodeToString(it.toByteArray(StandardCharsets.UTF_8)) }
+            .joinToString("\n")
+
     private companion object {
         const val THEME_KEY = "theme"
         const val DENSITY_KEY = "density"
@@ -70,6 +108,11 @@ internal class JvmAppSettingsRepository(
         const val FAVORITE_CANDIDATES_KEY = "favorite-candidates"
         const val FAVORITE_JDK_VENDORS_KEY = "favorite-jdk-vendors"
         const val RECENT_CANDIDATES_KEY = "recent-candidates"
+        const val PROFILES_KEY = "toolchain-profiles"
+        const val PROFILE_FIELD_SEPARATOR = '\u001F'
+        const val TARGET_FIELD_SEPARATOR = '\u001E'
+        val PROFILE_ENCODER: Base64.Encoder = Base64.getUrlEncoder().withoutPadding()
+        val PROFILE_DECODER: Base64.Decoder = Base64.getUrlDecoder()
     }
 }
 

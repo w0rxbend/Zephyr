@@ -100,6 +100,14 @@ Navigation is grouped into Workspace, Discover, Maintenance, and application sec
 - Removals run sequentially with pending/running/success/failure status per version, continuing after individual failures.
 - Repository checks still reject protected or default versions if local state changes between selection and execution.
 
+### Toolchain profiles
+
+- Save the machine's current candidate defaults as a named profile such as Backend, Android, or Data.
+- Profiles persist candidate/version identifiers locally and compare every target with currently installed versions.
+- Each profile shows installed and missing counts plus status badges for every target.
+- Applying a profile creates a reviewed batch install containing only missing versions; it does not change defaults or remove extra versions.
+- Saving an existing name replaces that profile, and profiles can be deleted without changing the SDKMAN installation.
+
 ### Installed JDK screen
 
 Displays installed Java versions as cards. Supports:

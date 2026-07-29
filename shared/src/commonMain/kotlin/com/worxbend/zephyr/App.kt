@@ -139,6 +139,7 @@ internal fun headerTitle(state: ZephyrUiState.Ready): String =
         ZephyrRoute.LocalOnly -> "Local-only Versions"
         ZephyrRoute.UpdateCenter -> "Update Center"
         ZephyrRoute.BatchUninstall -> "Batch Uninstall"
+        ZephyrRoute.Profiles -> "Toolchain Profiles"
         is ZephyrRoute.JdkDetail -> state.selectedCandidate?.displayName ?: "JDK"
         is ZephyrRoute.SdkDetail -> state.selectedCandidate?.displayName ?: displayNameFor(route.candidate)
     }

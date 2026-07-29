@@ -124,6 +124,7 @@ private fun MutableList<GlobalSearchItem>.addPageItems() {
         Triple("Local-only versions", ZephyrRoute.LocalOnly, null),
         Triple("Update Center", ZephyrRoute.UpdateCenter, null),
         Triple("Batch Uninstall", ZephyrRoute.BatchUninstall, null),
+        Triple("Toolchain Profiles", ZephyrRoute.Profiles, null),
         Triple("Diagnostics", ZephyrRoute.Diagnostics, "Ctrl/⌘ Shift D"),
         Triple("Operation history", ZephyrRoute.History, null),
         Triple("Settings", ZephyrRoute.Settings, null),

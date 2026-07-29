@@ -1,5 +1,7 @@
 package com.worxbend.zephyr.settings
 
+import com.worxbend.zephyr.domain.InstallTarget
+
 data class AppSettings(
     val themePreference: ThemePreference = ThemePreference.System,
     val uiDensity: UiDensity = UiDensity.Compact,
@@ -7,6 +9,12 @@ data class AppSettings(
     val favoriteCandidates: Set<String> = emptySet(),
     val favoriteJdkVendors: Set<String> = emptySet(),
     val recentCandidates: List<String> = emptyList(),
+    val toolchainProfiles: List<ToolchainProfile> = emptyList(),
+)
+
+data class ToolchainProfile(
+    val name: String,
+    val targets: List<InstallTarget>,
 )
 
 fun AppSettings.recordRecentCandidate(candidate: String, limit: Int = 6): AppSettings {

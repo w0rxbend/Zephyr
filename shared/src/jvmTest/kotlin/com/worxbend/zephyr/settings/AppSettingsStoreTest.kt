@@ -5,6 +5,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import com.worxbend.zephyr.domain.InstallTarget
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -18,6 +19,9 @@ class AppSettingsStoreTest {
             favoriteCandidates = setOf("gradle", "kotlin"),
             favoriteJdkVendors = setOf("tem", "zulu"),
             recentCandidates = listOf("kotlin", "gradle"),
+            toolchainProfiles = listOf(
+                ToolchainProfile("Backend", listOf(InstallTarget("java", "21.0.5-tem"))),
+            ),
         )
         val saved = CompletableDeferred<AppSettings>()
         val repository = FakeAppSettingsRepository(initial) { saved.complete(it) }
@@ -43,6 +47,15 @@ class AppSettingsStoreTest {
                 favoriteCandidates = setOf("kotlin", "gradle"),
                 favoriteJdkVendors = setOf("zulu", "tem"),
                 recentCandidates = listOf("kotlin", "gradle"),
+                toolchainProfiles = listOf(
+                    ToolchainProfile(
+                        "Backend | JVM",
+                        listOf(
+                            InstallTarget("java", "21.0.5-tem"),
+                            InstallTarget("gradle", "8.14"),
+                        ),
+                    ),
+                ),
             )
 
             repository.save(expected)

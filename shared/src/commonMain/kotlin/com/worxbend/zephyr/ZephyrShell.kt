@@ -483,6 +483,12 @@ private fun WorkbenchSidebar(
             { onNavigate(ZephyrRoute.InstalledSdks) },
             badge = installedSdks.toString(),
         )
+        ZephyrNavigationItem(
+            "P",
+            "Toolchain Profiles",
+            state.route is ZephyrRoute.Profiles,
+            { onNavigate(ZephyrRoute.Profiles) },
+        )
 
         ZephyrSectionLabel("Discover", Modifier.padding(top = 7.dp))
         ZephyrNavigationItem("+J", "Browse JDKs", state.route is ZephyrRoute.BrowseJdks, { onNavigate(ZephyrRoute.BrowseJdks) })

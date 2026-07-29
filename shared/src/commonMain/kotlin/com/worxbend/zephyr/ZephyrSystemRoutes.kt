@@ -15,6 +15,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -45,6 +46,7 @@ import com.worxbend.zephyr.domain.searchOperationJournal
 import com.worxbend.zephyr.data.formatLocalTimestamp
 import com.worxbend.zephyr.settings.AppSettings
 import com.worxbend.zephyr.settings.ThemePreference
+import com.worxbend.zephyr.settings.ToolchainProfile
 import com.worxbend.zephyr.settings.UiDensity
 import com.worxbend.zephyr.viewmodel.ZephyrRoute
 import com.worxbend.zephyr.viewmodel.ZephyrUiState
@@ -110,6 +112,7 @@ internal fun OverviewScreen(
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         ZephyrToolbarButton("Browse JDKs", onClick = { viewModel.navigate(ZephyrRoute.BrowseJdks) })
                         ZephyrToolbarButton("Browse SDKs", onClick = { viewModel.navigate(ZephyrRoute.BrowseSdks) })
+                        ZephyrToolbarButton("Profiles", onClick = { viewModel.navigate(ZephyrRoute.Profiles) })
                         ZephyrToolbarButton("Update Center", onClick = { viewModel.navigate(ZephyrRoute.UpdateCenter) })
                         ZephyrToolbarButton("Batch Uninstall", onClick = { viewModel.navigate(ZephyrRoute.BatchUninstall) })
                         ZephyrToolbarButton("Refresh local state", onClick = viewModel::refreshInstalled)
@@ -543,6 +546,143 @@ internal fun BatchUninstallScreen(
                                     Badge("SDKMAN key: ${item.target.candidate}")
                                     item.blockedReason?.let { Badge(it, BadgeTone.Warning) }
                                 }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun ToolchainProfilesScreen(
+    state: ZephyrUiState.Ready,
+    viewModel: ZephyrViewModel,
+    settings: AppSettings,
+    onSettingsChange: ((AppSettings) -> AppSettings) -> Unit,
+) {
+    val metrics = LocalZephyrMetrics.current
+    var profileName by remember { mutableStateOf("") }
+    val currentDefaults = state.candidates.mapNotNull { candidate ->
+        candidate.defaultVersion?.let { InstallTarget(candidate.name, it) }
+    }
+
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(metrics.spacing * 2),
+    ) {
+        PageTitle(
+            "Toolchain Profiles",
+            "Save named default-version sets, compare them with this machine, and install missing targets.",
+        )
+        ZephyrPanel(Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(metrics.panelPadding),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                OutlinedTextField(
+                    value = profileName,
+                    onValueChange = { profileName = it.take(60) },
+                    modifier = Modifier.width(300.dp),
+                    singleLine = true,
+                    label = { Text("Profile name") },
+                    placeholder = { Text("Backend, Android, Data…") },
+                )
+                Column(Modifier.weight(1f)) {
+                    Text("Capture current defaults", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "${currentDefaults.size} candidate default(s) will be saved.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                ZephyrToolbarButton(
+                    label = "Save profile",
+                    onClick = {
+                        val profile = ToolchainProfile(profileName.trim(), currentDefaults)
+                        onSettingsChange {
+                            it.copy(
+                                toolchainProfiles = (
+                                    it.toolchainProfiles.filterNot { existing ->
+                                        existing.name.equals(profile.name, ignoreCase = true)
+                                    } + profile
+                                    ).sortedBy { saved -> saved.name.lowercase() },
+                            )
+                        }
+                        profileName = ""
+                    },
+                    enabled = profileName.isNotBlank() && currentDefaults.isNotEmpty(),
+                )
+            }
+        }
+        if (settings.toolchainProfiles.isEmpty()) {
+            EmptyState(
+                "No profiles saved",
+                "Name the current defaults to create a reusable toolchain profile.",
+            )
+            return@Column
+        }
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(metrics.spacing),
+        ) {
+            items(settings.toolchainProfiles, key = ToolchainProfile::name) { profile ->
+                val missing = profile.targets.filter { target ->
+                    state.candidates
+                        .firstOrNull { it.name == target.candidate }
+                        ?.installedVersions
+                        ?.none { it.isInstalled && it.version == target.version }
+                        ?: true
+                }
+                ZephyrPanel(Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(metrics.panelPadding),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(profile.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    "${profile.targets.size - missing.size} installed • ${missing.size} missing",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            if (missing.isNotEmpty()) {
+                                ZephyrToolbarButton(
+                                    label = "Review missing (${missing.size})",
+                                    onClick = {
+                                        viewModel.requestTransaction(SdkmanTransaction.BatchInstall(missing))
+                                    },
+                                )
+                            } else {
+                                Badge("Matches this machine", BadgeTone.Success)
+                            }
+                            ZephyrToolbarButton(
+                                label = "Delete profile",
+                                onClick = {
+                                    onSettingsChange {
+                                        it.copy(toolchainProfiles = it.toolchainProfiles - profile)
+                                    }
+                                },
+                            )
+                        }
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(7.dp),
+                            verticalArrangement = Arrangement.spacedBy(7.dp),
+                        ) {
+                            profile.targets.forEach { target ->
+                                val isMissing = target in missing
+                                Badge(
+                                    "${target.candidate} ${target.version}",
+                                    if (isMissing) BadgeTone.Warning else BadgeTone.Success,
+                                )
                             }
                         }
                     }
