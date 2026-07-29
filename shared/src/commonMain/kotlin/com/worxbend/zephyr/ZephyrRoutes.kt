@@ -41,6 +41,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.worxbend.zephyr.data.createClipboardService
+import com.worxbend.zephyr.data.createTerminalLauncher
 import com.worxbend.zephyr.data.currentEpochMillis
 import com.worxbend.zephyr.domain.Candidate
 import com.worxbend.zephyr.domain.CandidateCatalogItem
@@ -151,6 +152,8 @@ private fun InstalledJdkScreen(
     val jdk = state.candidates.firstOrNull { it.name == "java" }
     var query by remember { mutableStateOf("") }
     var grouping by remember { mutableStateOf(JavaVersionGrouping.None) }
+    var terminalMessage by remember { mutableStateOf<String?>(null) }
+    val terminalLauncher = remember { createTerminalLauncher() }
     val installed = jdk?.installedVersions.orEmpty()
         .asSequence()
         .filter { it.isInstalled }
@@ -159,6 +162,13 @@ private fun InstalledJdkScreen(
     val filtered = installed.filterByQuery(query)
     Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxSize()) {
         PageTitle("Installed JDK", "${installed.size} local Java version(s) managed by SDKMAN.")
+        terminalMessage?.let {
+            Text(
+                it,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -200,6 +210,13 @@ private fun InstalledJdkScreen(
                         isProtected = protected,
                         onToggleProtected = { onProtectionChange("java", version.identifier, !protected) },
                         onClean = { onClean("java", listOf(version.identifier)) },
+                        onOpenTerminal = state.sdkmanStatus.home?.takeIf(String::isNotBlank)?.let { sdkmanHome ->
+                            {
+                                terminalMessage = terminalLauncher
+                                    .launch(sdkmanHome, "java", version.identifier)
+                                    .message
+                            }
+                        },
                     )
                 }
             }
@@ -669,6 +686,7 @@ private fun BrowseScreen(
                                 version = CandidateVersion(java.identifier, java.isInstalled, java.isDefault, java.isRemoteAvailable),
                                 updateTargets = updateTargets,
                                 viewModel = viewModel,
+                                sdkmanHome = state.sdkmanStatus.home,
                                 isProtected = ProtectedVersion("java", java.identifier) in state.protectedVersions,
                                 onClean = onClean,
                                 onUninstall = onUninstall,
@@ -784,9 +802,23 @@ private fun CandidateDetailScreen(
         if (candidate == null || state.detailLoadingCandidate == candidateName && state.selectedCandidate == null) {
             ZephyrProgressIndicator()
         } else if (jdk) {
-            JdkDetailVersions(candidate, state.protectedVersions, viewModel, onClean, onUninstall)
+            JdkDetailVersions(
+                candidate,
+                state.protectedVersions,
+                state.sdkmanStatus.home,
+                viewModel,
+                onClean,
+                onUninstall,
+            )
         } else {
-            VersionList(candidate, state.protectedVersions, viewModel, onClean, onUninstall)
+            VersionList(
+                candidate,
+                state.protectedVersions,
+                state.sdkmanStatus.home,
+                viewModel,
+                onClean,
+                onUninstall,
+            )
         }
     }
 }
@@ -795,6 +827,7 @@ private fun CandidateDetailScreen(
 private fun JdkDetailVersions(
     candidate: Candidate,
     protectedVersions: Set<ProtectedVersion>,
+    sdkmanHome: String?,
     viewModel: ZephyrViewModel,
     onClean: (String, List<String>) -> Unit,
     onUninstall: (String, String) -> Unit,
@@ -844,6 +877,7 @@ private fun JdkDetailVersions(
                         version = CandidateVersion(java.identifier, java.isInstalled, java.isDefault, java.isRemoteAvailable),
                         updateTargets = updateTargets,
                         viewModel = viewModel,
+                        sdkmanHome = sdkmanHome,
                         isProtected = ProtectedVersion(candidate.name, java.identifier) in protectedVersions,
                         onClean = onClean,
                         onUninstall = onUninstall,
@@ -862,6 +896,7 @@ private fun JdkDetailVersions(
 private fun VersionList(
     candidate: Candidate,
     protectedVersions: Set<ProtectedVersion>,
+    sdkmanHome: String?,
     viewModel: ZephyrViewModel,
     onClean: (String, List<String>) -> Unit,
     onUninstall: (String, String) -> Unit,
@@ -899,6 +934,7 @@ private fun VersionList(
                     version = version,
                     updateTargets = updateTargets,
                     viewModel = viewModel,
+                    sdkmanHome = sdkmanHome,
                     isProtected = ProtectedVersion(candidate.name, version.version) in protectedVersions,
                     onClean = onClean,
                     onUninstall = onUninstall,
@@ -924,12 +960,22 @@ private fun VersionRow(
     version: CandidateVersion,
     updateTargets: List<CandidateVersion>,
     viewModel: ZephyrViewModel,
+    sdkmanHome: String?,
     isProtected: Boolean,
     onClean: (String, List<String>) -> Unit,
     onUninstall: (String, String) -> Unit,
 ) {
     var updateMenuOpen by remember { mutableStateOf(false) }
+    var terminalMessage by remember(candidateName, version.version) { mutableStateOf<String?>(null) }
     val clipboard = remember { createClipboardService() }
+    val terminalLauncher = remember { createTerminalLauncher() }
+    val openTerminal = {
+        terminalMessage = if (sdkmanHome.isNullOrBlank()) {
+            "SDKMAN home is unavailable."
+        } else {
+            terminalLauncher.launch(sdkmanHome, candidateName, version.version).message
+        }
+    }
     ContextActionArea(
         actions = buildList {
             add(ContextAction("Copy version") { clipboard.copy(version.version) })
@@ -947,6 +993,13 @@ private fun VersionRow(
                 }
             }
             if (version.isInstalled) {
+                add(
+                    ContextAction(
+                        label = "Open activated terminal",
+                        enabled = !sdkmanHome.isNullOrBlank(),
+                        onClick = openTerminal,
+                    ),
+                )
                 add(ContextAction(if (isProtected) "Unpin" else "Protect") {
                     viewModel.setVersionProtected(candidateName, version.version, !isProtected)
                 })
@@ -982,8 +1035,24 @@ private fun VersionRow(
                     if (version.isRemoteAvailable) Badge("Available", BadgeTone.Success) else Badge("Local only", BadgeTone.Warning)
                     if (isProtected) Badge("Protected", BadgeTone.Primary)
                 }
+                terminalMessage?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
             CopyTextButton(version.version, "Copy version")
+            if (version.isInstalled) {
+                OutlinedButton(
+                    onClick = openTerminal,
+                    enabled = !sdkmanHome.isNullOrBlank(),
+                    modifier = Modifier.height(36.dp),
+                ) {
+                    Text("Terminal")
+                }
+            }
             if (!version.isInstalled && version.isRemoteAvailable) {
                 FilledTonalButton(
                     onClick = { viewModel.requestTransaction(SdkmanTransaction.Install(candidateName, version.version)) },

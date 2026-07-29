@@ -96,7 +96,8 @@ The first product slice delivers:
 | AUTO-01 Scheduled metadata refresh | Delivered | Persisted Off/Hourly/6-hour/Daily schedules refresh only while the app is open, online, and idle, with cadence visible in status. |
 | AUTO-02 Update notifications | Delivered | Persisted Off/Updates-only/All-checks policies produce deduplicated, path-free desktop notices from any loaded catalog refresh. |
 | AUTO-03 Cleanup policy | Delivered | Opt-in 7/30/90-day first-seen tracking flags overdue local-only versions while preserving manual review and repository safety checks. |
-| AUTO-04 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
+| AUTO-04 CLI launch integration | Delivered | Installed versions can open in a supported terminal with `sdk use` scoped to that child shell and values passed outside shell text. |
+| AUTO-05 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
 
 ## Groomed feature backlog
 

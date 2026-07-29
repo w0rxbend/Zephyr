@@ -293,12 +293,16 @@ internal fun JdkVersionCard(
     isProtected: Boolean,
     onToggleProtected: () -> Unit,
     onClean: () -> Unit,
+    onOpenTerminal: (() -> Unit)? = null,
 ) {
     val metrics = LocalZephyrMetrics.current
     val clipboard = remember { createClipboardService() }
     ContextActionArea(
         actions = buildList {
             add(ContextAction("Copy version") { clipboard.copy(version.identifier) })
+            onOpenTerminal?.let {
+                add(ContextAction("Open activated terminal") { it() })
+            }
             add(ContextAction(if (isProtected) "Unpin" else "Protect") { onToggleProtected() })
             if (!version.isRemoteAvailable && version.identifier != default && !isProtected) {
                 add(ContextAction("Clean") { onClean() })
@@ -325,6 +329,9 @@ internal fun JdkVersionCard(
                     }
                 }
                 CopyTextButton(version.identifier, "Copy version")
+                if (onOpenTerminal != null) {
+                    OutlinedButton(onClick = onOpenTerminal) { Text("Terminal") }
+                }
                 OutlinedButton(onClick = onToggleProtected) { Text(if (isProtected) "Unpin" else "Protect") }
                 if (!version.isRemoteAvailable && version.identifier != default && !isProtected) {
                     OutlinedButton(onClick = onClean) { Text("Clean") }

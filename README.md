@@ -142,6 +142,12 @@ Navigation is grouped into Workspace, Discover, Maintenance, and application sec
 - Zephyr persists the first time each candidate/version is observed as local-only and marks overdue counts on the Local-Only page.
 - The policy never deletes automatically: cleanup still requires a user action, transaction preview, protection checks, and repository re-verification.
 
+### Activated terminals
+
+- Installed JDK and SDK versions expose a **Terminal** action and matching right-click entry.
+- Zephyr opens a supported Linux terminal, sources SDKMAN, and runs `sdk use` only inside the launched child shell.
+- SDKMAN home, candidate, and version values travel through child-process environment variables rather than interpolated shell text; persisted defaults remain unchanged.
+
 ### Favorites
 
 - Favorite any SDK from Browse SDKs; favorites sort before other matching catalog results.
