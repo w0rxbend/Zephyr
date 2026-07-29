@@ -13,6 +13,7 @@ import com.worxbend.zephyr.domain.DiskImpactKind
 import com.worxbend.zephyr.domain.EstimateConfidence
 import com.worxbend.zephyr.domain.OperationJournalEntry
 import com.worxbend.zephyr.domain.OperationStatus
+import com.worxbend.zephyr.domain.ProtectedVersion
 import com.worxbend.zephyr.domain.SdkmanSelfUpdateStatus
 import com.worxbend.zephyr.domain.SdkmanStatus
 import com.worxbend.zephyr.domain.SdkmanTransaction
@@ -67,6 +68,7 @@ sealed interface ZephyrUiState {
         val transactionPreviewLoading: Boolean = false,
         val operationJournal: List<OperationJournalEntry> = emptyList(),
         val journalExportInProgress: Boolean = false,
+        val protectedVersions: Set<ProtectedVersion> = emptySet(),
     ) : ZephyrUiState
 }
 
@@ -101,6 +103,7 @@ class ZephyrViewModel(
                     val version = repository.cliVersion()
                     val status = detected.copy(cliVersion = version)
                     val candidates = repository.installedCandidates()
+                    val protectedVersions = loadProtectedVersions()
                     _state.value = ZephyrUiState.Ready(
                         sdkmanStatus = status,
                         route = ZephyrRoute.Overview,
@@ -113,6 +116,7 @@ class ZephyrViewModel(
                         localOnlyScanInProgress = false,
                         errorMessage = null,
                         lastOutcome = "Loaded ${candidates.size} installed SDKMAN package(s).",
+                        protectedVersions = protectedVersions,
                     )
                 }
             }.onFailure { failure ->
@@ -132,6 +136,7 @@ class ZephyrViewModel(
                             localOnlyScanInProgress = false,
                             errorMessage = "SDKMAN catalog failed: ${failure.message}",
                             lastOutcome = null,
+                            protectedVersions = loadProtectedVersions(),
                         )
                     } else {
                         _state.value = ZephyrUiState.SdkmanMissing(detected.reason ?: failure.message ?: "SDKMAN could not be found.")
@@ -290,6 +295,28 @@ class ZephyrViewModel(
                         errorMessage = "Operation journal export failed: ${failure.message}",
                     )
                 }
+            }
+        }
+    }
+
+    fun setVersionProtected(candidate: String, version: String, protected: Boolean) {
+        launchOperation {
+            if (!beginRefresh()) return@launchOperation
+            runCatchingCancellable {
+                val outcome = repository.setVersionProtected(candidate, version, protected)
+                outcome to repository.protectedVersions()
+            }.onSuccess { (outcome, protectedVersions) ->
+                _state.updateReady {
+                    it.copy(
+                        protectedVersions = protectedVersions,
+                        isRefreshing = false,
+                        lastOutcome = outcome.message,
+                        errorMessage = if (outcome.success) null else outcome.message,
+                    )
+                }
+            }.onFailure { failure ->
+                ZephyrLogger.warn("Protected-version update failed.", failure)
+                fail("Protected-version update failed: ${failure.message}")
             }
         }
     }
@@ -577,6 +604,14 @@ class ZephyrViewModel(
             )
         }
     }
+
+    private suspend fun loadProtectedVersions(): Set<ProtectedVersion> =
+        runCatchingCancellable {
+            repository.protectedVersions()
+        }.getOrElse { failure ->
+            ZephyrLogger.warn("Unable to load protected SDKMAN versions.", failure)
+            emptySet()
+        }
 
     private data class MutationResult(
         val outcome: CommandOutcome,

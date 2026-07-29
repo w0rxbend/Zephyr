@@ -8,6 +8,7 @@ import com.worxbend.zephyr.domain.CommandOutcome
 import com.worxbend.zephyr.domain.DiskImpactEstimate
 import com.worxbend.zephyr.domain.DiskImpactKind
 import com.worxbend.zephyr.domain.EstimateConfidence
+import com.worxbend.zephyr.domain.ProtectedVersion
 import com.worxbend.zephyr.domain.SdkmanSelfUpdateStatus
 import com.worxbend.zephyr.domain.SdkmanStatus
 import com.worxbend.zephyr.domain.SdkmanTransaction
@@ -25,6 +26,7 @@ import kotlin.time.Duration.Companion.seconds
 class JvmSdkmanRepository(
     private val fileSystem: FileSystem,
     private val sdkmanHomeResolver: () -> Path = ::defaultSdkmanHome,
+    private val protectedVersionStore: ProtectedVersionStore = InMemoryProtectedVersionStore(),
     private val commandRunnerFactory: (Path) -> SdkmanCommandRunner,
 ) : SdkmanRepository {
     private var sdkmanHome: Path? = null
@@ -227,6 +229,29 @@ class JvmSdkmanRepository(
         }
     }
 
+    override suspend fun protectedVersions(): Set<ProtectedVersion> = protectedVersionStore.load()
+
+    override suspend fun setVersionProtected(
+        candidate: String,
+        version: String,
+        protected: Boolean,
+    ): CommandOutcome {
+        invalidCommandInput(candidate, version)?.let { return it }
+        val target = ProtectedVersion(candidate, version)
+        val current = protectedVersionStore.load()
+        val updated = if (protected) current + target else current - target
+        return try {
+            protectedVersionStore.save(updated)
+            CommandOutcome(
+                success = true,
+                message = if (protected) "Protected $version from cleanup." else "Removed cleanup protection from $version.",
+            )
+        } catch (exception: Exception) {
+            ZephyrLogger.warn("Unable to persist protected SDKMAN versions.", exception)
+            CommandOutcome(false, "Unable to save protected versions: ${exception.message}")
+        }
+    }
+
     override suspend fun refreshCandidateMetadata(): CommandOutcome {
         catalogCache = null
         return runner().run(SdkmanCommand.UpdateCandidateMetadata, 30.seconds).toOutcome("Candidate metadata refreshed.")
@@ -254,6 +279,9 @@ class JvmSdkmanRepository(
 
     override suspend fun uninstall(candidate: String, version: String): CommandOutcome {
         invalidCommandInput(candidate, version)?.let { return it }
+        if (ProtectedVersion(candidate, version) in protectedVersionStore.load()) {
+            return CommandOutcome(false, "Unpin $version before uninstalling it.")
+        }
         catalogCache = null
         return runner().run(SdkmanCommand.Uninstall(candidate, version), 2.minutes).toOutcome("Uninstalled $version.")
     }
@@ -272,6 +300,10 @@ class JvmSdkmanRepository(
         val eligible = requestedVersions.filterNot { it == default }
         if (eligible.size != requestedVersions.size) {
             return CommandOutcome(false, "Choose another default version before cleaning this one.")
+        }
+        val protected = protectedVersionStore.load()
+        if (eligible.any { ProtectedVersion(candidate, it) in protected }) {
+            return CommandOutcome(false, "Unpin protected versions before cleaning them.")
         }
         val localOnlyVersions = try {
             mergedCandidate(candidate)?.localOnlyVersions.orEmpty().toSet()

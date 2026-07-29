@@ -26,11 +26,13 @@ import com.worxbend.zephyr.domain.Candidate
 import com.worxbend.zephyr.domain.CandidateCatalogItem
 import com.worxbend.zephyr.domain.CandidateKind
 import com.worxbend.zephyr.domain.JavaVersion
+import com.worxbend.zephyr.domain.ProtectedVersion
 import com.worxbend.zephyr.domain.javaProviderName
 
 @Composable
 internal fun CandidateGrid(
     candidates: List<Candidate>,
+    protectedVersions: Set<ProtectedVersion> = emptySet(),
     onOpen: (Candidate) -> Unit,
     onClean: (String, List<String>) -> Unit,
 ) {
@@ -41,15 +43,28 @@ internal fun CandidateGrid(
         horizontalArrangement = Arrangement.spacedBy(spacing),
     ) {
         items(candidates, key = { it.name }) { candidate ->
-            CandidateCard(candidate, onClick = { onOpen(candidate) }, onClean = {
-                onClean(candidate.name, candidate.localOnlyVersions)
-            })
+            val protectedLocalOnly = candidate.localOnlyVersions.filter { version ->
+                ProtectedVersion(candidate.name, version) in protectedVersions
+            }
+            CandidateCard(
+                candidate = candidate,
+                protectedLocalOnlyCount = protectedLocalOnly.size,
+                onClick = { onOpen(candidate) },
+                onClean = {
+                    onClean(candidate.name, candidate.localOnlyVersions - protectedLocalOnly.toSet())
+                },
+            )
         }
     }
 }
 
 @Composable
-internal fun CandidateCard(candidate: Candidate, onClick: () -> Unit, onClean: () -> Unit) {
+internal fun CandidateCard(
+    candidate: Candidate,
+    protectedLocalOnlyCount: Int,
+    onClick: () -> Unit,
+    onClean: () -> Unit,
+) {
     val metrics = LocalZephyrMetrics.current
     ZephyrClickablePanel(
         onClick = onClick,
@@ -72,11 +87,20 @@ internal fun CandidateCard(candidate: Candidate, onClick: () -> Unit, onClean: (
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 candidate.defaultVersion?.let { Badge("Default: $it", BadgeTone.Primary) }
                 if (candidate.hasLocalOnlyVersions) Badge("${candidate.localOnlyVersionCount} local-only", BadgeTone.Warning)
+                if (protectedLocalOnlyCount > 0) Badge("$protectedLocalOnlyCount protected", BadgeTone.Primary)
             }
             if (candidate.hasLocalOnlyVersions) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    OutlinedButton(onClick = onClean, modifier = Modifier.height(34.dp)) {
-                        Text("Clean", style = MaterialTheme.typography.labelLarge)
+                    if (protectedLocalOnlyCount < candidate.localOnlyVersionCount) {
+                        OutlinedButton(onClick = onClean, modifier = Modifier.height(34.dp)) {
+                            Text("Clean unprotected", style = MaterialTheme.typography.labelLarge)
+                        }
+                    } else {
+                        Text(
+                            "All local-only versions are protected",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
             }
@@ -110,7 +134,13 @@ internal fun PackageCard(item: CandidateCatalogItem, onClick: () -> Unit) {
 }
 
 @Composable
-internal fun JdkVersionCard(version: JavaVersion, default: String?, onClean: () -> Unit) {
+internal fun JdkVersionCard(
+    version: JavaVersion,
+    default: String?,
+    isProtected: Boolean,
+    onToggleProtected: () -> Unit,
+    onClean: () -> Unit,
+) {
     val metrics = LocalZephyrMetrics.current
     ZephyrPanel {
         Row(
@@ -127,9 +157,13 @@ internal fun JdkVersionCard(version: JavaVersion, default: String?, onClean: () 
                     Badge("SDKMAN key: java")
                     if (version.identifier == default) Badge("Default", BadgeTone.Primary)
                     if (!version.isRemoteAvailable) Badge("Local only", BadgeTone.Warning)
+                    if (isProtected) Badge("Protected", BadgeTone.Primary)
                 }
             }
-            if (!version.isRemoteAvailable && version.identifier != default) OutlinedButton(onClick = onClean) { Text("Clean") }
+            OutlinedButton(onClick = onToggleProtected) { Text(if (isProtected) "Unpin" else "Protect") }
+            if (!version.isRemoteAvailable && version.identifier != default && !isProtected) {
+                OutlinedButton(onClick = onClean) { Text("Clean") }
+            }
             if (!version.isRemoteAvailable && version.identifier == default) {
                 Text("Choose another default first", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }

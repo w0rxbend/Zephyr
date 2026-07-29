@@ -2,11 +2,14 @@ package com.worxbend.zephyr.sdkman
 
 import com.worxbend.zephyr.domain.DiskImpactKind
 import com.worxbend.zephyr.domain.EstimateConfidence
+import com.worxbend.zephyr.domain.ProtectedVersion
 import com.worxbend.zephyr.domain.SdkmanTransaction
 import okio.FileSystem
 import okio.Path
 import okio.Path.Companion.toPath
 import java.nio.file.Files
+import java.util.UUID
+import java.util.prefs.Preferences
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -162,6 +165,54 @@ class JvmSdkmanRepositoryTest {
             assertTrue((install.availableBytes ?: 0) > 0)
         } finally {
             FileSystem.SYSTEM.deleteRecursively(home, mustExist = false)
+        }
+    }
+
+    @Test
+    fun repositoryBoundaryBlocksProtectedCleanupAndUninstall() = runBlocking {
+        val home = Files.createTempDirectory("zephyr-sdkman-test-").toString().toPath()
+        try {
+            createSdkmanHome(home)
+            val protected = ProtectedVersion("java", "17.0.1-tem")
+            val store = InMemoryProtectedVersionStore(setOf(protected))
+            val runner = RecordingRunner()
+            val repository = JvmSdkmanRepository(FileSystem.SYSTEM, { home }, store) { runner }
+
+            val uninstall = repository.uninstall("java", "17.0.1-tem")
+            val cleanup = repository.cleanLocalOnly("java", listOf("17.0.1-tem"))
+
+            assertFalse(uninstall.success)
+            assertFalse(cleanup.success)
+            assertTrue(uninstall.message.contains("Unpin"))
+            assertTrue(cleanup.message.contains("Unpin"))
+            assertFalse(runner.commands.any { it is SdkmanCommand.Uninstall })
+
+            assertTrue(repository.setVersionProtected("java", "17.0.1-tem", false).success)
+            assertTrue(repository.cleanLocalOnly("java", listOf("17.0.1-tem")).success)
+            assertEquals(
+                listOf(SdkmanCommand.Uninstall("java", "17.0.1-tem")),
+                runner.commands.filterIsInstance<SdkmanCommand.Uninstall>(),
+            )
+        } finally {
+            FileSystem.SYSTEM.deleteRecursively(home, mustExist = false)
+        }
+    }
+
+    @Test
+    fun protectedVersionsPersistAcrossStoreInstances() {
+        val preferences = Preferences.userRoot().node("/com/worxbend/zephyr/test/${UUID.randomUUID()}")
+        try {
+            val protected = setOf(
+                ProtectedVersion("java", "21.0.5-tem"),
+                ProtectedVersion("gradle", "9.0.0"),
+            )
+
+            PreferencesProtectedVersionStore(preferences).save(protected)
+
+            assertEquals(protected, PreferencesProtectedVersionStore(preferences).load())
+        } finally {
+            preferences.removeNode()
+            Preferences.userRoot().flush()
         }
     }
 

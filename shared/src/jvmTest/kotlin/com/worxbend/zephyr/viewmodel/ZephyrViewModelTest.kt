@@ -13,6 +13,7 @@ import com.worxbend.zephyr.domain.EstimateConfidence
 import com.worxbend.zephyr.domain.JournalExportResult
 import com.worxbend.zephyr.domain.OperationJournalEntry
 import com.worxbend.zephyr.domain.OperationStatus
+import com.worxbend.zephyr.domain.ProtectedVersion
 import com.worxbend.zephyr.domain.SdkmanSelfUpdateStatus
 import com.worxbend.zephyr.domain.SdkmanStatus
 import com.worxbend.zephyr.domain.SdkmanTransaction
@@ -287,6 +288,21 @@ class ZephyrViewModelTest {
         viewModel.close()
     }
 
+    @Test
+    fun protectionChangesAreReflectedInReadyState() {
+        val viewModel = ZephyrViewModel(FakeSdkmanRepository(), testScope())
+        val protected = ProtectedVersion("java", "21.0.5-tem")
+
+        viewModel.setVersionProtected(protected.candidate, protected.version, true)
+
+        assertTrue(protected in assertIs<ZephyrUiState.Ready>(viewModel.state.value).protectedVersions)
+
+        viewModel.setVersionProtected(protected.candidate, protected.version, false)
+
+        assertFalse(protected in assertIs<ZephyrUiState.Ready>(viewModel.state.value).protectedVersions)
+        viewModel.close()
+    }
+
     private fun testScope() = Dispatchers.Unconfined
 }
 
@@ -323,6 +339,7 @@ private class FakeSdkmanRepository(
     var metadataRefreshCalls: Int = 0
         private set
     val mutationCalls = mutableListOf<String>()
+    private val protected = mutableSetOf<ProtectedVersion>()
 
     override suspend fun detect(): SdkmanStatus = SdkmanStatus(isInstalled = true, home = "/tmp/sdkman")
 
@@ -363,6 +380,18 @@ private class FakeSdkmanRepository(
             confidence = EstimateConfidence.Exact,
             explanation = "No test disk impact.",
         )
+
+    override suspend fun protectedVersions(): Set<ProtectedVersion> = protected
+
+    override suspend fun setVersionProtected(
+        candidate: String,
+        version: String,
+        protected: Boolean,
+    ): CommandOutcome {
+        val target = ProtectedVersion(candidate, version)
+        if (protected) this.protected += target else this.protected -= target
+        return CommandOutcome(true, if (protected) "Protected" else "Unprotected")
+    }
 
     override suspend fun refreshCandidateMetadata(): CommandOutcome {
         metadataRefreshCalls += 1

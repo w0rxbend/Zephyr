@@ -43,6 +43,7 @@ import com.worxbend.zephyr.domain.Candidate
 import com.worxbend.zephyr.domain.CandidateCatalogItem
 import com.worxbend.zephyr.domain.CandidateKind
 import com.worxbend.zephyr.domain.CandidateVersion
+import com.worxbend.zephyr.domain.ProtectedVersion
 import com.worxbend.zephyr.domain.SdkmanTransaction
 import com.worxbend.zephyr.domain.displayNameFor
 import com.worxbend.zephyr.domain.toJavaVersion
@@ -64,7 +65,12 @@ internal fun Content(
     Box(Modifier.fillMaxSize().padding(metrics.pagePadding)) {
         when (val route = state.route) {
             ZephyrRoute.Overview -> OverviewScreen(state, viewModel)
-            ZephyrRoute.InstalledJdk -> InstalledJdkScreen(state, viewModel::navigate, onClean)
+            ZephyrRoute.InstalledJdk -> InstalledJdkScreen(
+                state,
+                viewModel::navigate,
+                viewModel::setVersionProtected,
+                onClean,
+            )
             ZephyrRoute.InstalledSdks -> InstalledSdksScreen(state, viewModel::navigate, onClean)
             ZephyrRoute.BrowseJdks -> BrowseScreen(
                 state = state,
@@ -93,6 +99,7 @@ internal fun Content(
 private fun InstalledJdkScreen(
     state: ZephyrUiState.Ready,
     onNavigate: (ZephyrRoute) -> Unit,
+    onProtectionChange: (String, String, Boolean) -> Unit,
     onClean: (String, List<String>) -> Unit,
 ) {
     val jdk = state.candidates.firstOrNull { it.name == "java" }
@@ -140,9 +147,14 @@ private fun InstalledJdkScreen(
             groups.forEach { (title, groupVersions) ->
                 if (title.isNotBlank()) item { Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) }
                 items(groupVersions) { version ->
-                    JdkVersionCard(version, jdk?.defaultVersion) {
-                        onClean("java", listOf(version.identifier))
-                    }
+                    val protected = ProtectedVersion("java", version.identifier) in state.protectedVersions
+                    JdkVersionCard(
+                        version = version,
+                        default = jdk?.defaultVersion,
+                        isProtected = protected,
+                        onToggleProtected = { onProtectionChange("java", version.identifier, !protected) },
+                        onClean = { onClean("java", listOf(version.identifier)) },
+                    )
                 }
             }
         }
@@ -184,7 +196,12 @@ private fun InstalledSdksScreen(
         } else if (filtered.isEmpty()) {
             EmptyState("No matching SDKs", "No installed packages match \"$query\".", "Clear search") { query = "" }
         } else {
-            CandidateGrid(filtered, onOpen = { onNavigate(ZephyrRoute.SdkDetail(it.name)) }, onClean = onClean)
+            CandidateGrid(
+                candidates = filtered,
+                protectedVersions = state.protectedVersions,
+                onOpen = { onNavigate(ZephyrRoute.SdkDetail(it.name)) },
+                onClean = onClean,
+            )
         }
     }
 }
@@ -333,6 +350,7 @@ private fun BrowseScreen(
                                 version = CandidateVersion(java.identifier, java.isInstalled, java.isDefault, java.isRemoteAvailable),
                                 updateTargets = updateTargets,
                                 viewModel = viewModel,
+                                isProtected = ProtectedVersion("java", java.identifier) in state.protectedVersions,
                                 onClean = onClean,
                                 onUninstall = onUninstall,
                             )
@@ -387,7 +405,8 @@ private fun LocalOnlyScreen(
             EmptyState("No Local-Only Versions", "Run Scan whenever SDKMAN metadata changes.", "Run scan", onScan)
         } else {
             CandidateGrid(
-                items,
+                candidates = items,
+                protectedVersions = state.protectedVersions,
                 onOpen = { candidate ->
                     onNavigate(if (candidate.kind == CandidateKind.Jdk) ZephyrRoute.JdkDetail(candidate.name) else ZephyrRoute.SdkDetail(candidate.name))
                 },
@@ -429,9 +448,9 @@ private fun CandidateDetailScreen(
         if (candidate == null || state.detailLoadingCandidate == candidateName && state.selectedCandidate == null) {
             CircularProgressIndicator()
         } else if (jdk) {
-            JdkDetailVersions(candidate, viewModel, onClean, onUninstall)
+            JdkDetailVersions(candidate, state.protectedVersions, viewModel, onClean, onUninstall)
         } else {
-            VersionList(candidate, viewModel, onClean, onUninstall)
+            VersionList(candidate, state.protectedVersions, viewModel, onClean, onUninstall)
         }
     }
 }
@@ -439,6 +458,7 @@ private fun CandidateDetailScreen(
 @Composable
 private fun JdkDetailVersions(
     candidate: Candidate,
+    protectedVersions: Set<ProtectedVersion>,
     viewModel: ZephyrViewModel,
     onClean: (String, List<String>) -> Unit,
     onUninstall: (String, String) -> Unit,
@@ -485,6 +505,7 @@ private fun JdkDetailVersions(
                         version = CandidateVersion(java.identifier, java.isInstalled, java.isDefault, java.isRemoteAvailable),
                         updateTargets = updateTargets,
                         viewModel = viewModel,
+                        isProtected = ProtectedVersion(candidate.name, java.identifier) in protectedVersions,
                         onClean = onClean,
                         onUninstall = onUninstall,
                     )
@@ -501,6 +522,7 @@ private fun JdkDetailVersions(
 @Composable
 private fun VersionList(
     candidate: Candidate,
+    protectedVersions: Set<ProtectedVersion>,
     viewModel: ZephyrViewModel,
     onClean: (String, List<String>) -> Unit,
     onUninstall: (String, String) -> Unit,
@@ -530,7 +552,15 @@ private fun VersionList(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             items(versions, key = { it.version }) { version ->
-                VersionRow(candidate.name, version, updateTargets, viewModel, onClean, onUninstall)
+                VersionRow(
+                    candidateName = candidate.name,
+                    version = version,
+                    updateTargets = updateTargets,
+                    viewModel = viewModel,
+                    isProtected = ProtectedVersion(candidate.name, version.version) in protectedVersions,
+                    onClean = onClean,
+                    onUninstall = onUninstall,
+                )
             }
         }
         VerticalScrollbar(
@@ -552,6 +582,7 @@ private fun VersionRow(
     version: CandidateVersion,
     updateTargets: List<CandidateVersion>,
     viewModel: ZephyrViewModel,
+    isProtected: Boolean,
     onClean: (String, List<String>) -> Unit,
     onUninstall: (String, String) -> Unit,
 ) {
@@ -572,6 +603,7 @@ private fun VersionRow(
                 if (version.isDefault) Badge("Default", BadgeTone.Primary)
                 if (version.isInstalled) Badge("Installed", BadgeTone.Neutral)
                 if (version.isRemoteAvailable) Badge("Available", BadgeTone.Success) else Badge("Local only", BadgeTone.Warning)
+                if (isProtected) Badge("Protected", BadgeTone.Primary)
             }
         }
         if (!version.isInstalled && version.isRemoteAvailable) {
@@ -589,10 +621,18 @@ private fun VersionRow(
             ) {
                 Text("Make default")
             }
-            if (version.isRemoteAvailable) {
+            if (version.isRemoteAvailable && !isProtected) {
                 OutlinedButton(onClick = { onUninstall(candidateName, version.version) }, modifier = Modifier.height(36.dp)) {
                     Text("Uninstall")
                 }
+            }
+        }
+        if (version.isInstalled) {
+            OutlinedButton(
+                onClick = { viewModel.setVersionProtected(candidateName, version.version, !isProtected) },
+                modifier = Modifier.height(36.dp),
+            ) {
+                Text(if (isProtected) "Unpin" else "Protect")
             }
         }
         if (version.isInstalled && !version.isRemoteAvailable) {
@@ -611,7 +651,7 @@ private fun VersionRow(
                 }
             }
         }
-        if (version.isInstalled && !version.isRemoteAvailable && !version.isDefault) {
+        if (version.isInstalled && !version.isRemoteAvailable && !version.isDefault && !isProtected) {
             ZephyrDestructiveButton(
                 label = "Clean",
                 onClick = { onClean(candidateName, listOf(version.version)) },

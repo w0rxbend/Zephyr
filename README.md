@@ -107,6 +107,14 @@ Every SDKMAN mutation is reviewed before execution:
 - Export writes a collision-safe CSV to `~/Downloads` when available, falling back to the user home directory.
 - Export content contains operation data but excludes the SDKMAN home path.
 
+### Protected versions
+
+- Pin any installed version from Installed JDK or a package detail page.
+- Protected badges remain visible in version lists and local-only cleanup cards.
+- Candidate-level cleanup automatically excludes pinned versions and explains when every local-only version is protected.
+- Protection is persisted for the desktop user.
+- Cleanup and uninstall enforce protection again inside the repository, so bypassing the UI cannot remove a pinned version.
+
 ### SDKMAN maintenance
 
 - **Refresh** — reloads the local filesystem state.
