@@ -82,6 +82,12 @@ Navigation is grouped into Workspace, Discover, Maintenance, and application sec
 - Card mode keeps descriptions and visual scanning; table mode prioritizes dense identifiers, defaults, stable targets, favorites, and actions.
 - Installed and catalog modes persist independently, so each page family keeps its preferred presentation.
 
+### Sort and filters
+
+- Browse JDKs combines free-text search with All/Installed/Available/Local-only status, an explicit vendor selector, and Catalog/Version/Vendor sorting.
+- Active search, status, vendor, and sort choices render as visible badges with one **Clear filters** action.
+- Filter and sort composition is covered by deterministic presentation tests.
+
 ### Favorites
 
 - Favorite any SDK from Browse SDKs; favorites sort before other matching catalog results.

@@ -55,6 +55,7 @@ The first product slice delivers:
 33. Documented keyboard navigation with global workspace shortcuts, deterministic resolution tests, and visible custom-control focus.
 34. Drag-resizable navigation with density-aware defaults, safe width bounds, persistence, and a Settings reset.
 35. Independent persistent Cards/Table preferences for installed SDK and catalog browsing page families.
+36. Composable JDK search, lifecycle, vendor, and sort controls with visible active filters and deterministic reset.
 
 ## Delivery log
 
@@ -84,7 +85,8 @@ The first product slice delivers:
 | UX-01 Keyboard navigation | Delivered | Global route/action shortcuts, Tab focus guidance, resolver tests, and visible sidebar/toolbar focus support keyboard-only use. |
 | UX-02 Resizable navigation | Delivered | Sidebar dragging persists within tested 190–360 dp bounds and can return to the density-aware default from Settings. |
 | UX-03 Table/card view choice | Delivered | Installed SDK and Browse SDK families independently persist visual-card or dense-table rendering without losing actions. |
-| UX-04 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
+| UX-04 Sort and filters | Delivered | JDK browsing composes query, installed/available/local-only state, vendor, and sort controls with visible clearable state. |
+| UX-05 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
 
 ## Groomed feature backlog
 

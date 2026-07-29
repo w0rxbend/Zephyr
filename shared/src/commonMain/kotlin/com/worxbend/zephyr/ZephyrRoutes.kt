@@ -365,7 +365,13 @@ private fun BrowseScreen(
     val jdkPackage = state.selectedCandidate ?: state.candidates.firstOrNull { it.name == "java" }
     var query by remember { mutableStateOf("") }
     var grouping by remember { mutableStateOf(JavaVersionGrouping.FeatureVersion) }
-    var collapsedGroups by remember(grouping, query) { mutableStateOf(emptySet<String>()) }
+    var statusFilter by remember { mutableStateOf(JavaVersionStatusFilter.All) }
+    var providerFilter by remember { mutableStateOf<String?>(null) }
+    var versionSort by remember { mutableStateOf(JavaVersionSort.Catalog) }
+    var providerMenuOpen by remember { mutableStateOf(false) }
+    var collapsedGroups by remember(grouping, query, statusFilter, providerFilter, versionSort) {
+        mutableStateOf(emptySet<String>())
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxSize()) {
         PageTitle("Browse JDKs", "SDKMAN JDK versions. ${jdkPackage?.installedVersions?.size ?: 0} version(s) loaded.")
@@ -387,6 +393,96 @@ private fun BrowseScreen(
                 onClick = { grouping = JavaVersionGrouping.Provider },
             )
         }
+        val allJavaVersions = jdkPackage?.installedVersions.orEmpty().map { it.toJavaVersion() }
+        val providers = allJavaVersions
+            .mapNotNull { version ->
+                version.providerCode?.let { code -> code to (version.providerName ?: code) }
+            }
+            .distinctBy { it.first }
+            .sortedBy { it.second }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ZephyrSegmentedControl(
+                options = JavaVersionStatusFilter.entries,
+                selected = statusFilter,
+                label = JavaVersionStatusFilter::label,
+                onSelected = { statusFilter = it },
+            )
+            Box {
+                ZephyrToolbarButton(
+                    label = "Vendor",
+                    detail = providerFilter?.let { selected ->
+                        providers.firstOrNull { it.first == selected }?.second ?: selected
+                    } ?: "all",
+                    onClick = { providerMenuOpen = true },
+                )
+                DropdownMenu(
+                    expanded = providerMenuOpen,
+                    onDismissRequest = { providerMenuOpen = false },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("All vendors") },
+                        onClick = {
+                            providerFilter = null
+                            providerMenuOpen = false
+                        },
+                    )
+                    providers.forEach { (code, name) ->
+                        DropdownMenuItem(
+                            text = { Text(name) },
+                            onClick = {
+                                providerFilter = code
+                                providerMenuOpen = false
+                            },
+                        )
+                    }
+                }
+            }
+            ZephyrSegmentedControl(
+                options = JavaVersionSort.entries,
+                selected = versionSort,
+                label = JavaVersionSort::label,
+                onSelected = { versionSort = it },
+            )
+            Text(
+                "${allJavaVersions.filterAndSort(query, statusFilter, providerFilter, versionSort).size} shown",
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        val filtersActive = query.isNotBlank() ||
+            statusFilter != JavaVersionStatusFilter.All ||
+            providerFilter != null ||
+            versionSort != JavaVersionSort.Catalog
+        if (filtersActive) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
+                verticalArrangement = Arrangement.spacedBy(7.dp),
+            ) {
+                if (query.isNotBlank()) Badge("Search: $query")
+                if (statusFilter != JavaVersionStatusFilter.All) Badge(statusFilter.label, BadgeTone.Primary)
+                providerFilter?.let { code ->
+                    Badge(
+                        "Vendor: ${providers.firstOrNull { it.first == code }?.second ?: code}",
+                        BadgeTone.Primary,
+                    )
+                }
+                if (versionSort != JavaVersionSort.Catalog) Badge("Sort: ${versionSort.label}")
+                ZephyrToolbarButton(
+                    label = "Clear filters",
+                    onClick = {
+                        query = ""
+                        statusFilter = JavaVersionStatusFilter.All
+                        providerFilter = null
+                        versionSort = JavaVersionSort.Catalog
+                    },
+                )
+            }
+        }
 
         if (state.detailLoadingCandidate == "java" && jdkPackage == null) {
             CircularProgressIndicator()
@@ -397,11 +493,23 @@ private fun BrowseScreen(
             return@Column
         }
 
-        val filteredVersions = jdkPackage.installedVersions
-            .map { it.toJavaVersion() }
-            .filterByQuery(query)
+        val filteredVersions = allJavaVersions.filterAndSort(
+            query = query,
+            status = statusFilter,
+            providerCode = providerFilter,
+            sort = versionSort,
+        )
         if (filteredVersions.isEmpty()) {
-            EmptyState("No matching JDKs", "No available Java versions match \"$query\".", "Clear search") { query = "" }
+            EmptyState(
+                "No matching JDKs",
+                "No Java versions match the active search, status, and vendor filters.",
+                "Clear filters",
+            ) {
+                query = ""
+                statusFilter = JavaVersionStatusFilter.All
+                providerFilter = null
+                versionSort = JavaVersionSort.Catalog
+            }
             return@Column
         }
         val groups = filteredVersions.groupBy(grouping)
