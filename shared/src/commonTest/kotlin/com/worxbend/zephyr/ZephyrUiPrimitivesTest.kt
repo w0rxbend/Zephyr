@@ -25,9 +25,32 @@ import com.worxbend.zephyr.domain.SdkmanTransaction
 import com.worxbend.zephyr.domain.DiskImpactEstimate
 import com.worxbend.zephyr.domain.DiskImpactKind
 import com.worxbend.zephyr.domain.EstimateConfidence
+import kotlin.test.assertEquals
 import kotlin.test.Test
 
 class ZephyrUiPrimitivesTest {
+    @Test
+    fun statusTonesHaveDistinctNonColorSignals() {
+        assertEquals("•", statusSymbol(StatusTone.Neutral))
+        assertEquals("↻", statusSymbol(StatusTone.Accent))
+        assertEquals("✓", statusSymbol(StatusTone.Success))
+        assertEquals("!", statusSymbol(StatusTone.Warning))
+        assertEquals("×", statusSymbol(StatusTone.Error))
+        assertEquals("Healthy", statusLabel(StatusTone.Success))
+        assertEquals("Error", statusLabel(StatusTone.Error))
+    }
+
+    @Test
+    fun emphasizedBadgesPairSymbolsWithLabels() {
+        assertEquals(null, badgeSymbol(BadgeTone.Neutral))
+        assertEquals("◆", badgeSymbol(BadgeTone.Primary))
+        assertEquals("✓", badgeSymbol(BadgeTone.Success))
+        assertEquals("!", badgeSymbol(BadgeTone.Warning))
+        assertEquals("×", badgeSymbol(BadgeTone.Error))
+        assertEquals("Success", badgeToneLabel(BadgeTone.Success))
+        assertEquals("Error", badgeToneLabel(BadgeTone.Error))
+    }
+
     @OptIn(ExperimentalTestApi::class)
     @Test
     fun searchFieldPublishesUserInput() = runComposeUiTest {

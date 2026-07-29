@@ -33,6 +33,8 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
@@ -245,7 +247,26 @@ internal enum class BadgeTone {
     Primary,
     Success,
     Warning,
+    Error,
 }
+
+internal fun badgeSymbol(tone: BadgeTone): String? =
+    when (tone) {
+        BadgeTone.Neutral -> null
+        BadgeTone.Primary -> "◆"
+        BadgeTone.Success -> "✓"
+        BadgeTone.Warning -> "!"
+        BadgeTone.Error -> "×"
+    }
+
+internal fun badgeToneLabel(tone: BadgeTone): String? =
+    when (tone) {
+        BadgeTone.Neutral -> null
+        BadgeTone.Primary -> "Highlighted"
+        BadgeTone.Success -> "Success"
+        BadgeTone.Warning -> "Attention"
+        BadgeTone.Error -> "Error"
+    }
 
 @Composable
 internal fun Badge(text: String, tone: BadgeTone = BadgeTone.Neutral) {
@@ -254,19 +275,37 @@ internal fun Badge(text: String, tone: BadgeTone = BadgeTone.Neutral) {
         BadgeTone.Primary -> MaterialTheme.colorScheme.primaryContainer
         BadgeTone.Success -> Color(0xFFDBF0DF)
         BadgeTone.Warning -> Color(0xFFF8E6C2)
+        BadgeTone.Error -> MaterialTheme.colorScheme.errorContainer
     }
     val foreground = when (tone) {
         BadgeTone.Neutral -> MaterialTheme.colorScheme.onSecondaryContainer
         BadgeTone.Primary -> MaterialTheme.colorScheme.onPrimaryContainer
         BadgeTone.Success -> Color(0xFF166534)
         BadgeTone.Warning -> Color(0xFF92400E)
+        BadgeTone.Error -> MaterialTheme.colorScheme.onErrorContainer
     }
-    Text(
-        text,
-        style = MaterialTheme.typography.labelSmall,
-        color = foreground,
-        modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(background).padding(horizontal = 7.dp, vertical = 3.dp),
-    )
+    val toneLabel = badgeToneLabel(tone)
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(4.dp))
+            .background(background)
+            .padding(horizontal = 7.dp, vertical = 3.dp)
+            .semantics {
+                contentDescription = toneLabel?.let { "$it: $text" } ?: text
+            },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        badgeSymbol(tone)?.let { symbol ->
+            Text(
+                symbol,
+                color = foreground,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+        Text(text, color = foreground, style = MaterialTheme.typography.labelSmall)
+    }
 }
 
 @Composable

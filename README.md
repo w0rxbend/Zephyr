@@ -94,6 +94,12 @@ Navigation is grouped into Workspace, Discover, Maintenance, and application sec
 - Saved presets persist locally, apply all fields together, and appear directly below the filter controls.
 - Saving the same name replaces the previous preset; the adjacent × action removes a preset without changing SDKMAN data.
 
+### Accessible status language
+
+- Health, progress, warning, and error markers use distinct symbols in addition to color.
+- Emphasized badges retain explicit text while pairing each tone with a consistent symbol.
+- Status markers and badges publish descriptive accessibility labels for assistive technologies.
+
 ### Favorites
 
 - Favorite any SDK from Browse SDKs; favorites sort before other matching catalog results.

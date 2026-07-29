@@ -328,7 +328,7 @@ internal fun UpdateCenterScreen(
                                 ) {
                                     Badge(item.status.label, when (item.status) {
                                         BatchItemStatus.Succeeded -> BadgeTone.Success
-                                        BatchItemStatus.Failed -> BadgeTone.Warning
+                                        BatchItemStatus.Failed -> BadgeTone.Error
                                         BatchItemStatus.Running -> BadgeTone.Primary
                                         BatchItemStatus.Pending -> BadgeTone.Neutral
                                     })
@@ -1052,7 +1052,7 @@ private fun Boolean.yesNo(): String = if (this) "Yes" else "No"
 private fun batchStatusTone(status: BatchItemStatus): BadgeTone =
     when (status) {
         BatchItemStatus.Succeeded -> BadgeTone.Success
-        BatchItemStatus.Failed -> BadgeTone.Warning
+        BatchItemStatus.Failed -> BadgeTone.Error
         BatchItemStatus.Running -> BadgeTone.Primary
         BatchItemStatus.Pending -> BadgeTone.Neutral
     }

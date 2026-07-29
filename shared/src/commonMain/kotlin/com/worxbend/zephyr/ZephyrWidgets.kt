@@ -32,6 +32,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -43,6 +45,24 @@ internal enum class StatusTone {
     Warning,
     Error,
 }
+
+internal fun statusSymbol(tone: StatusTone): String =
+    when (tone) {
+        StatusTone.Neutral -> "•"
+        StatusTone.Accent -> "↻"
+        StatusTone.Success -> "✓"
+        StatusTone.Warning -> "!"
+        StatusTone.Error -> "×"
+    }
+
+internal fun statusLabel(tone: StatusTone): String =
+    when (tone) {
+        StatusTone.Neutral -> "Unknown"
+        StatusTone.Accent -> "In progress"
+        StatusTone.Success -> "Healthy"
+        StatusTone.Warning -> "Attention"
+        StatusTone.Error -> "Error"
+    }
 
 @Composable
 internal fun ZephyrPanel(
@@ -318,5 +338,18 @@ internal fun StatusDot(
         StatusTone.Warning -> Color(0xFFE2A53A)
         StatusTone.Error -> MaterialTheme.colorScheme.error
     }
-    Box(modifier.size(7.dp).background(color, RoundedCornerShape(99.dp)))
+    Box(
+        modifier = modifier
+            .size(14.dp)
+            .background(color.copy(alpha = 0.16f), RoundedCornerShape(99.dp))
+            .semantics { contentDescription = "${statusLabel(tone)} status" },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = statusSymbol(tone),
+            color = color,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+        )
+    }
 }

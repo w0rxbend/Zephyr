@@ -88,7 +88,8 @@ The first product slice delivers:
 | UX-03 Table/card view choice | Delivered | Installed SDK and Browse SDK families independently persist visual-card or dense-table rendering without losing actions. |
 | UX-04 Sort and filters | Delivered | JDK browsing composes query, installed/available/local-only state, vendor, and sort controls with visible clearable state. |
 | UX-05 Saved filters | Delivered | Named JDK query/status/vendor/sort presets persist locally, apply atomically, replace by name, and can be removed. |
-| UX-06 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
+| UX-06 Accessible status language | Delivered | Status markers use distinct symbols and semantic labels; emphasized badges pair their text and color with tone-specific symbols. |
+| UX-07 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
 
 ## Groomed feature backlog
 
