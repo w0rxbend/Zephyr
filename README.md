@@ -34,13 +34,19 @@ Zephyr uses user-facing labels instead of SDKMAN's internal "candidate" term:
 
 ## Current Functionality
 
-### Sidebar navigation
+### Workbench and navigation
 
+- **Overview** — default JDK, installed-version totals, local-only risk, health checks, and quick actions.
 - **Installed JDK** — locally installed Java versions.
 - **Installed SDKs** — all other locally installed SDKMAN candidates.
 - **Browse JDKs** — SDKMAN's remote Java catalog.
 - **Browse SDKs** — all other remote SDKMAN candidates.
-- **Local-Only Versions** — appears after a scan finds orphaned versions.
+- **Local-Only Versions** — orphan review and an explicit rescan workflow.
+- **Diagnostics** — read-only SDKMAN installation, metadata, and updater health.
+- **Settings** — persisted theme, information density, and SDKMAN-path privacy controls.
+- **About** — application version, runtime integration, project links, and license.
+
+Navigation is grouped into Workspace, Discover, Maintenance, and application sections. A compact toolbar exposes global maintenance actions, while the bottom status bar reports background work, candidate count, default JDK, and SDKMAN state.
 
 ### Installed JDK screen
 
@@ -48,24 +54,26 @@ Displays installed Java versions as cards. Supports:
 
 - Search by identifier, feature version, or provider name.
 - Grouping by **feature version** (JDK 25, JDK 21, …) or by **provider** (Eclipse Temurin, Azul Zulu, Amazon Corretto, …).
-- Current and default markers per version card.
+- Default marker per version card, derived from SDKMAN's persisted `current` symlink.
 - Local-only marker with a **Clean** button for orphaned versions.
-- **Clean** is blocked for the currently active version — switch away first.
+- **Clean** is blocked for the default version — choose another default first.
 
 ### Installed SDKs screen
 
-Displays installed non-Java candidates as package cards. Each card shows the current version, installed version count, and a local-only marker when orphaned versions are present.
+Displays installed non-Java candidates as package cards. Each card shows the default version, installed version count, and a local-only marker when orphaned versions are present. Search covers display names, SDKMAN keys, and default versions.
 
 ### Browse JDKs / Browse SDKs screens
 
-Shows the full SDKMAN remote catalog with display names, descriptions, stable versions, and install status. Includes a search bar. Clicking a card opens the package detail page.
+Shows the full SDKMAN remote catalog with display names, descriptions, stable versions, and install status. Search, Installed/Available filters, live result counts, adaptive grids, and guided empty states make large catalogs easier to scan. Clicking a card opens the package detail page.
 
 ### Package detail pages
 
 - Version list merged from the local filesystem and `sdk list <candidate>` remote output.
-- Each version row shows installed, current, available, and local-only status.
-- Actions per version: **Install**, **Use for This Session**, **Set as Default**, **Uninstall**.
-- Local-only versions show a **Clean** button (blocked when the version is currently active).
+- Each version row shows installed, default, available, and local-only status.
+- Actions per version: **Install**, **Set as Default**, **Uninstall**.
+- Non-default installed versions expose **Make default** directly.
+- Uninstall always requires an explicit destructive-action confirmation.
+- Local-only versions show a **Clean** button (blocked when the version is the default).
 - JDK detail supports the same grouping and search as the Installed JDK screen.
 
 ### Local-only cleanup
@@ -82,13 +90,14 @@ Shows the full SDKMAN remote catalog with display names, descriptions, stable ve
 - **Metadata** — runs `sdk update` to refresh the remote candidate catalog. Runs automatically before the first Browse load.
 - **Check Updates** — runs `sdk selfupdate` after a confirmation dialog. SDKMAN may update itself if a new version is available.
 
-### Header bar
+### Appearance and desktop behavior
 
-Always shows:
-
-- Current JDK identifier and provider (e.g. `Current JDK: 21.0.5-tem`).
-- Default JDK when it differs from the current one.
-- SDKMAN CLI version and installation path.
+- JetBrains-inspired light and dark palettes with a restrained blue accent.
+- Persistent **System**, **Light**, and **Dark** theme modes.
+- Persistent **Compact** and **Comfortable** information density.
+- Optional hiding of the machine-specific SDKMAN home path.
+- A 1280×820 default window with a practical minimum size for the workbench layout.
+- Shared panels, navigation items, segmented controls, metric tiles, settings rows, status indicators, toolbar controls, and destructive buttons across pages.
 
 ---
 
@@ -98,12 +107,12 @@ Zephyr reads installed candidates directly from the filesystem:
 
 ```text
 ~/.sdkman/candidates/<candidate>/<version>/   ← installed version
-~/.sdkman/candidates/<candidate>/current      ← symlink to active version
+~/.sdkman/candidates/<candidate>/current      ← symlink to persisted default version
 ```
 
 Remote versions come from `sdk list <candidate>`. The two sets are merged by version identifier to produce the local-only status.
 
-All CLI commands run through `zsh -c` after sourcing `sdkman-init.sh`:
+All CLI commands run through a non-interactive `/bin/bash` process after sourcing `sdkman-init.sh`:
 
 ```bash
 source "$SDKMAN_DIR/bin/sdkman-init.sh" && sdk list java
@@ -141,17 +150,36 @@ Requires SDKMAN to be installed. If SDKMAN is not detected the app shows an erro
 ./gradlew :shared:jvmTest
 ```
 
+Gradle verifies dependency checksums using [`gradle/verification-metadata.xml`](gradle/verification-metadata.xml). Regenerate it only as part of a reviewed dependency update:
+
+```bash
+./gradlew --write-verification-metadata sha256 check :desktopApp:packageAppImage
+```
+
+### Linux packages
+
+```bash
+# Portable application image
+./gradlew :desktopApp:packageAppImage
+
+# Native package formats (require a JDK jpackage installation with the matching system packager)
+./gradlew :desktopApp:packageDeb
+./gradlew :desktopApp:packageRpm
+```
+
 ---
 
 ## Architecture
 
 Kotlin Multiplatform + Compose Multiplatform desktop app.
 
+The current technical review and completed hardening work are tracked in [ARCHITECTURE_REVIEW.md](ARCHITECTURE_REVIEW.md). The groomed product backlog, UX direction, and design guardrails are in [PRODUCT_UX_ROADMAP.md](PRODUCT_UX_ROADMAP.md).
+
 | Module | Content |
 | --- | --- |
 | `shared/commonMain` | Domain models, repository interface, ViewModel, all Compose UI |
 | `shared/jvmMain` | SDKMAN filesystem integration (Okio), CLI execution (Apache Commons Exec) |
-| `shared/jvmTest` | Integration and parser tests |
+| `shared/commonTest`, `shared/jvmTest` | UI interaction, integration, and parser tests |
 | `desktopApp` | JVM entry point and window configuration |
 
 Source set boundaries are strict: `commonMain` contains no JVM-only APIs. Process execution, filesystem access, and OS environment reads live entirely in `jvmMain`.
@@ -170,9 +198,8 @@ Source set boundaries are strict: `commonMain` contains no JVM-only APIs. Proces
 
 ## Status
 
-The app is functional end-to-end. Work remaining:
+The app is functional end-to-end. Parser, repository safety/cache, ViewModel failure paths, settings persistence, and headless Compose interactions are covered. The prioritized roadmap captures broader workflow, accessibility, automation, and ecosystem opportunities.
 
-- Test coverage — parser, scanner, and ViewModel tests are placeholder.
-- Real candidate icons — currently using placeholder label boxes.
-- Default JDK detection beyond the `current` symlink.
-- Native distribution packaging.
+## License
+
+Zephyr is licensed under the [MIT License](LICENSE).

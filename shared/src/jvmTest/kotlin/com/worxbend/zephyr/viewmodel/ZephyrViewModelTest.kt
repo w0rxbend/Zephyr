@@ -1,0 +1,276 @@
+package com.worxbend.zephyr.viewmodel
+
+import com.worxbend.zephyr.data.SdkmanRepository
+import com.worxbend.zephyr.domain.Candidate
+import com.worxbend.zephyr.domain.CandidateCatalogItem
+import com.worxbend.zephyr.domain.CandidateKind
+import com.worxbend.zephyr.domain.CandidateVersion
+import com.worxbend.zephyr.domain.CommandOutcome
+import com.worxbend.zephyr.domain.SdkmanSelfUpdateStatus
+import com.worxbend.zephyr.domain.SdkmanStatus
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertIs
+import kotlin.test.assertTrue
+
+class ZephyrViewModelTest {
+    @Test
+    fun initialLoadDoesNotRefreshRemoteMetadata() {
+        val repository = FakeSdkmanRepository()
+        val viewModel = ZephyrViewModel(repository, testScope())
+
+        assertEquals(0, repository.catalogCalls)
+        assertEquals(0, repository.metadataRefreshCalls)
+        viewModel.close()
+    }
+
+    @Test
+    fun openingBrowseLoadsTheCatalogWithMetadataRefresh() {
+        val repository = FakeSdkmanRepository()
+        val viewModel = ZephyrViewModel(repository, testScope())
+
+        viewModel.navigate(ZephyrRoute.BrowseSdks)
+
+        assertEquals(listOf(true), repository.catalogRefreshRequests)
+        viewModel.close()
+    }
+
+    @Test
+    fun metadataFailureLeavesTheUiInteractiveAndReportsTheError() {
+        val repository = FakeSdkmanRepository(catalogFailure = IllegalStateException("network unavailable"))
+        val viewModel = ZephyrViewModel(repository, testScope())
+
+        viewModel.refreshMetadata()
+
+        val state = assertIs<ZephyrUiState.Ready>(viewModel.state.value)
+        assertFalse(state.isCatalogLoading)
+        assertEquals("Candidate metadata refresh failed: network unavailable", state.errorMessage)
+    }
+
+    @Test
+    fun selfUpdateExceptionLeavesTheUiInteractiveAndReportsTheError() {
+        val repository = FakeSdkmanRepository(selfUpdateFailure = IllegalStateException("connection reset"))
+        val viewModel = ZephyrViewModel(repository, testScope())
+
+        viewModel.checkSdkmanUpdates()
+
+        val state = assertIs<ZephyrUiState.Ready>(viewModel.state.value)
+        assertFalse(state.isRefreshing)
+        assertEquals("SDKMAN self-update failed: connection reset", state.errorMessage)
+    }
+
+    @Test
+    fun refreshPreservesTheCurrentRouteInsteadOfWritingAStaleSnapshot() {
+        val repository = FakeSdkmanRepository()
+        val viewModel = ZephyrViewModel(repository, testScope())
+
+        viewModel.navigate(ZephyrRoute.BrowseSdks)
+        viewModel.refreshInstalled()
+
+        val state = assertIs<ZephyrUiState.Ready>(viewModel.state.value)
+        assertIs<ZephyrRoute.BrowseSdks>(state.route)
+        assertTrue(state.candidates.isEmpty())
+    }
+
+    @Test
+    fun openingAnUninstalledPackageDoesNotAddItToInstalledCandidates() {
+        val repository = FakeSdkmanRepository(remoteDetail = remoteCandidate("gradle"))
+        val viewModel = ZephyrViewModel(repository, testScope())
+
+        viewModel.navigate(ZephyrRoute.SdkDetail("gradle"))
+
+        val state = assertIs<ZephyrUiState.Ready>(viewModel.state.value)
+        assertEquals("gradle", state.selectedCandidate?.name)
+        assertTrue(state.candidates.isEmpty())
+    }
+
+    @Test
+    fun ignoresRepeatedOperationsWhileAnotherOperationIsRunning() = runBlocking {
+        val refreshStarted = CompletableDeferred<Unit>()
+        val refreshGate = CompletableDeferred<Unit>()
+        val repository = FakeSdkmanRepository(refreshStarted = refreshStarted, refreshGate = refreshGate)
+        val viewModel = ZephyrViewModel(repository, Dispatchers.Default)
+        withTimeout(1_000) { viewModel.state.filterIsInstance<ZephyrUiState.Ready>().first() }
+
+        viewModel.refreshInstalled()
+        withTimeout(1_000) { refreshStarted.await() }
+        viewModel.refreshInstalled()
+        refreshGate.complete(Unit)
+        withTimeout(1_000) {
+            viewModel.state.filterIsInstance<ZephyrUiState.Ready>().first { !it.isRefreshing }
+        }
+
+        assertEquals(2, repository.installedCandidatesCalls)
+        viewModel.close()
+    }
+
+    @Test
+    fun loadsARequestedDetailAfterAnActiveScanFinishes() = runBlocking {
+        val refreshStarted = CompletableDeferred<Unit>()
+        val refreshGate = CompletableDeferred<Unit>()
+        val java = remoteCandidate("java", CandidateKind.Jdk)
+        val repository = FakeSdkmanRepository(
+            remoteDetail = java,
+            installedCandidate = java,
+            refreshStarted = refreshStarted,
+            refreshGate = refreshGate,
+        )
+        val viewModel = ZephyrViewModel(repository, Dispatchers.Default)
+        withTimeout(1_000) { viewModel.state.filterIsInstance<ZephyrUiState.Ready>().first() }
+
+        viewModel.scanLocalOnly()
+        withTimeout(1_000) { refreshStarted.await() }
+        viewModel.navigate(ZephyrRoute.JdkDetail())
+        refreshGate.complete(Unit)
+
+        val state = withTimeout(1_000) {
+            viewModel.state.filterIsInstance<ZephyrUiState.Ready>().first {
+                it.route is ZephyrRoute.JdkDetail && it.selectedCandidate?.name == "java"
+            }
+        }
+
+        assertEquals("java", state.selectedCandidate?.name)
+        viewModel.close()
+    }
+
+    @Test
+    fun loadsBrowseCatalogRequestedDuringAnActiveScan() = runBlocking {
+        val refreshStarted = CompletableDeferred<Unit>()
+        val refreshGate = CompletableDeferred<Unit>()
+        val repository = FakeSdkmanRepository(refreshStarted = refreshStarted, refreshGate = refreshGate)
+        val viewModel = ZephyrViewModel(repository, Dispatchers.Default)
+        withTimeout(1_000) { viewModel.state.filterIsInstance<ZephyrUiState.Ready>().first() }
+
+        viewModel.scanLocalOnly()
+        withTimeout(1_000) { refreshStarted.await() }
+        viewModel.navigate(ZephyrRoute.BrowseSdks)
+        refreshGate.complete(Unit)
+
+        withTimeout(1_000) {
+            viewModel.state.filterIsInstance<ZephyrUiState.Ready>().first {
+                it.route is ZephyrRoute.BrowseSdks && repository.catalogRefreshRequests == listOf(true)
+            }
+        }
+
+        viewModel.close()
+    }
+
+    @Test
+    fun leavingASlowDetailRequestClearsOnlyTheDetailLoadingState() = runBlocking {
+        val detailStarted = CompletableDeferred<Unit>()
+        val detailGate = CompletableDeferred<Unit>()
+        val detailCompleted = CompletableDeferred<Unit>()
+        val repository = FakeSdkmanRepository(
+            remoteDetail = remoteCandidate("gradle"),
+            detailStarted = detailStarted,
+            detailGate = detailGate,
+            detailCompleted = detailCompleted,
+        )
+        val viewModel = ZephyrViewModel(repository, Dispatchers.Default)
+        withTimeout(1_000) { viewModel.state.filterIsInstance<ZephyrUiState.Ready>().first() }
+
+        viewModel.navigate(ZephyrRoute.SdkDetail("gradle"))
+        withTimeout(1_000) { detailStarted.await() }
+        viewModel.navigate(ZephyrRoute.InstalledSdks)
+        detailGate.complete(Unit)
+        withTimeout(1_000) { detailCompleted.await() }
+
+        val state = assertIs<ZephyrUiState.Ready>(viewModel.state.value)
+        assertIs<ZephyrRoute.InstalledSdks>(state.route)
+        assertEquals(null, state.detailLoadingCandidate)
+        assertFalse(state.isRefreshing)
+        viewModel.close()
+    }
+
+    private fun testScope() = Dispatchers.Unconfined
+}
+
+private fun remoteCandidate(name: String, kind: CandidateKind = CandidateKind.Sdk) = Candidate(
+    name = name,
+    displayName = name,
+    description = null,
+    websiteUrl = null,
+    kind = kind,
+    installedVersions = emptyList(),
+    defaultVersion = null,
+    hasLocalOnlyVersions = false,
+    localOnlyVersionCount = 0,
+    localOnlyVersions = emptyList(),
+)
+
+private class FakeSdkmanRepository(
+    private val catalogFailure: Throwable? = null,
+    private val selfUpdateFailure: Throwable? = null,
+    private val remoteDetail: Candidate? = null,
+    private val installedCandidate: Candidate? = null,
+    private val refreshStarted: CompletableDeferred<Unit>? = null,
+    private val refreshGate: CompletableDeferred<Unit>? = null,
+    private val detailStarted: CompletableDeferred<Unit>? = null,
+    private val detailGate: CompletableDeferred<Unit>? = null,
+    private val detailCompleted: CompletableDeferred<Unit>? = null,
+) : SdkmanRepository {
+    var installedCandidatesCalls: Int = 0
+        private set
+    var catalogCalls: Int = 0
+        private set
+    val catalogRefreshRequests = mutableListOf<Boolean>()
+    var metadataRefreshCalls: Int = 0
+        private set
+
+    override suspend fun detect(): SdkmanStatus = SdkmanStatus(isInstalled = true, home = "/tmp/sdkman")
+
+    override suspend fun cliVersion(): String = "SDKMAN 5"
+
+    override suspend fun installedCandidates(): List<Candidate> {
+        installedCandidatesCalls += 1
+        if (installedCandidatesCalls > 1) {
+            refreshStarted?.complete(Unit)
+            refreshGate?.await()
+        }
+        return listOfNotNull(installedCandidate)
+    }
+
+    override suspend fun catalog(refreshMetadata: Boolean): List<CandidateCatalogItem> {
+        catalogCalls += 1
+        catalogRefreshRequests += refreshMetadata
+        catalogFailure?.let { throw it }
+        return emptyList()
+    }
+
+    override suspend fun versions(candidate: String): List<CandidateVersion> = emptyList()
+
+    override suspend fun mergedCandidate(candidate: String): Candidate? {
+        detailStarted?.complete(Unit)
+        try {
+            detailGate?.await()
+        } finally {
+            detailCompleted?.complete(Unit)
+        }
+        return remoteDetail?.takeIf { it.name == candidate }
+    }
+
+    override suspend fun refreshCandidateMetadata(): CommandOutcome {
+        metadataRefreshCalls += 1
+        return CommandOutcome(true, "Metadata refreshed")
+    }
+
+    override suspend fun selfUpdate(): SdkmanSelfUpdateStatus {
+        selfUpdateFailure?.let { throw it }
+        return SdkmanSelfUpdateStatus.UpToDate
+    }
+
+    override suspend fun install(candidate: String, version: String): CommandOutcome = CommandOutcome(true, "Installed")
+
+    override suspend fun uninstall(candidate: String, version: String): CommandOutcome = CommandOutcome(true, "Uninstalled")
+
+    override suspend fun setDefault(candidate: String, version: String): CommandOutcome = CommandOutcome(true, "Default")
+
+    override suspend fun cleanLocalOnly(candidate: String, versions: List<String>): CommandOutcome = CommandOutcome(true, "Cleaned")
+}

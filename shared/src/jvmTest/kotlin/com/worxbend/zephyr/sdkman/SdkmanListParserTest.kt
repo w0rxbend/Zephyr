@@ -8,6 +8,21 @@ import kotlin.test.assertTrue
 
 class SdkmanListParserTest {
     @Test
+    fun ignoresCatalogAndVersionIdentifiersOutsideTheCommandBoundary() {
+        val invalidCandidateCatalog = """
+            Bad Candidate (1.0)                                      https://example.invalid/
+            ${'$'} sdk install BAD_CANDIDATE
+            --------------------------------------------------------------------------------
+            Valid Candidate (1.0)                                    https://example.invalid/
+            ${'$'} sdk install valid-candidate
+        """.trimIndent()
+        val oversizedVersion = "1" + "a".repeat(256)
+
+        assertEquals(listOf("valid-candidate"), SdkmanListParser.parseCatalog(invalidCandidateCatalog, emptySet()).map { it.name })
+        assertEquals(listOf("21.0.5-tem"), SdkmanListParser.parseVersions("$oversizedVersion 21.0.5-tem").map { it.version })
+    }
+
+    @Test
     fun parsesCatalogBlocksFromSdkmanListOutput() {
         val output = """
             ================================================================================
@@ -61,7 +76,7 @@ class SdkmanListParserTest {
 
         assertEquals(8, versions.size)
         assertTrue(latest.isInstalled)
-        assertTrue(latest.isCurrent)
+        assertTrue(latest.isDefault)
         assertTrue(latest.isRemoteAvailable)
         assertFalse(remote.isInstalled)
         assertTrue(remote.isRemoteAvailable)

@@ -10,7 +10,6 @@ sealed interface SdkmanCommand {
     data class ListVersions(val candidate: String) : SdkmanCommand
     data class Install(val candidate: String, val version: String) : SdkmanCommand
     data class Uninstall(val candidate: String, val version: String) : SdkmanCommand
-    data class Use(val candidate: String, val version: String) : SdkmanCommand
     data class SetDefault(val candidate: String, val version: String) : SdkmanCommand
 }
 

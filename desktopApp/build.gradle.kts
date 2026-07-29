@@ -6,6 +6,12 @@ plugins {
     alias(libs.plugins.composeCompiler)
 }
 
+kotlin {
+    compilerOptions {
+        allWarningsAsErrors.set(true)
+    }
+}
+
 dependencies {
     implementation(projects.shared)
 
@@ -20,9 +26,12 @@ compose.desktop {
         mainClass = "com.worxbend.zephyr.MainKt"
 
         nativeDistributions {
-            targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
+            targetFormats(TargetFormat.AppImage, TargetFormat.Deb, TargetFormat.Rpm)
             packageName = "com.worxbend.zephyr"
             packageVersion = "1.0.0"
+            description = "A desktop GUI for SDKMAN"
+            vendor = "Worxbend"
+            licenseFile.set(rootProject.file("LICENSE"))
         }
     }
 }

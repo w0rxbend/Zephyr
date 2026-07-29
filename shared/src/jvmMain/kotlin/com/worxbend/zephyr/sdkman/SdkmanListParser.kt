@@ -5,7 +5,8 @@ import com.worxbend.zephyr.domain.CandidateKind
 import com.worxbend.zephyr.domain.CandidateVersion
 import com.worxbend.zephyr.domain.candidateKindFor
 import com.worxbend.zephyr.domain.displayNameFor
-import com.worxbend.zephyr.domain.iconResourceFor
+import com.worxbend.zephyr.domain.isValidSdkmanCandidateName
+import com.worxbend.zephyr.domain.isValidSdkmanVersion
 
 object SdkmanListParser {
     private val installLine = Regex("""sdk\s+install\s+([a-zA-Z0-9._-]+)""")
@@ -20,6 +21,7 @@ object SdkmanListParser {
         for (index in lines.indices) {
             val match = installLine.find(lines[index]) ?: continue
             val name = match.groupValues[1]
+            if (!isValidSdkmanCandidateName(name)) continue
             val block = candidateBlock(lines, index)
             val header = block.firstOrNull()?.trim()
             val headerMatch = header?.let { candidateHeader.find(it) }
@@ -55,7 +57,6 @@ object SdkmanListParser {
                 description = description,
                 websiteUrl = website,
                 kind = kind,
-                iconResource = iconResourceFor(kind),
                 isInstalled = name in installedNames,
             )
         }
@@ -99,6 +100,7 @@ object SdkmanListParser {
         if (cells.size < 2) return null
         val identifier = cells.lastOrNull {
             it.matches(versionToken) &&
+                isValidSdkmanVersion(it) &&
                 it.any(Char::isDigit) &&
                 it.lowercase() !in nonVersionTokens
         } ?: return null
@@ -106,7 +108,7 @@ object SdkmanListParser {
         return CandidateVersion(
             version = identifier,
             isInstalled = "installed" in joined || "local only" in joined || "local" in joined,
-            isCurrent = ">>>" in joined || "current" in joined,
+            isDefault = ">>>" in joined || "current" in joined,
             isRemoteAvailable = "local only" !in joined,
         )
     }
@@ -116,13 +118,13 @@ object SdkmanListParser {
         val tokens = line.split(Regex("""\s+""")).filter { it.isNotBlank() }
         val versions = mutableListOf<CandidateVersion>()
         var nextIsInstalled = false
-        var nextIsCurrent = false
+        var nextIsDefault = false
         var nextIsLocalOnly = false
 
         tokens.forEach { token ->
             when (token) {
                 "*" -> nextIsInstalled = true
-                ">" -> nextIsCurrent = true
+                ">" -> nextIsDefault = true
                 "+" -> {
                     nextIsInstalled = true
                     nextIsLocalOnly = true
@@ -131,11 +133,11 @@ object SdkmanListParser {
                     versions += CandidateVersion(
                         version = token,
                         isInstalled = nextIsInstalled,
-                        isCurrent = nextIsCurrent,
+                        isDefault = nextIsDefault,
                         isRemoteAvailable = !nextIsLocalOnly,
                     )
                     nextIsInstalled = false
-                    nextIsCurrent = false
+                    nextIsDefault = false
                     nextIsLocalOnly = false
                 }
             }
@@ -162,6 +164,7 @@ object SdkmanListParser {
         val normalized = token.trim()
         val lowered = normalized.lowercase()
         return normalized.matches(versionToken) &&
+            isValidSdkmanVersion(normalized) &&
             normalized.any(Char::isDigit) &&
             lowered !in nonVersionTokens &&
             normalized.firstOrNull()?.isDigit() == true &&
@@ -182,7 +185,7 @@ object SdkmanListParser {
 }
 
 fun versionComparator(): Comparator<CandidateVersion> =
-    compareByDescending<CandidateVersion> { it.isCurrent }
+    compareByDescending<CandidateVersion> { it.isDefault }
         .thenByDescending { it.isInstalled }
         .thenByDescending { semanticPrefix(it.version) }
         .thenBy { it.version }

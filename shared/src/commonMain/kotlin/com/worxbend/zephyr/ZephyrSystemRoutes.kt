@@ -1,0 +1,283 @@
+package com.worxbend.zephyr
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import com.worxbend.zephyr.domain.CandidateKind
+import com.worxbend.zephyr.domain.CandidateMetadataStatus
+import com.worxbend.zephyr.domain.SdkmanSelfUpdateStatus
+import com.worxbend.zephyr.settings.AppSettings
+import com.worxbend.zephyr.settings.ThemePreference
+import com.worxbend.zephyr.settings.UiDensity
+import com.worxbend.zephyr.viewmodel.ZephyrRoute
+import com.worxbend.zephyr.viewmodel.ZephyrUiState
+import com.worxbend.zephyr.viewmodel.ZephyrViewModel
+
+@Composable
+internal fun OverviewScreen(
+    state: ZephyrUiState.Ready,
+    viewModel: ZephyrViewModel,
+) {
+    val metrics = LocalZephyrMetrics.current
+    val jdk = state.candidates.firstOrNull { it.kind == CandidateKind.Jdk }
+    val sdks = state.candidates.count { it.kind == CandidateKind.Sdk }
+    val installedVersions = state.candidates.sumOf { candidate -> candidate.installedVersions.count { it.isInstalled } }
+    val localOnly = state.candidates.sumOf { it.localOnlyVersionCount }
+
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(metrics.spacing * 2),
+    ) {
+        PageTitle("Overview", "Your SDKMAN toolchain at a glance.")
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(metrics.spacing),
+        ) {
+            ZephyrMetricTile(
+                label = "Default JDK",
+                value = jdk?.defaultVersion ?: "Not set",
+                detail = if (jdk == null) "Install a JDK to get started" else "${jdk.installedVersions.count { it.isInstalled }} installed",
+                tone = if (jdk?.defaultVersion != null) StatusTone.Success else StatusTone.Warning,
+                modifier = Modifier.weight(1f),
+            )
+            ZephyrMetricTile(
+                label = "Installed SDKs",
+                value = sdks.toString(),
+                detail = "$installedVersions total versions",
+                tone = StatusTone.Accent,
+                modifier = Modifier.weight(1f),
+            )
+            ZephyrMetricTile(
+                label = "Local-only",
+                value = localOnly.toString(),
+                detail = if (localOnly == 0) "No cleanup needed" else "Review before cleaning",
+                tone = if (localOnly == 0) StatusTone.Success else StatusTone.Warning,
+                modifier = Modifier.weight(1f),
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(metrics.spacing),
+        ) {
+            ZephyrPanel(Modifier.weight(1.25f).fillMaxSize()) {
+                Column(Modifier.padding(metrics.panelPadding), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    PanelHeading("Quick actions", "Common SDKMAN workflows")
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        ZephyrToolbarButton("Browse JDKs", onClick = { viewModel.navigate(ZephyrRoute.BrowseJdks) })
+                        ZephyrToolbarButton("Browse SDKs", onClick = { viewModel.navigate(ZephyrRoute.BrowseSdks) })
+                        ZephyrToolbarButton("Refresh local state", onClick = viewModel::refreshInstalled)
+                        ZephyrToolbarButton("Scan local-only", onClick = viewModel::scanLocalOnly)
+                    }
+                    PanelHeading("Toolchain summary", "Persisted SDKMAN defaults")
+                    KeyValueRow("SDKMAN", sdkmanVersionLabel(state))
+                    KeyValueRow("Default JDK", jdk?.defaultVersion ?: "Not configured")
+                    KeyValueRow("Candidates", state.candidates.size.toString())
+                    KeyValueRow("Catalog", if (state.catalog.isEmpty()) "Not loaded" else "${state.catalog.size} packages")
+                }
+            }
+            ZephyrPanel(Modifier.weight(0.75f).fillMaxSize()) {
+                Column(Modifier.padding(metrics.panelPadding), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    PanelHeading("Environment health", "Read-only diagnostics")
+                    HealthRow("SDKMAN detected", true)
+                    HealthRow("CLI version available", state.sdkmanStatus.cliVersion != null)
+                    HealthRow("Default JDK configured", jdk?.defaultVersion != null)
+                    HealthRow("No local-only versions", localOnly == 0)
+                    ZephyrToolbarButton(
+                        label = "Open diagnostics",
+                        onClick = { viewModel.navigate(ZephyrRoute.Diagnostics) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun DiagnosticsScreen(state: ZephyrUiState.Ready) {
+    val metrics = LocalZephyrMetrics.current
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(metrics.spacing * 2),
+    ) {
+        PageTitle("Diagnostics", "Inspect the SDKMAN integration without changing your environment.")
+        ZephyrPanel(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(metrics.panelPadding), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                PanelHeading("Installation", "Local SDKMAN environment")
+                DiagnosticRow("SDKMAN home", state.sdkmanStatus.home ?: "Unavailable", state.sdkmanStatus.home != null)
+                DiagnosticRow("CLI version", sdkmanVersionLabel(state), state.sdkmanStatus.cliVersion != null)
+                DiagnosticRow("Installed candidates", state.candidates.size.toString(), true)
+                DiagnosticRow(
+                    "Persisted default JDK",
+                    state.candidates.firstOrNull { it.name == "java" }?.defaultVersion ?: "Not configured",
+                    state.candidates.firstOrNull { it.name == "java" }?.defaultVersion != null,
+                )
+            }
+        }
+        ZephyrPanel(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(metrics.panelPadding), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                PanelHeading("Remote metadata", "Catalog and updater state")
+                DiagnosticRow("Catalog packages", state.catalog.size.toString(), state.catalog.isNotEmpty())
+                DiagnosticRow("Metadata", metadataShortLabel(state.sdkmanStatus.metadataStatus), state.sdkmanStatus.metadataStatus !is CandidateMetadataStatus.Failed)
+                DiagnosticRow("SDKMAN update", selfUpdateShortLabel(state.sdkmanStatus.selfUpdateStatus), state.sdkmanStatus.selfUpdateStatus !is SdkmanSelfUpdateStatus.Failed)
+                DiagnosticRow(
+                    "Local-only findings",
+                    state.candidates.sumOf { it.localOnlyVersionCount }.toString(),
+                    state.candidates.none { it.hasLocalOnlyVersions },
+                )
+            }
+        }
+        Text(
+            "Diagnostics are intentionally read-only. Refresh, metadata update, and cleanup actions remain explicit in the toolbar and package pages.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+internal fun SettingsScreen(
+    settings: AppSettings,
+    onSettingsChange: ((AppSettings) -> AppSettings) -> Unit,
+) {
+    val metrics = LocalZephyrMetrics.current
+    Column(
+        modifier = Modifier.fillMaxSize().widthIn(max = 920.dp),
+        verticalArrangement = Arrangement.spacedBy(metrics.spacing * 2),
+    ) {
+        PageTitle("Settings", "Personalize Zephyr. Changes are saved for this desktop user.")
+        ZephyrPanel(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(metrics.panelPadding)) {
+                PanelHeading("Appearance", "Workbench colors and information density")
+                ZephyrSettingsRow(
+                    title = "Theme",
+                    description = "Follow the Linux desktop or use an explicit light or dark theme.",
+                ) {
+                    ZephyrSegmentedControl(
+                        options = ThemePreference.entries,
+                        selected = settings.themePreference,
+                        label = ThemePreference::label,
+                        onSelected = { selected -> onSettingsChange { it.copy(themePreference = selected) } },
+                    )
+                }
+                ZephyrSettingsRow(
+                    title = "UI density",
+                    description = "Compact fits more information; Comfortable adds spacing and larger controls.",
+                ) {
+                    ZephyrSegmentedControl(
+                        options = UiDensity.entries,
+                        selected = settings.uiDensity,
+                        label = UiDensity::label,
+                        onSelected = { selected -> onSettingsChange { it.copy(uiDensity = selected) } },
+                    )
+                }
+            }
+        }
+        ZephyrPanel(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(metrics.panelPadding)) {
+                PanelHeading("Privacy", "Control machine-specific information in the application chrome")
+                ZephyrSettingsRow(
+                    title = "Show SDKMAN home path",
+                    description = "Display the local SDKMAN path in the toolbar and status bar.",
+                ) {
+                    ZephyrToggle(
+                        checked = settings.showSdkmanHome,
+                        onCheckedChange = { visible -> onSettingsChange { it.copy(showSdkmanHome = visible) } },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun AboutScreen(state: ZephyrUiState.Ready) {
+    val metrics = LocalZephyrMetrics.current
+    Column(
+        modifier = Modifier.fillMaxSize().widthIn(max = 840.dp),
+        verticalArrangement = Arrangement.spacedBy(metrics.spacing * 2),
+    ) {
+        PageTitle("About Zephyr", "A focused desktop control center for SDKMAN.")
+        ZephyrPanel(Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.padding(metrics.panelPadding),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(18.dp),
+            ) {
+                CandidateIcon(CandidateKind.Jdk)
+                Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Text("Zephyr", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
+                    Text("Version 1.0.0", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Kotlin Multiplatform + Compose Desktop for Linux", style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+        }
+        ZephyrPanel(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(metrics.panelPadding), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                PanelHeading("Runtime", "Connected local environment")
+                KeyValueRow("SDKMAN", sdkmanVersionLabel(state))
+                KeyValueRow("Installation", state.sdkmanStatus.home ?: "Unavailable")
+                KeyValueRow("License", "MIT")
+            }
+        }
+        ZephyrPanel(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(metrics.panelPadding), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                PanelHeading("Project", "Open-source and designed for safe local toolchain management")
+                LinkText("SDKMAN: https://sdkman.io/")
+                Text(
+                    "Zephyr delegates package management to SDKMAN, validates command and filesystem boundaries, and keeps destructive cleanup behind explicit review.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PanelHeading(title: String, detail: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun KeyValueRow(label: String, value: String) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+private fun HealthRow(label: String, healthy: Boolean) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+        StatusDot(if (healthy) StatusTone.Success else StatusTone.Warning)
+        Text(label)
+    }
+}
+
+@Composable
+private fun DiagnosticRow(label: String, value: String, healthy: Boolean) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        StatusDot(if (healthy) StatusTone.Success else StatusTone.Warning)
+        Text(label, modifier = Modifier.weight(1f))
+        Text(value, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Medium)
+    }
+}

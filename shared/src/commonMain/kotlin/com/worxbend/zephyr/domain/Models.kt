@@ -29,9 +29,9 @@ data class Candidate(
     val description: String? = null,
     val websiteUrl: String? = null,
     val kind: CandidateKind,
-    val iconResource: String,
     val installedVersions: List<CandidateVersion>,
-    val currentVersion: String?,
+    /** The SDKMAN version persisted through the candidate's `current` symlink. */
+    val defaultVersion: String?,
     val hasLocalOnlyVersions: Boolean,
     val localOnlyVersionCount: Int,
     val localOnlyVersions: List<String>,
@@ -45,7 +45,7 @@ enum class CandidateKind {
 data class CandidateVersion(
     val version: String,
     val isInstalled: Boolean,
-    val isCurrent: Boolean,
+    val isDefault: Boolean,
     val isRemoteAvailable: Boolean,
 )
 
@@ -56,9 +56,13 @@ data class CandidateCatalogItem(
     val description: String?,
     val websiteUrl: String?,
     val kind: CandidateKind,
-    val iconResource: String,
     val isInstalled: Boolean,
 )
+
+fun List<CandidateCatalogItem>.withInstalledCandidates(candidates: List<Candidate>): List<CandidateCatalogItem> {
+    val installedNames = candidates.asSequence().map { it.name }.toSet()
+    return map { item -> item.copy(isInstalled = item.name in installedNames) }
+}
 
 data class JavaVersion(
     val identifier: String,
@@ -66,22 +70,13 @@ data class JavaVersion(
     val providerCode: String?,
     val providerName: String?,
     val isInstalled: Boolean,
-    val isCurrent: Boolean,
+    val isDefault: Boolean,
     val isRemoteAvailable: Boolean,
 )
 
 data class JavaVersionGroup(
     val title: String,
     val versions: List<JavaVersion>,
-)
-
-data class JdkSelection(
-    val currentIdentifier: String?,
-    val currentFeatureVersion: String?,
-    val currentProviderName: String?,
-    val defaultIdentifier: String?,
-    val defaultFeatureVersion: String?,
-    val defaultProviderName: String?,
 )
 
 data class CommandOutcome(
@@ -95,9 +90,6 @@ fun candidateKindFor(name: String): CandidateKind =
 fun displayNameFor(name: String): String =
     if (name == "java") "JDK" else name.split('-', '_')
         .joinToString(" ") { part -> part.replaceFirstChar { it.titlecase() } }
-
-fun iconResourceFor(kind: CandidateKind): String =
-    if (kind == CandidateKind.Jdk) "ic_jdk_mock" else "ic_package_mock"
 
 fun javaFeatureVersion(identifier: String?): String? =
     identifier?.substringBefore('.')?.substringBefore('-')?.takeIf { it.isNotBlank() }
@@ -126,7 +118,7 @@ fun CandidateVersion.toJavaVersion(): JavaVersion {
         providerCode = providerCode,
         providerName = javaProviderName(providerCode),
         isInstalled = isInstalled,
-        isCurrent = isCurrent,
+        isDefault = isDefault,
         isRemoteAvailable = isRemoteAvailable,
     )
 }

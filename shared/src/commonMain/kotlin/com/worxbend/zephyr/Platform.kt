@@ -1,9 +1,3 @@
 package com.worxbend.zephyr
 
-interface Platform {
-    val name: String
-}
-
-expect fun getPlatform(): Platform
-
-expect fun isSystemDarkMode(): Boolean
+expect suspend fun isSystemDarkMode(): Boolean

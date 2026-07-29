@@ -5,15 +5,12 @@ import com.worxbend.zephyr.domain.Candidate
 import com.worxbend.zephyr.domain.CandidateCatalogItem
 import com.worxbend.zephyr.domain.CandidateVersion
 import com.worxbend.zephyr.domain.CommandOutcome
-import com.worxbend.zephyr.domain.JdkSelection
 import com.worxbend.zephyr.domain.SdkmanSelfUpdateStatus
 import com.worxbend.zephyr.domain.SdkmanStatus
 import com.worxbend.zephyr.domain.candidateKindFor
 import com.worxbend.zephyr.domain.displayNameFor
-import com.worxbend.zephyr.domain.iconResourceFor
-import com.worxbend.zephyr.domain.javaFeatureVersion
-import com.worxbend.zephyr.domain.javaProviderCode
-import com.worxbend.zephyr.domain.javaProviderName
+import com.worxbend.zephyr.domain.isValidSdkmanCandidateName
+import com.worxbend.zephyr.domain.isValidSdkmanVersion
 import com.worxbend.zephyr.logging.ZephyrLogger
 import okio.FileSystem
 import okio.Path
@@ -23,6 +20,7 @@ import kotlin.time.Duration.Companion.seconds
 
 class JvmSdkmanRepository(
     private val fileSystem: FileSystem,
+    private val sdkmanHomeResolver: () -> Path = ::defaultSdkmanHome,
     private val commandRunnerFactory: (Path) -> SdkmanCommandRunner,
 ) : SdkmanRepository {
     private var sdkmanHome: Path? = null
@@ -61,13 +59,16 @@ class JvmSdkmanRepository(
     override suspend fun installedCandidates(): List<Candidate> {
         val candidatesPath = home() / "candidates"
         return fileSystem.listOrNull(candidatesPath).orEmpty()
-            .filter { path -> fileSystem.metadataOrNull(path)?.isDirectory == true }
-            .filterNot { path -> fileSystem.metadataOrNull(path)?.symlinkTarget != null }
             .mapNotNull { candidatePath ->
-                val name = candidatePath.name
+                val metadata = fileSystem.metadataOrNull(candidatePath) ?: return@mapNotNull null
+                candidatePath.name.takeIf {
+                    metadata.isDirectory && metadata.symlinkTarget == null && isValidCandidate(it)
+                }
+            }
+            .mapNotNull { name ->
                 val versions = installedVersionsFor(name)
                 if (versions.isEmpty()) return@mapNotNull null
-                val current = currentVersionFor(name)
+                val default = defaultVersionFor(name)
                 val kind = candidateKindFor(name)
                 Candidate(
                     name = name,
@@ -75,16 +76,15 @@ class JvmSdkmanRepository(
                     description = null,
                     websiteUrl = null,
                     kind = kind,
-                    iconResource = iconResourceFor(kind),
                     installedVersions = versions.map {
                         CandidateVersion(
                             version = it,
                             isInstalled = true,
-                            isCurrent = it == current,
+                            isDefault = it == default,
                             isRemoteAvailable = true,
                         )
                     },
-                    currentVersion = current,
+                    defaultVersion = default,
                     hasLocalOnlyVersions = false,
                     localOnlyVersionCount = 0,
                     localOnlyVersions = emptyList(),
@@ -118,34 +118,39 @@ class JvmSdkmanRepository(
     }
 
     override suspend fun versions(candidate: String): List<CandidateVersion> {
+        validateCandidate(candidate)
         val result = runner().run(SdkmanCommand.ListVersions(candidate), 20.seconds)
         if (!result.success) {
-            ZephyrLogger.warn("Unable to list versions for $candidate: ${result.output.ifBlank { "exit ${result.exitCode}" }}")
-            return emptyList()
+            val message = "Unable to list versions for $candidate: ${result.output.ifBlank { "exit ${result.exitCode}" }}"
+            ZephyrLogger.warn(message)
+            throw IllegalStateException(message)
         }
         val parsed = SdkmanListParser.parseVersions(result.stdout)
         if (parsed.isEmpty()) {
-            ZephyrLogger.warn("No versions parsed for $candidate. Output started with: ${result.stdout.take(300)}")
+            val message = "No versions parsed for $candidate. Output started with: ${result.stdout.take(300)}"
+            ZephyrLogger.warn(message)
+            throw IllegalStateException(message)
         }
         return parsed
     }
 
     override suspend fun mergedCandidate(candidate: String): Candidate? {
+        validateCandidate(candidate)
         val localVersions = installedVersionsFor(candidate)
-        val current = currentVersionFor(candidate)
+        val default = defaultVersionFor(candidate)
         val remote = versions(candidate)
         val remoteByVersion = remote.associateBy { it.version }
         val merged = (remote.map { version ->
             version.copy(
                 isInstalled = version.isInstalled || version.version in localVersions,
-                isCurrent = version.isCurrent || version.version == current,
+                isDefault = version.version == default,
                 isRemoteAvailable = version.isRemoteAvailable,
             )
         } + localVersions.filterNot { it in remoteByVersion }.map { version ->
             CandidateVersion(
                 version = version,
                 isInstalled = true,
-                isCurrent = version == current,
+                isDefault = version == default,
                 isRemoteAvailable = false,
             )
         }).distinctBy { it.version }.sortedWith(versionComparator())
@@ -160,30 +165,18 @@ class JvmSdkmanRepository(
             description = metadata?.description,
             websiteUrl = metadata?.websiteUrl,
             kind = kind,
-            iconResource = iconResourceFor(kind),
             installedVersions = merged,
-            currentVersion = current,
+            defaultVersion = default,
             hasLocalOnlyVersions = localOnly.isNotEmpty(),
             localOnlyVersionCount = localOnly.size,
             localOnlyVersions = localOnly,
         )
     }
 
-    override suspend fun jdkSelection(): JdkSelection {
-        val current = currentVersionFor("java")
-        val providerCode = javaProviderCode(current)
-        return JdkSelection(
-            currentIdentifier = current,
-            currentFeatureVersion = javaFeatureVersion(current),
-            currentProviderName = javaProviderName(providerCode),
-            defaultIdentifier = null,
-            defaultFeatureVersion = null,
-            defaultProviderName = null,
-        )
+    override suspend fun refreshCandidateMetadata(): CommandOutcome {
+        catalogCache = null
+        return runner().run(SdkmanCommand.UpdateCandidateMetadata, 30.seconds).toOutcome("Candidate metadata refreshed.")
     }
-
-    override suspend fun refreshCandidateMetadata(): CommandOutcome =
-        runner().run(SdkmanCommand.UpdateCandidateMetadata, 30.seconds).toOutcome("Candidate metadata refreshed.")
 
     override suspend fun selfUpdate(): SdkmanSelfUpdateStatus {
         val result = runner().run(SdkmanCommand.SelfUpdate, 2.minutes)
@@ -199,23 +192,41 @@ class JvmSdkmanRepository(
         }
     }
 
-    override suspend fun install(candidate: String, version: String): CommandOutcome =
-        runner().run(SdkmanCommand.Install(candidate, version), 10.minutes).toOutcome("Installed $version.")
+    override suspend fun install(candidate: String, version: String): CommandOutcome {
+        invalidCommandInput(candidate, version)?.let { return it }
+        catalogCache = null
+        return runner().run(SdkmanCommand.Install(candidate, version), 10.minutes).toOutcome("Installed $version.")
+    }
 
-    override suspend fun uninstall(candidate: String, version: String): CommandOutcome =
-        runner().run(SdkmanCommand.Uninstall(candidate, version), 2.minutes).toOutcome("Uninstalled $version.")
+    override suspend fun uninstall(candidate: String, version: String): CommandOutcome {
+        invalidCommandInput(candidate, version)?.let { return it }
+        catalogCache = null
+        return runner().run(SdkmanCommand.Uninstall(candidate, version), 2.minutes).toOutcome("Uninstalled $version.")
+    }
 
-    override suspend fun use(candidate: String, version: String): CommandOutcome =
-        runner().run(SdkmanCommand.Use(candidate, version), 30.seconds).toOutcome("Using $version.")
-
-    override suspend fun setDefault(candidate: String, version: String): CommandOutcome =
-        runner().run(SdkmanCommand.SetDefault(candidate, version), 30.seconds).toOutcome("Default set to $version.")
+    override suspend fun setDefault(candidate: String, version: String): CommandOutcome {
+        invalidCommandInput(candidate, version)?.let { return it }
+        return runner().run(SdkmanCommand.SetDefault(candidate, version), 30.seconds).toOutcome("Default set to $version.")
+    }
 
     override suspend fun cleanLocalOnly(candidate: String, versions: List<String>): CommandOutcome {
-        val current = currentVersionFor(candidate)
-        val eligible = versions.filterNot { it == current }
-        if (eligible.size != versions.size) {
-            return CommandOutcome(false, "Switch away from the current version before cleaning it.")
+        if (!isValidCandidate(candidate)) return invalidCandidateOutcome()
+        if (versions.isEmpty()) return CommandOutcome(false, "Select at least one version to clean.")
+        if (versions.any { !isValidVersion(it) }) return invalidVersionOutcome()
+        val default = defaultVersionFor(candidate)
+        val requestedVersions = versions.distinct()
+        val eligible = requestedVersions.filterNot { it == default }
+        if (eligible.size != requestedVersions.size) {
+            return CommandOutcome(false, "Choose another default version before cleaning this one.")
+        }
+        val localOnlyVersions = try {
+            mergedCandidate(candidate)?.localOnlyVersions.orEmpty().toSet()
+        } catch (exception: IllegalStateException) {
+            ZephyrLogger.warn("Unable to verify local-only versions before cleanup for $candidate.", exception)
+            return CommandOutcome(false, "Unable to verify local-only versions. Try scanning again.")
+        }
+        if (eligible.any { it !in localOnlyVersions }) {
+            return CommandOutcome(false, "Only versions confirmed as local-only can be cleaned.")
         }
         val failures = mutableListOf<String>()
         eligible.forEach { version ->
@@ -235,30 +246,58 @@ class JvmSdkmanRepository(
     }
 
     private fun installedVersionsFor(candidate: String): List<String> {
+        validateCandidate(candidate)
         val candidatePath = home() / "candidates" / candidate
         return fileSystem.listOrNull(candidatePath).orEmpty()
-            .filter { it.name != "current" }
-            .filter { path -> fileSystem.metadataOrNull(path)?.isDirectory == true }
-            .map { it.name }
+            .mapNotNull { versionPath ->
+                val metadata = fileSystem.metadataOrNull(versionPath) ?: return@mapNotNull null
+                versionPath.name.takeIf {
+                    it != "current" && metadata.isDirectory && metadata.symlinkTarget == null && isValidVersion(it)
+                }
+            }
             .sorted()
     }
 
-    private fun currentVersionFor(candidate: String): String? {
+    private fun defaultVersionFor(candidate: String): String? {
+        validateCandidate(candidate)
         val currentPath = home() / "candidates" / candidate / "current"
         val metadata = fileSystem.metadataOrNull(currentPath) ?: return null
-        return metadata.symlinkTarget?.name ?: if (metadata.isDirectory) currentPath.name else null
+        val version = metadata.symlinkTarget?.name?.takeIf(::isValidVersion) ?: return null
+        val versionPath = home() / "candidates" / candidate / version
+        return version.takeIf {
+            fileSystem.metadataOrNull(versionPath)?.let { target ->
+                target.isDirectory && target.symlinkTarget == null
+            } == true
+        }
     }
 
-    private fun locateHome(): Path {
-        val configured = System.getenv("SDKMAN_DIR")?.takeIf { it.isNotBlank() }
-        val home = configured ?: "${System.getProperty("user.home")}/.sdkman"
-        return home.toPath()
-    }
+    private fun locateHome(): Path = sdkmanHomeResolver()
 
     private fun home(): Path = sdkmanHome ?: locateHome().also { sdkmanHome = it }
 
     private fun runner(): SdkmanCommandRunner =
         commandRunner ?: commandRunnerFactory(home()).also { commandRunner = it }
+
+    private fun invalidCommandInput(candidate: String, version: String): CommandOutcome? =
+        when {
+            !isValidCandidate(candidate) -> invalidCandidateOutcome()
+            !isValidVersion(version) -> invalidVersionOutcome()
+            else -> null
+        }
+
+    private fun validateCandidate(candidate: String) {
+        require(isValidCandidate(candidate)) { "Invalid SDKMAN candidate name." }
+    }
+
+    private fun isValidCandidate(candidate: String): Boolean = isValidSdkmanCandidateName(candidate)
+
+    private fun isValidVersion(version: String): Boolean = isValidSdkmanVersion(version)
+
+    private fun invalidCandidateOutcome(): CommandOutcome =
+        CommandOutcome(false, "Invalid SDKMAN candidate name.")
+
+    private fun invalidVersionOutcome(): CommandOutcome =
+        CommandOutcome(false, "Invalid SDKMAN version identifier.")
 
     private fun SdkmanCommandResult.toOutcome(successMessage: String): CommandOutcome =
         if (success) {
@@ -266,4 +305,9 @@ class JvmSdkmanRepository(
         } else {
             CommandOutcome(false, output.ifBlank { "SDKMAN command failed." })
         }
+}
+
+private fun defaultSdkmanHome(): Path {
+    val configured = System.getenv("SDKMAN_DIR")?.takeIf { it.isNotBlank() }
+    return (configured ?: "${System.getProperty("user.home")}/.sdkman").toPath()
 }
