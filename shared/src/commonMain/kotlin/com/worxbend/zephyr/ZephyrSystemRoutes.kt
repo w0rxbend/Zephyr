@@ -1370,6 +1370,20 @@ internal fun SettingsScreen(
                         onSelected = { selected -> onSettingsChange { it.copy(uiDensity = selected) } },
                     )
                 }
+                ZephyrSettingsRow(
+                    title = "Navigation width",
+                    description = if (settings.navigationWidthDp == 0) {
+                        "Using the density-aware default. Drag the sidebar divider to resize."
+                    } else {
+                        "${settings.navigationWidthDp} dp. Drag the sidebar divider to resize."
+                    },
+                ) {
+                    ZephyrToolbarButton(
+                        label = "Reset width",
+                        onClick = { onSettingsChange { it.copy(navigationWidthDp = 0) } },
+                        enabled = settings.navigationWidthDp != 0,
+                    )
+                }
             }
         }
         ZephyrPanel(Modifier.fillMaxWidth()) {

@@ -19,6 +19,7 @@ internal class JvmAppSettingsRepository(
             favoriteJdkVendors = preferences.stringSet(FAVORITE_JDK_VENDORS_KEY),
             recentCandidates = preferences.stringList(RECENT_CANDIDATES_KEY),
             toolchainProfiles = preferences.profiles(PROFILES_KEY),
+            navigationWidthDp = preferences.getInt(NAVIGATION_WIDTH_KEY, 0).normalizedNavigationWidth(),
         )
     }
 
@@ -30,6 +31,7 @@ internal class JvmAppSettingsRepository(
         preferences.put(FAVORITE_JDK_VENDORS_KEY, settings.favoriteJdkVendors.encode())
         preferences.put(RECENT_CANDIDATES_KEY, settings.recentCandidates.encode())
         preferences.put(PROFILES_KEY, settings.toolchainProfiles.encodeProfiles())
+        preferences.putInt(NAVIGATION_WIDTH_KEY, settings.navigationWidthDp.normalizedNavigationWidth())
         preferences.flush()
     }
 
@@ -109,6 +111,7 @@ internal class JvmAppSettingsRepository(
         const val FAVORITE_JDK_VENDORS_KEY = "favorite-jdk-vendors"
         const val RECENT_CANDIDATES_KEY = "recent-candidates"
         const val PROFILES_KEY = "toolchain-profiles"
+        const val NAVIGATION_WIDTH_KEY = "navigation-width-dp"
         const val PROFILE_FIELD_SEPARATOR = '\u001F'
         const val TARGET_FIELD_SEPARATOR = '\u001E'
         val PROFILE_ENCODER: Base64.Encoder = Base64.getUrlEncoder().withoutPadding()

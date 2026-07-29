@@ -10,7 +10,14 @@ data class AppSettings(
     val favoriteJdkVendors: Set<String> = emptySet(),
     val recentCandidates: List<String> = emptyList(),
     val toolchainProfiles: List<ToolchainProfile> = emptyList(),
+    val navigationWidthDp: Int = 0,
 )
+
+const val MIN_NAVIGATION_WIDTH_DP = 190
+const val MAX_NAVIGATION_WIDTH_DP = 360
+
+fun Int.normalizedNavigationWidth(): Int =
+    if (this == 0) 0 else coerceIn(MIN_NAVIGATION_WIDTH_DP, MAX_NAVIGATION_WIDTH_DP)
 
 data class ToolchainProfile(
     val name: String,

@@ -22,6 +22,7 @@ class AppSettingsStoreTest {
             toolchainProfiles = listOf(
                 ToolchainProfile("Backend", listOf(InstallTarget("java", "21.0.5-tem"))),
             ),
+            navigationWidthDp = 286,
         )
         val saved = CompletableDeferred<AppSettings>()
         val repository = FakeAppSettingsRepository(initial) { saved.complete(it) }
@@ -56,6 +57,7 @@ class AppSettingsStoreTest {
                         ),
                     ),
                 ),
+                navigationWidthDp = 320,
             )
 
             repository.save(expected)
@@ -74,6 +76,13 @@ class AppSettingsStoreTest {
         val updated = settings.recordRecentCandidate("kotlin", limit = 3)
 
         assertEquals(listOf("kotlin", "gradle", "maven"), updated.recentCandidates)
+    }
+
+    @Test
+    fun navigationWidthIsClampedToSafeBounds() {
+        assertEquals(MIN_NAVIGATION_WIDTH_DP, 100.normalizedNavigationWidth())
+        assertEquals(MAX_NAVIGATION_WIDTH_DP, 500.normalizedNavigationWidth())
+        assertEquals(0, 0.normalizedNavigationWidth())
     }
 }
 

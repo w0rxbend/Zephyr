@@ -70,6 +70,12 @@ Navigation is grouped into Workspace, Discover, Maintenance, and application sec
 - The full shortcut reference is available in Settings and in command-palette result hints.
 - Global shortcut routing is tested independently from UI event delivery.
 
+### Resizable navigation
+
+- Drag the divider between the sidebar and page content to resize navigation.
+- Width is constrained to 190–360 dp so labels remain usable and content cannot be crowded out.
+- The chosen width persists for the desktop user; Settings shows the saved value and can reset it to the current density-aware default.
+
 ### Favorites
 
 - Favorite any SDK from Browse SDKs; favorites sort before other matching catalog results.

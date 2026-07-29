@@ -2,6 +2,7 @@ package com.worxbend.zephyr
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -29,10 +30,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
@@ -44,6 +48,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import com.worxbend.zephyr.domain.CandidateKind
 import com.worxbend.zephyr.domain.BatchItemStatus
 import com.worxbend.zephyr.domain.ConnectivityState
@@ -56,6 +61,9 @@ import com.worxbend.zephyr.domain.copyableCommand
 import com.worxbend.zephyr.domain.requiresNetwork
 import com.worxbend.zephyr.settings.AppSettings
 import com.worxbend.zephyr.settings.recordRecentCandidate
+import com.worxbend.zephyr.settings.MAX_NAVIGATION_WIDTH_DP
+import com.worxbend.zephyr.settings.MIN_NAVIGATION_WIDTH_DP
+import kotlin.math.roundToInt
 import com.worxbend.zephyr.viewmodel.ZephyrRoute
 import com.worxbend.zephyr.viewmodel.ZephyrUiState
 import com.worxbend.zephyr.viewmodel.ZephyrViewModel
@@ -74,6 +82,14 @@ internal fun ZephyrScreen(
     darkTheme: Boolean,
     onToggleTheme: () -> Unit,
 ) {
+    val metrics = LocalZephyrMetrics.current
+    val defaultNavigationWidth = metrics.navigationWidth.value
+    var navigationWidth by remember(settings.navigationWidthDp, defaultNavigationWidth) {
+        mutableFloatStateOf(
+            settings.navigationWidthDp.takeIf { it > 0 }?.toFloat() ?: defaultNavigationWidth,
+        )
+    }
+    val displayDensity = LocalDensity.current.density
     var globalSearchOpen by remember { mutableStateOf(false) }
     var commandPaletteOpen by remember { mutableStateOf(false) }
     val activateSearchTarget: (GlobalSearchTarget) -> Unit = { target ->
@@ -192,8 +208,20 @@ internal fun ZephyrScreen(
             onCheckUpdates = { viewModel.requestTransaction(SdkmanTransaction.SelfUpdate) },
         )
         Row(Modifier.weight(1f).fillMaxWidth()) {
-            WorkbenchSidebar(state = state, onNavigate = viewModel::navigate)
-            Box(Modifier.fillMaxHeight().width(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
+            WorkbenchSidebar(
+                state = state,
+                width = navigationWidth.dp,
+                onNavigate = viewModel::navigate,
+            )
+            NavigationResizeHandle(
+                onDrag = { pixels ->
+                    navigationWidth = (navigationWidth + pixels / displayDensity)
+                        .coerceIn(MIN_NAVIGATION_WIDTH_DP.toFloat(), MAX_NAVIGATION_WIDTH_DP.toFloat())
+                },
+                onDragFinished = {
+                    onSettingsChange { it.copy(navigationWidthDp = navigationWidth.roundToInt()) }
+                },
+            )
             Content(
                 state = state,
                 viewModel = viewModel,
@@ -474,6 +502,7 @@ private fun GlobalSearchButton(onClick: () -> Unit) {
 @Composable
 private fun WorkbenchSidebar(
     state: ZephyrUiState.Ready,
+    width: Dp,
     onNavigate: (ZephyrRoute) -> Unit,
 ) {
     val metrics = LocalZephyrMetrics.current
@@ -481,7 +510,7 @@ private fun WorkbenchSidebar(
     val localOnly = state.candidates.sumOf { it.localOnlyVersionCount }
     Column(
         modifier = Modifier
-            .width(metrics.navigationWidth)
+            .width(width)
             .fillMaxHeight()
             .background(MaterialTheme.colorScheme.surface)
             .padding(horizontal = 10.dp, vertical = 8.dp),
@@ -567,6 +596,35 @@ private fun WorkbenchSidebar(
         Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
         ZephyrNavigationItem("⚙", "Settings", state.route is ZephyrRoute.Settings, { onNavigate(ZephyrRoute.Settings) })
         ZephyrNavigationItem("i", "About", state.route is ZephyrRoute.About, { onNavigate(ZephyrRoute.About) })
+    }
+}
+
+@Composable
+private fun NavigationResizeHandle(
+    onDrag: (Float) -> Unit,
+    onDragFinished: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .width(7.dp)
+            .fillMaxHeight()
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures(
+                    onDragEnd = onDragFinished,
+                    onDragCancel = onDragFinished,
+                ) { change, dragAmount ->
+                    change.consume()
+                    onDrag(dragAmount)
+                }
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            Modifier
+                .width(1.dp)
+                .fillMaxHeight()
+                .background(MaterialTheme.colorScheme.outlineVariant),
+        )
     }
 }
 
