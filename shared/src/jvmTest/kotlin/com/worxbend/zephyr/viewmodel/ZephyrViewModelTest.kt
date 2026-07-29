@@ -7,6 +7,7 @@ import com.worxbend.zephyr.domain.Candidate
 import com.worxbend.zephyr.domain.CandidateCatalogItem
 import com.worxbend.zephyr.domain.CandidateKind
 import com.worxbend.zephyr.domain.CandidateVersion
+import com.worxbend.zephyr.domain.BatchItemStatus
 import com.worxbend.zephyr.domain.CommandOutcome
 import com.worxbend.zephyr.domain.ConnectivityState
 import com.worxbend.zephyr.domain.ConnectivityStatus
@@ -17,6 +18,7 @@ import com.worxbend.zephyr.domain.EstimateConfidence
 import com.worxbend.zephyr.domain.IntegrityCheck
 import com.worxbend.zephyr.domain.IntegrityCheckId
 import com.worxbend.zephyr.domain.IntegrityStatus
+import com.worxbend.zephyr.domain.InstallTarget
 import com.worxbend.zephyr.domain.JournalExportResult
 import com.worxbend.zephyr.domain.OperationJournalEntry
 import com.worxbend.zephyr.domain.OperationStatus
@@ -230,6 +232,33 @@ class ZephyrViewModelTest {
         assertEquals(null, ready.pendingTransaction)
         assertEquals(OperationStatus.Succeeded, ready.operationJournal.single().status)
         assertEquals("Installed", ready.operationJournal.single().outcome)
+        viewModel.close()
+    }
+
+    @Test
+    fun batchInstallRunsTargetsSequentiallyAndRetainsPerItemResults() {
+        val repository = FakeSdkmanRepository()
+        val viewModel = ZephyrViewModel(repository, testScope())
+        val transaction = SdkmanTransaction.BatchInstall(
+            listOf(
+                InstallTarget("gradle", "8.14"),
+                InstallTarget("kotlin", "2.2.0"),
+            ),
+        )
+
+        viewModel.requestTransaction(transaction)
+        viewModel.confirmTransaction()
+
+        assertEquals(
+            listOf("install:gradle:8.14", "install:kotlin:2.2.0"),
+            repository.mutationCalls,
+        )
+        val ready = assertIs<ZephyrUiState.Ready>(viewModel.state.value)
+        assertEquals(
+            listOf(BatchItemStatus.Succeeded, BatchItemStatus.Succeeded),
+            ready.batchInstallProgress.map { it.status },
+        )
+        assertEquals(OperationStatus.Succeeded, ready.operationJournal.single().status)
         viewModel.close()
     }
 

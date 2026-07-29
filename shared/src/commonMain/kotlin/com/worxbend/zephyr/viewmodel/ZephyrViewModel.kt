@@ -9,6 +9,8 @@ import com.worxbend.zephyr.data.currentEpochMillis
 import com.worxbend.zephyr.domain.Candidate
 import com.worxbend.zephyr.domain.CandidateCatalogItem
 import com.worxbend.zephyr.domain.CandidateMetadataStatus
+import com.worxbend.zephyr.domain.BatchInstallProgress
+import com.worxbend.zephyr.domain.BatchItemStatus
 import com.worxbend.zephyr.domain.CommandOutcome
 import com.worxbend.zephyr.domain.ConnectivityState
 import com.worxbend.zephyr.domain.ConnectivityStatus
@@ -77,6 +79,7 @@ sealed interface ZephyrUiState {
         val operationJournal: List<OperationJournalEntry> = emptyList(),
         val journalExportInProgress: Boolean = false,
         val diagnosticsExportInProgress: Boolean = false,
+        val batchInstallProgress: List<BatchInstallProgress> = emptyList(),
         val protectedVersions: Set<ProtectedVersion> = emptySet(),
         val connectivityStatus: ConnectivityStatus = ConnectivityStatus(ConnectivityState.Unknown),
         val integrityChecks: List<IntegrityCheck> = emptyList(),
@@ -320,6 +323,7 @@ class ZephyrViewModel(
         val journalId = startJournalEntry(transaction)
         when (transaction) {
             is SdkmanTransaction.Install -> install(transaction.candidate, transaction.version, journalId)
+            is SdkmanTransaction.BatchInstall -> batchInstall(transaction, journalId)
             is SdkmanTransaction.Uninstall -> uninstall(transaction.candidate, transaction.version, journalId)
             is SdkmanTransaction.SetDefault -> setDefault(transaction.candidate, transaction.version, journalId)
             is SdkmanTransaction.CleanLocalOnly -> cleanLocalOnly(transaction.candidate, transaction.versions, journalId)
@@ -536,6 +540,45 @@ class ZephyrViewModel(
 
     fun install(candidate: String, version: String, journalId: Long? = null) = mutate(journalId) {
         repository.install(candidate, version)
+    }
+
+    private fun batchInstall(transaction: SdkmanTransaction.BatchInstall, journalId: Long) {
+        launchOperation {
+            if (!beginRefresh()) return@launchOperation
+            var progress = transaction.targets.map { BatchInstallProgress(it) }
+            _state.updateReady { it.copy(batchInstallProgress = progress) }
+            transaction.targets.forEachIndexed { index, target ->
+                progress = progress.updateBatchItem(index, BatchItemStatus.Running)
+                _state.updateReady { it.copy(batchInstallProgress = progress) }
+                val outcome = runCatchingCancellable {
+                    repository.install(target.candidate, target.version)
+                }.getOrElse { failure ->
+                    CommandOutcome(false, failure.message ?: "Install failed.")
+                }
+                progress = progress.updateBatchItem(
+                    index = index,
+                    status = if (outcome.success) BatchItemStatus.Succeeded else BatchItemStatus.Failed,
+                    outcome = outcome.message,
+                )
+                _state.updateReady { it.copy(batchInstallProgress = progress) }
+            }
+            val candidates = runCatchingCancellable { repository.installedCandidates() }
+                .getOrElse { (_state.value as? ZephyrUiState.Ready)?.candidates.orEmpty() }
+            val succeeded = progress.count { it.status == BatchItemStatus.Succeeded }
+            val summary = "$succeeded of ${progress.size} selected installs succeeded."
+            val allSucceeded = succeeded == progress.size
+            completeJournalEntry(journalId, allSucceeded, summary)
+            _state.updateReady {
+                it.copy(
+                    candidates = candidates,
+                    catalog = it.catalog.withInstalledCandidates(candidates),
+                    batchInstallProgress = progress,
+                    isRefreshing = false,
+                    lastOutcome = summary,
+                    errorMessage = if (allSucceeded) null else summary,
+                )
+            }
+        }
     }
 
     fun uninstall(candidate: String, version: String, journalId: Long? = null) = mutate(journalId) {
@@ -779,6 +822,15 @@ private fun List<Candidate>.replaceCandidate(candidate: Candidate?): List<Candid
     val index = indexOfFirst { it.name == candidate.name }
     return if (index < 0) this else toMutableList().also { it[index] = candidate }
 }
+
+private fun List<BatchInstallProgress>.updateBatchItem(
+    index: Int,
+    status: BatchItemStatus,
+    outcome: String? = null,
+): List<BatchInstallProgress> =
+    mapIndexed { itemIndex, item ->
+        if (itemIndex == index) item.copy(status = status, outcome = outcome) else item
+    }
 
 private fun ZephyrUiState.Ready.displaysCandidate(candidate: String): Boolean =
     when (val currentRoute = route) {

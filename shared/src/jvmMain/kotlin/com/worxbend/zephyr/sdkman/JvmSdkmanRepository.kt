@@ -317,6 +317,27 @@ class JvmSdkmanRepository(
                     },
                 )
             }
+            is SdkmanTransaction.BatchInstall -> {
+                val estimates = transaction.targets.map { target ->
+                    estimateDiskImpact(SdkmanTransaction.Install(target.candidate, target.version))
+                }
+                val knownBytes = estimates.mapNotNull { it.bytes }
+                DiskImpactEstimate(
+                    kind = if (knownBytes.size == estimates.size) DiskImpactKind.Required else DiskImpactKind.Unknown,
+                    bytes = knownBytes.takeIf { it.size == estimates.size }?.sum(),
+                    availableBytes = available,
+                    confidence = if (knownBytes.size == estimates.size) {
+                        EstimateConfidence.Estimated
+                    } else {
+                        EstimateConfidence.Unknown
+                    },
+                    explanation = if (knownBytes.size == estimates.size) {
+                        "Combined estimate for ${transaction.targets.size} sequential installs."
+                    } else {
+                        "One or more selected candidates have no local sibling size evidence."
+                    },
+                )
+            }
             is SdkmanTransaction.Uninstall -> reclaimableEstimate(
                 versions = listOf(transaction.version),
                 candidate = transaction.candidate,

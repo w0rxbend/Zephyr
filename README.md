@@ -84,6 +84,14 @@ Navigation is grouped into Workspace, Discover, Maintenance, and application sec
 - Every update remains an ordinary typed install transaction with network preflight, disk-impact estimate, confirmation, and journal history.
 - Refreshing Update Center metadata is explicit and uses the same confirmed SDKMAN metadata transaction as the toolbar.
 
+### Batch installs
+
+- Select multiple Update Center targets and choose **Review selected** to create one typed batch plan.
+- The preview lists every candidate/version command and combines available sibling-based disk estimates.
+- Installs run strictly one at a time; a failed item does not prevent later selected items from running.
+- Update Center shows pending, running, successful, and failed status per target, while the status bar reports overall progress.
+- The operation journal records the full batch command list and summary outcome.
+
 ### Installed JDK screen
 
 Displays installed Java versions as cards. Supports:

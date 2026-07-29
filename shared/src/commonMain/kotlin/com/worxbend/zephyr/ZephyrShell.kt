@@ -45,6 +45,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.worxbend.zephyr.domain.CandidateKind
+import com.worxbend.zephyr.domain.BatchItemStatus
 import com.worxbend.zephyr.domain.ConnectivityState
 import com.worxbend.zephyr.domain.DiskImpactEstimate
 import com.worxbend.zephyr.domain.DiskImpactKind
@@ -610,6 +611,12 @@ private fun HeaderThemeButton(
 
 private fun ZephyrUiState.Ready.busyLabel(): String? =
     when {
+        batchInstallProgress.any { it.status == BatchItemStatus.Running } -> {
+            val completed = batchInstallProgress.count {
+                it.status == BatchItemStatus.Succeeded || it.status == BatchItemStatus.Failed
+            }
+            "Installing ${completed + 1} of ${batchInstallProgress.size}"
+        }
         localOnlyScanInProgress -> "Scanning local-only versions"
         isCatalogLoading -> "Loading SDKMAN catalog"
         detailLoadingCandidate != null -> "Loading package details"

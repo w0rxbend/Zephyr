@@ -26,6 +26,18 @@ fun SdkmanTransaction.recoveryGuidance(): RecoveryGuidance =
             actions = listOf(
                 RecoveryAction.RefreshMetadata,
                 RecoveryAction.OpenDiagnostics,
+            ),
+        )
+        is SdkmanTransaction.BatchInstall -> RecoveryGuidance(
+            title = "Some toolchain items did not install",
+            steps = listOf(
+                "Review the per-item batch results and leave successful targets installed.",
+                "Refresh SDKMAN metadata before retrying failed targets.",
+                "Create a new reviewed batch containing only the remaining targets.",
+            ),
+            actions = listOf(
+                RecoveryAction.RefreshMetadata,
+                RecoveryAction.OpenDiagnostics,
                 RecoveryAction.Retry,
             ),
         )

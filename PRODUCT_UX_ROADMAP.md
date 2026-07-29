@@ -45,6 +45,7 @@ The first product slice delivers:
 23. Persistent SDK and JDK-vendor favorites, prioritized in Browse and available as shortcuts from Overview.
 24. Persistent, bounded recent-candidate history with Overview shortcuts back to the last viewed details.
 25. Consolidated Update Center with stable-target detection, JDK/SDK grouping, selection, inspection, and reviewed installs.
+26. Typed batch installs with combined disk estimates, sequential execution, and persistent per-item progress/results.
 
 ## Delivery log
 
@@ -64,7 +65,8 @@ The first product slice delivers:
 | FLOW-03 Favorites | Delivered | SDK and JDK-vendor pins persist locally, sort first in Browse, and render as direct Overview destinations. |
 | FLOW-04 Recent items | Delivered | Candidate detail navigation records a deduplicated six-item MRU list and exposes it on Overview across sessions. |
 | FLOW-05 Update center | Delivered | Installed candidates with uninstalled stable targets are grouped, selectable, inspectable, and routed through typed install review. |
-| FLOW-06 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
+| FLOW-06 Batch install | Delivered | Update Center selections produce one typed plan, run sequentially, continue after item failures, and report every outcome. |
+| FLOW-07 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
 
 ## Groomed feature backlog
 

@@ -36,6 +36,25 @@ sealed interface SdkmanTransaction {
         override val commands = listOf(PlannedSdkmanCommand(SdkmanCommandAction.Install, candidate, version))
     }
 
+    data class BatchInstall(
+        val targets: List<InstallTarget>,
+    ) : SdkmanTransaction {
+        init {
+            require(targets.isNotEmpty()) { "A batch install requires at least one target." }
+            targets.forEach { requireValidTarget(it.candidate, it.version) }
+            require(targets.distinct().size == targets.size) { "Batch install targets must be unique." }
+        }
+
+        override val title = "Install ${targets.size} toolchain items?"
+        override val description =
+            "Zephyr will install the selected SDKMAN targets sequentially and report each result independently."
+        override val confirmationLabel = "Install selected"
+        override val destructive = false
+        override val commands = targets.map {
+            PlannedSdkmanCommand(SdkmanCommandAction.Install, it.candidate, it.version)
+        }
+    }
+
     data class Uninstall(
         val candidate: String,
         val version: String,
@@ -104,6 +123,11 @@ sealed interface SdkmanTransaction {
         override val commands = listOf(PlannedSdkmanCommand(SdkmanCommandAction.SelfUpdate))
     }
 }
+
+data class InstallTarget(
+    val candidate: String,
+    val version: String,
+)
 
 private fun requireValidTarget(candidate: String, version: String) {
     require(isValidSdkmanCandidateName(candidate)) { "Invalid SDKMAN candidate name." }

@@ -27,10 +27,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.worxbend.zephyr.domain.CandidateKind
+import com.worxbend.zephyr.domain.BatchItemStatus
 import com.worxbend.zephyr.domain.CandidateMetadataStatus
 import com.worxbend.zephyr.domain.ConnectivityState
 import com.worxbend.zephyr.domain.IntegrityCheck
 import com.worxbend.zephyr.domain.IntegrityStatus
+import com.worxbend.zephyr.domain.InstallTarget
 import com.worxbend.zephyr.domain.OperationJournalEntry
 import com.worxbend.zephyr.domain.OperationStatus
 import com.worxbend.zephyr.domain.RecoveryAction
@@ -291,16 +293,52 @@ internal fun UpdateCenterScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     ZephyrToolbarButton(
-                        label = "Review next selected",
+                        label = "Review selected (${selected.size})",
                         onClick = {
-                            updates.firstOrNull { "${it.candidate}:${it.targetVersion}" in selected }?.let {
-                                viewModel.requestTransaction(
-                                    SdkmanTransaction.Install(it.candidate, it.targetVersion),
-                                )
+                            val targets = updates
+                                .filter { "${it.candidate}:${it.targetVersion}" in selected }
+                                .map { InstallTarget(it.candidate, it.targetVersion) }
+                            if (targets.isNotEmpty()) {
+                                viewModel.requestTransaction(SdkmanTransaction.BatchInstall(targets))
                             }
                         },
                         enabled = selected.isNotEmpty(),
                     )
+                }
+                if (state.batchInstallProgress.isNotEmpty()) {
+                    ZephyrPanel(Modifier.fillMaxWidth()) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(metrics.panelPadding),
+                            verticalArrangement = Arrangement.spacedBy(7.dp),
+                        ) {
+                            PanelHeading("Batch progress", "Sequential install results")
+                            state.batchInstallProgress.forEach { item ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Badge(item.status.label, when (item.status) {
+                                        BatchItemStatus.Succeeded -> BadgeTone.Success
+                                        BatchItemStatus.Failed -> BadgeTone.Warning
+                                        BatchItemStatus.Running -> BadgeTone.Primary
+                                        BatchItemStatus.Pending -> BadgeTone.Neutral
+                                    })
+                                    Text(
+                                        "${item.target.candidate} ${item.target.version}",
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    item.outcome?.let {
+                                        Text(
+                                            it,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),

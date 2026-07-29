@@ -43,6 +43,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.worxbend.zephyr.domain.CandidateKind
+import com.worxbend.zephyr.domain.BatchItemStatus
 import com.worxbend.zephyr.domain.OperationStatus
 import com.worxbend.zephyr.viewmodel.ZephyrUiState
 import org.jetbrains.compose.resources.painterResource
@@ -283,6 +284,12 @@ internal fun MessageOverlay(
 @Composable
 internal fun BusyOverlay(state: ZephyrUiState.Ready) {
     val label = when {
+        state.batchInstallProgress.any { it.status == BatchItemStatus.Running } -> {
+            val completed = state.batchInstallProgress.count {
+                it.status == BatchItemStatus.Succeeded || it.status == BatchItemStatus.Failed
+            }
+            "Installing toolchain item ${completed + 1} of ${state.batchInstallProgress.size}"
+        }
         state.localOnlyScanInProgress -> "Scanning local-only versions"
         state.isCatalogLoading -> "Loading SDKMAN catalog"
         state.detailLoadingCandidate != null -> "Loading package details"
