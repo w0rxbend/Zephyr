@@ -32,6 +32,15 @@ The first product slice delivers:
 10. Search, result counts, filtering, and guided empty states across Installed, Browse, and Detail pages.
 11. Explicit confirmation and shared destructive styling for uninstall and local-only cleanup.
 12. Practical desktop window sizing and density-aware page/card layouts.
+13. Typed transaction previews for every SDKMAN mutation, with validated command fields and affected versions shown before execution.
+
+## Delivery log
+
+| Slice | Status | Evidence |
+| --- | --- | --- |
+| Foundation | Delivered | Modern workbench, persistent settings, diagnostics, shared widget library, architecture hardening, and packaging gate. |
+| SAFE-01 Transaction preview | Delivered | Install, default, uninstall, cleanup, metadata, and self-update actions require confirmation of a typed command plan. |
+| SAFE-02 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
 
 ## Groomed feature backlog
 

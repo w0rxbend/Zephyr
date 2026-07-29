@@ -7,6 +7,7 @@ import com.worxbend.zephyr.domain.CandidateMetadataStatus
 import com.worxbend.zephyr.domain.CommandOutcome
 import com.worxbend.zephyr.domain.SdkmanSelfUpdateStatus
 import com.worxbend.zephyr.domain.SdkmanStatus
+import com.worxbend.zephyr.domain.SdkmanTransaction
 import com.worxbend.zephyr.domain.withInstalledCandidates
 import com.worxbend.zephyr.logging.ZephyrLogger
 import kotlinx.coroutines.CoroutineDispatcher
@@ -52,6 +53,7 @@ sealed interface ZephyrUiState {
         val detailLoadingCandidate: String? = null,
         val errorMessage: String?,
         val lastOutcome: String?,
+        val pendingTransaction: SdkmanTransaction? = null,
     ) : ZephyrUiState
 }
 
@@ -164,6 +166,33 @@ class ZephyrViewModel(
 
     fun clearMessages() {
         _state.updateReady { it.copy(errorMessage = null, lastOutcome = null) }
+    }
+
+    fun requestTransaction(transaction: SdkmanTransaction) {
+        _state.updateReady { ready ->
+            if (ready.hasActiveOperation() || ready.pendingTransaction != null) {
+                ready
+            } else {
+                ready.copy(pendingTransaction = transaction)
+            }
+        }
+    }
+
+    fun dismissTransaction() {
+        _state.updateReady { it.copy(pendingTransaction = null) }
+    }
+
+    fun confirmTransaction() {
+        val transaction = (_state.value as? ZephyrUiState.Ready)?.pendingTransaction ?: return
+        _state.updateReady { it.copy(pendingTransaction = null) }
+        when (transaction) {
+            is SdkmanTransaction.Install -> install(transaction.candidate, transaction.version)
+            is SdkmanTransaction.Uninstall -> uninstall(transaction.candidate, transaction.version)
+            is SdkmanTransaction.SetDefault -> setDefault(transaction.candidate, transaction.version)
+            is SdkmanTransaction.CleanLocalOnly -> cleanLocalOnly(transaction.candidate, transaction.versions)
+            SdkmanTransaction.RefreshMetadata -> refreshMetadata()
+            SdkmanTransaction.SelfUpdate -> checkSdkmanUpdates()
+        }
     }
 
     fun refreshInstalled() {
@@ -453,3 +482,6 @@ private fun ZephyrUiState.Ready.displaysCandidate(candidate: String): Boolean =
         ZephyrRoute.BrowseJdks -> candidate == "java"
         else -> false
     }
+
+private fun ZephyrUiState.Ready.hasActiveOperation(): Boolean =
+    isRefreshing || isCatalogLoading || localOnlyScanInProgress || detailLoadingCandidate != null

@@ -80,9 +80,18 @@ Shows the full SDKMAN remote catalog with display names, descriptions, stable ve
 
 - Run **Scan** from the header bar to audit every installed candidate against SDKMAN's remote registry.
 - The **Local-Only Versions** screen shows all affected packages as cards with orphaned version counts.
-- **Clean** removes only the flagged versions after a confirmation dialog that lists what will be removed.
+- **Clean** removes only the flagged versions after a typed transaction preview lists every affected version.
 - If every installed version of a package is orphaned, the confirmation warns that the package may disappear from Installed after cleaning.
 - Partial failures are reported; cleaning continues for remaining eligible versions.
+
+### Transaction previews
+
+Every SDKMAN mutation is reviewed before execution:
+
+- Install, make-default, uninstall, cleanup, metadata refresh, and SDKMAN self-update actions create a typed command plan.
+- The confirmation shows the exact action, candidate, and version fields without constructing or exposing shell expressions.
+- Candidate and version identifiers are validated both when the plan is created and again at the repository boundary.
+- Destructive transactions use distinct warning styling and remain cancellable.
 
 ### SDKMAN maintenance
 

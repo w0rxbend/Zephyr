@@ -43,6 +43,7 @@ import com.worxbend.zephyr.domain.Candidate
 import com.worxbend.zephyr.domain.CandidateCatalogItem
 import com.worxbend.zephyr.domain.CandidateKind
 import com.worxbend.zephyr.domain.CandidateVersion
+import com.worxbend.zephyr.domain.SdkmanTransaction
 import com.worxbend.zephyr.domain.displayNameFor
 import com.worxbend.zephyr.domain.toJavaVersion
 import com.worxbend.zephyr.settings.AppSettings
@@ -573,10 +574,18 @@ private fun VersionRow(
             }
         }
         if (!version.isInstalled && version.isRemoteAvailable) {
-            FilledTonalButton(onClick = { viewModel.install(candidateName, version.version) }, modifier = Modifier.height(36.dp)) { Text("Install") }
+            FilledTonalButton(
+                onClick = { viewModel.requestTransaction(SdkmanTransaction.Install(candidateName, version.version)) },
+                modifier = Modifier.height(36.dp),
+            ) {
+                Text("Install")
+            }
         }
         if (version.isInstalled && !version.isDefault) {
-            OutlinedButton(onClick = { viewModel.setDefault(candidateName, version.version) }, modifier = Modifier.height(36.dp)) {
+            OutlinedButton(
+                onClick = { viewModel.requestTransaction(SdkmanTransaction.SetDefault(candidateName, version.version)) },
+                modifier = Modifier.height(36.dp),
+            ) {
                 Text("Make default")
             }
             if (version.isRemoteAvailable) {
@@ -594,7 +603,7 @@ private fun VersionRow(
                             text = { Text(target.version) },
                             onClick = {
                                 updateMenuOpen = false
-                                viewModel.install(candidateName, target.version)
+                                viewModel.requestTransaction(SdkmanTransaction.Install(candidateName, target.version))
                             },
                         )
                     }

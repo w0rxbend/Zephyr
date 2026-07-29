@@ -8,6 +8,7 @@ import com.worxbend.zephyr.domain.CandidateVersion
 import com.worxbend.zephyr.domain.CommandOutcome
 import com.worxbend.zephyr.domain.SdkmanSelfUpdateStatus
 import com.worxbend.zephyr.domain.SdkmanStatus
+import com.worxbend.zephyr.domain.SdkmanTransaction
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.filterIsInstance
@@ -189,6 +190,24 @@ class ZephyrViewModelTest {
         viewModel.close()
     }
 
+    @Test
+    fun mutationRunsOnlyAfterItsTypedTransactionIsConfirmed() {
+        val repository = FakeSdkmanRepository()
+        val viewModel = ZephyrViewModel(repository, testScope())
+        val transaction = SdkmanTransaction.Install("java", "21.0.5-tem")
+
+        viewModel.requestTransaction(transaction)
+
+        assertEquals(transaction, assertIs<ZephyrUiState.Ready>(viewModel.state.value).pendingTransaction)
+        assertTrue(repository.mutationCalls.isEmpty())
+
+        viewModel.confirmTransaction()
+
+        assertEquals(listOf("install:java:21.0.5-tem"), repository.mutationCalls)
+        assertEquals(null, assertIs<ZephyrUiState.Ready>(viewModel.state.value).pendingTransaction)
+        viewModel.close()
+    }
+
     private fun testScope() = Dispatchers.Unconfined
 }
 
@@ -223,6 +242,7 @@ private class FakeSdkmanRepository(
     val catalogRefreshRequests = mutableListOf<Boolean>()
     var metadataRefreshCalls: Int = 0
         private set
+    val mutationCalls = mutableListOf<String>()
 
     override suspend fun detect(): SdkmanStatus = SdkmanStatus(isInstalled = true, home = "/tmp/sdkman")
 
@@ -266,11 +286,23 @@ private class FakeSdkmanRepository(
         return SdkmanSelfUpdateStatus.UpToDate
     }
 
-    override suspend fun install(candidate: String, version: String): CommandOutcome = CommandOutcome(true, "Installed")
+    override suspend fun install(candidate: String, version: String): CommandOutcome {
+        mutationCalls += "install:$candidate:$version"
+        return CommandOutcome(true, "Installed")
+    }
 
-    override suspend fun uninstall(candidate: String, version: String): CommandOutcome = CommandOutcome(true, "Uninstalled")
+    override suspend fun uninstall(candidate: String, version: String): CommandOutcome {
+        mutationCalls += "uninstall:$candidate:$version"
+        return CommandOutcome(true, "Uninstalled")
+    }
 
-    override suspend fun setDefault(candidate: String, version: String): CommandOutcome = CommandOutcome(true, "Default")
+    override suspend fun setDefault(candidate: String, version: String): CommandOutcome {
+        mutationCalls += "default:$candidate:$version"
+        return CommandOutcome(true, "Default")
+    }
 
-    override suspend fun cleanLocalOnly(candidate: String, versions: List<String>): CommandOutcome = CommandOutcome(true, "Cleaned")
+    override suspend fun cleanLocalOnly(candidate: String, versions: List<String>): CommandOutcome {
+        mutationCalls += "clean:$candidate:${versions.joinToString(",")}"
+        return CommandOutcome(true, "Cleaned")
+    }
 }

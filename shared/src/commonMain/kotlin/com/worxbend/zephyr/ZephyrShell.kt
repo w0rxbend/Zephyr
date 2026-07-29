@@ -2,6 +2,8 @@ package com.worxbend.zephyr
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -23,17 +26,14 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.worxbend.zephyr.domain.CandidateKind
-import com.worxbend.zephyr.domain.displayNameFor
+import com.worxbend.zephyr.domain.PlannedSdkmanCommand
+import com.worxbend.zephyr.domain.SdkmanTransaction
 import com.worxbend.zephyr.settings.AppSettings
 import com.worxbend.zephyr.viewmodel.ZephyrRoute
 import com.worxbend.zephyr.viewmodel.ZephyrUiState
@@ -53,62 +53,11 @@ internal fun ZephyrScreen(
     darkTheme: Boolean,
     onToggleTheme: () -> Unit,
 ) {
-    var pendingClean by remember { mutableStateOf<Pair<String, List<String>>?>(null) }
-    var pendingUninstall by remember { mutableStateOf<Pair<String, String>?>(null) }
-    var confirmSelfUpdate by remember { mutableStateOf(false) }
-
-    pendingClean?.let { (candidate, versions) ->
-        AlertDialog(
-            onDismissRequest = { pendingClean = null },
-            title = { Text("Clean Local-Only Versions") },
-            text = {
-                Text("Zephyr will uninstall ${versions.joinToString()}. If every installed version is cleaned, ${displayNameFor(candidate)} may disappear from Installed.")
-            },
-            confirmButton = {
-                ZephyrDestructiveButton(
-                    label = "Clean",
-                    onClick = {
-                        pendingClean = null
-                        viewModel.cleanLocalOnly(candidate, versions)
-                    },
-                )
-            },
-            dismissButton = { TextButton(onClick = { pendingClean = null }) { Text("Cancel") } },
-        )
-    }
-
-    pendingUninstall?.let { (candidate, version) ->
-        AlertDialog(
-            onDismissRequest = { pendingUninstall = null },
-            title = { Text("Uninstall $version?") },
-            text = {
-                Text("SDKMAN will uninstall $version from ${displayNameFor(candidate)}. This cannot be undone without downloading and installing it again.")
-            },
-            confirmButton = {
-                ZephyrDestructiveButton(
-                    label = "Uninstall",
-                    onClick = {
-                        pendingUninstall = null
-                        viewModel.uninstall(candidate, version)
-                    },
-                )
-            },
-            dismissButton = { TextButton(onClick = { pendingUninstall = null }) { Text("Cancel") } },
-        )
-    }
-
-    if (confirmSelfUpdate) {
-        AlertDialog(
-            onDismissRequest = { confirmSelfUpdate = false },
-            title = { Text("Check for SDKMAN Updates") },
-            text = { Text("SDKMAN may update itself if a new CLI version is available.") },
-            confirmButton = {
-                Button(onClick = {
-                    confirmSelfUpdate = false
-                    viewModel.checkSdkmanUpdates()
-                }) { Text("Check") }
-            },
-            dismissButton = { TextButton(onClick = { confirmSelfUpdate = false }) { Text("Cancel") } },
+    state.pendingTransaction?.let { transaction ->
+        TransactionPreviewDialog(
+            transaction = transaction,
+            onConfirm = viewModel::confirmTransaction,
+            onDismiss = viewModel::dismissTransaction,
         )
     }
 
@@ -120,9 +69,9 @@ internal fun ZephyrScreen(
             onBack = viewModel::goBack,
             onToggleTheme = onToggleTheme,
             onRefresh = viewModel::refreshInstalled,
-            onRefreshMetadata = viewModel::refreshMetadata,
+            onRefreshMetadata = { viewModel.requestTransaction(SdkmanTransaction.RefreshMetadata) },
             onScan = viewModel::scanLocalOnly,
-            onCheckUpdates = { confirmSelfUpdate = true },
+            onCheckUpdates = { viewModel.requestTransaction(SdkmanTransaction.SelfUpdate) },
         )
         Row(Modifier.weight(1f).fillMaxWidth()) {
             WorkbenchSidebar(state = state, onNavigate = viewModel::navigate)
@@ -132,8 +81,12 @@ internal fun ZephyrScreen(
                 viewModel = viewModel,
                 settings = settings,
                 onSettingsChange = onSettingsChange,
-                onClean = { candidate, versions -> pendingClean = candidate to versions },
-                onUninstall = { candidate, version -> pendingUninstall = candidate to version },
+                onClean = { candidate, versions ->
+                    viewModel.requestTransaction(SdkmanTransaction.CleanLocalOnly(candidate, versions))
+                },
+                onUninstall = { candidate, version ->
+                    viewModel.requestTransaction(SdkmanTransaction.Uninstall(candidate, version))
+                },
             )
         }
         WorkbenchStatusBar(state = state, showSdkmanHome = settings.showSdkmanHome)
@@ -141,6 +94,75 @@ internal fun ZephyrScreen(
 
     BusyOverlay(state)
     MessageOverlay(state, viewModel::clearMessages)
+}
+
+@Composable
+internal fun TransactionPreviewDialog(
+    transaction: SdkmanTransaction,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(transaction.title) },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(transaction.description)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        "Typed command plan",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    ZephyrPanel(Modifier.fillMaxWidth().heightIn(max = 260.dp)) {
+                        Column(
+                            modifier = Modifier
+                                .padding(LocalZephyrMetrics.current.panelPadding)
+                                .verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            transaction.commands.forEachIndexed { index, command ->
+                                PlannedCommandRow(index + 1, command)
+                            }
+                        }
+                    }
+                    Text(
+                        "Arguments are validated and passed through Zephyr's typed SDKMAN boundary.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            if (transaction.destructive) {
+                ZephyrDestructiveButton(transaction.confirmationLabel, onConfirm)
+            } else {
+                Button(onClick = onConfirm) { Text(transaction.confirmationLabel) }
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+@Composable
+private fun PlannedCommandRow(
+    step: Int,
+    command: PlannedSdkmanCommand,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Badge(step.toString())
+        Text(command.action.label, modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
+        command.candidate?.let { Badge(it, BadgeTone.Primary) }
+        command.version?.let { Badge(it) }
+    }
 }
 
 @Composable
