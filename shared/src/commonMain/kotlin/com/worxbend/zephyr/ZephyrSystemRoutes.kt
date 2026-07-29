@@ -54,6 +54,7 @@ import com.worxbend.zephyr.settings.ThemePreference
 import com.worxbend.zephyr.settings.TextScale
 import com.worxbend.zephyr.settings.ToolchainProfile
 import com.worxbend.zephyr.settings.UiDensity
+import com.worxbend.zephyr.settings.UpdateNotificationPolicy
 import com.worxbend.zephyr.viewmodel.ZephyrRoute
 import com.worxbend.zephyr.viewmodel.ZephyrUiState
 import com.worxbend.zephyr.viewmodel.ZephyrViewModel
@@ -1464,6 +1465,19 @@ internal fun SettingsScreen(
                         label = MetadataRefreshSchedule::label,
                         onSelected = { selected ->
                             onSettingsChange { it.copy(metadataRefreshSchedule = selected) }
+                        },
+                    )
+                }
+                ZephyrSettingsRow(
+                    title = "Update notifications",
+                    description = "Show path-free desktop notices for available updates or every completed check.",
+                ) {
+                    ZephyrSegmentedControl(
+                        options = UpdateNotificationPolicy.entries,
+                        selected = settings.updateNotificationPolicy,
+                        label = UpdateNotificationPolicy::label,
+                        onSelected = { selected ->
+                            onSettingsChange { it.copy(updateNotificationPolicy = selected) }
                         },
                     )
                 }

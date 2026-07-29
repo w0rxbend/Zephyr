@@ -130,6 +130,12 @@ Navigation is grouped into Workspace, Discover, Maintenance, and application sec
 - Scheduling runs only while Zephyr is open and skips refreshes when offline, busy, or waiting for transaction confirmation.
 - The active cadence is shown in the bottom status bar; scheduled completion is reported through the normal outcome surface.
 
+### Update notifications
+
+- Settings provides Off, Updates only, and All checks desktop-notification policies.
+- Any loaded catalog refresh can produce a notification without requiring the Browse or Update Center page to be open.
+- Notices are deduplicated per update set, include only candidate names and target versions, and use `notify-send` when available.
+
 ### Favorites
 
 - Favorite any SDK from Browse SDKs; favorites sort before other matching catalog results.

@@ -8,6 +8,7 @@ data class AppSettings(
     val textScale: TextScale = TextScale.Percent100,
     val motionPreference: MotionPreference = MotionPreference.System,
     val metadataRefreshSchedule: MetadataRefreshSchedule = MetadataRefreshSchedule.Off,
+    val updateNotificationPolicy: UpdateNotificationPolicy = UpdateNotificationPolicy.Off,
     val showSdkmanHome: Boolean = true,
     val favoriteCandidates: Set<String> = emptySet(),
     val favoriteJdkVendors: Set<String> = emptySet(),
@@ -88,6 +89,12 @@ enum class MetadataRefreshSchedule(
     Hourly("Hourly", 60L * 60L * 1_000L),
     EverySixHours("Every 6 hours", 6L * 60L * 60L * 1_000L),
     Daily("Daily", 24L * 60L * 60L * 1_000L),
+}
+
+enum class UpdateNotificationPolicy(val label: String) {
+    Off("Off"),
+    UpdatesOnly("Updates only"),
+    AllChecks("All checks"),
 }
 
 enum class CollectionViewMode(val label: String) {

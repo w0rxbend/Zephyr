@@ -30,6 +30,7 @@ import com.worxbend.zephyr.settings.MotionPreference
 import com.worxbend.zephyr.settings.ThemePreference
 import com.worxbend.zephyr.settings.TextScale
 import com.worxbend.zephyr.settings.UiDensity
+import com.worxbend.zephyr.settings.UpdateNotificationPolicy
 import com.worxbend.zephyr.domain.SdkmanTransaction
 import com.worxbend.zephyr.domain.DiskImpactEstimate
 import com.worxbend.zephyr.domain.DiskImpactKind
@@ -161,7 +162,7 @@ class ZephyrUiPrimitivesTest {
                         onSettingsChange = { transform -> settings = transform(settings) },
                     )
                     Text(
-                        "${settings.themePreference}:${settings.uiDensity}:${settings.textScale}:${settings.motionPreference}:${settings.metadataRefreshSchedule}",
+                        "${settings.themePreference}:${settings.uiDensity}:${settings.textScale}:${settings.motionPreference}:${settings.metadataRefreshSchedule}:${settings.updateNotificationPolicy}",
                         modifier = Modifier.testTag("appearance-settings"),
                     )
                 }
@@ -173,9 +174,10 @@ class ZephyrUiPrimitivesTest {
         onNodeWithText("150%").performClick()
         onNodeWithText("Reduced").performClick()
         onNodeWithText("Every 6 hours").performClick()
+        onNodeWithText("Updates only").performClick()
 
         onNodeWithTag("appearance-settings").assertTextEquals(
-            "${ThemePreference.Dark}:${UiDensity.Comfortable}:${TextScale.Percent150}:${MotionPreference.Reduced}:${MetadataRefreshSchedule.EverySixHours}",
+            "${ThemePreference.Dark}:${UiDensity.Comfortable}:${TextScale.Percent150}:${MotionPreference.Reduced}:${MetadataRefreshSchedule.EverySixHours}:${UpdateNotificationPolicy.UpdatesOnly}",
         )
     }
 

@@ -25,12 +25,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.worxbend.zephyr.data.createDesktopNotificationService
 import com.worxbend.zephyr.data.createSdkmanRepository
 import com.worxbend.zephyr.domain.CandidateMetadataStatus
 import com.worxbend.zephyr.domain.SdkmanSelfUpdateStatus
 import com.worxbend.zephyr.domain.displayNameFor
 import com.worxbend.zephyr.settings.AppSettingsStore
 import com.worxbend.zephyr.settings.ThemePreference
+import com.worxbend.zephyr.settings.UpdateNotificationPolicy
 import com.worxbend.zephyr.settings.createAppSettingsRepository
 import com.worxbend.zephyr.settings.reducesMotion
 import com.worxbend.zephyr.viewmodel.ZephyrRoute
@@ -42,6 +44,7 @@ import kotlinx.coroutines.delay
 fun App() {
     val viewModel = remember { ZephyrViewModel(createSdkmanRepository()) }
     val settingsStore = remember { AppSettingsStore(createAppSettingsRepository()) }
+    val notificationService = remember { createDesktopNotificationService() }
     DisposableEffect(viewModel, settingsStore) {
         onDispose {
             viewModel.close()
@@ -52,6 +55,7 @@ fun App() {
     val settings by settingsStore.state.collectAsState()
     var systemDarkTheme by remember { mutableStateOf(false) }
     var systemReducedMotion by remember { mutableStateOf(false) }
+    var lastUpdateNotificationKey by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
         systemDarkTheme = isSystemDarkMode()
         systemReducedMotion = isSystemReducedMotion()
@@ -62,6 +66,34 @@ fun App() {
             delay(interval)
             viewModel.refreshMetadataIfIdle()
         }
+    }
+    LaunchedEffect(state, settings.updateNotificationPolicy) {
+        val ready = state as? ZephyrUiState.Ready
+        if (settings.updateNotificationPolicy == UpdateNotificationPolicy.Off) {
+            lastUpdateNotificationKey = null
+            return@LaunchedEffect
+        }
+        if (ready == null) return@LaunchedEffect
+        if (ready.isCatalogLoading) {
+            if (settings.updateNotificationPolicy == UpdateNotificationPolicy.AllChecks) {
+                lastUpdateNotificationKey = null
+            }
+            return@LaunchedEffect
+        }
+        if (ready.catalog.isEmpty()) return@LaunchedEffect
+        val notification = updateNotification(
+            policy = settings.updateNotificationPolicy,
+            candidates = ready.candidates,
+            catalog = ready.catalog,
+        )
+        if (notification == null) {
+            lastUpdateNotificationKey = "${settings.updateNotificationPolicy.name}:current"
+            return@LaunchedEffect
+        }
+        val notificationKey = "${settings.updateNotificationPolicy.name}:${notification.signature}"
+        if (notificationKey == lastUpdateNotificationKey) return@LaunchedEffect
+        lastUpdateNotificationKey = notificationKey
+        notificationService.show(notification.title, notification.message)
     }
     val darkTheme = when (settings.themePreference) {
         ThemePreference.System -> systemDarkTheme

@@ -18,6 +18,7 @@ class AppSettingsStoreTest {
             textScale = TextScale.Percent150,
             motionPreference = MotionPreference.Reduced,
             metadataRefreshSchedule = MetadataRefreshSchedule.EverySixHours,
+            updateNotificationPolicy = UpdateNotificationPolicy.UpdatesOnly,
             showSdkmanHome = false,
             favoriteCandidates = setOf("gradle", "kotlin"),
             favoriteJdkVendors = setOf("tem", "zulu"),
@@ -58,6 +59,7 @@ class AppSettingsStoreTest {
                 textScale = TextScale.Percent200,
                 motionPreference = MotionPreference.Full,
                 metadataRefreshSchedule = MetadataRefreshSchedule.Daily,
+                updateNotificationPolicy = UpdateNotificationPolicy.AllChecks,
                 recentCandidates = listOf("kotlin", "gradle"),
                 toolchainProfiles = listOf(
                     ToolchainProfile(

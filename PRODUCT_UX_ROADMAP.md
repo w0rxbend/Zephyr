@@ -94,7 +94,8 @@ The first product slice delivers:
 | UX-09 Empty-state guidance | Delivered | Every full-page empty state explains the condition and offers a relevant refresh, reset, browse, choose, save, or select action. |
 | UX-10 Context menus | Delivered | Right-click menus on cards and rows mirror safe inspect, copy, favorite, protect, install, default, uninstall, update, and clean actions. |
 | AUTO-01 Scheduled metadata refresh | Delivered | Persisted Off/Hourly/6-hour/Daily schedules refresh only while the app is open, online, and idle, with cadence visible in status. |
-| AUTO-02 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
+| AUTO-02 Update notifications | Delivered | Persisted Off/Updates-only/All-checks policies produce deduplicated, path-free desktop notices from any loaded catalog refresh. |
+| AUTO-03 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
 
 ## Groomed feature backlog
 
