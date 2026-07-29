@@ -76,6 +76,12 @@ Navigation is grouped into Workspace, Discover, Maintenance, and application sec
 - Width is constrained to 190–360 dp so labels remain usable and content cannot be crowded out.
 - The chosen width persists for the desktop user; Settings shows the saved value and can reset it to the current density-aware default.
 
+### Card and table views
+
+- Installed SDKs and Browse SDKs each expose Cards/Table controls.
+- Card mode keeps descriptions and visual scanning; table mode prioritizes dense identifiers, defaults, stable targets, favorites, and actions.
+- Installed and catalog modes persist independently, so each page family keeps its preferred presentation.
+
 ### Favorites
 
 - Favorite any SDK from Browse SDKs; favorites sort before other matching catalog results.

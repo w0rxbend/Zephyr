@@ -23,6 +23,8 @@ class AppSettingsStoreTest {
                 ToolchainProfile("Backend", listOf(InstallTarget("java", "21.0.5-tem"))),
             ),
             navigationWidthDp = 286,
+            installedViewMode = CollectionViewMode.Table,
+            catalogViewMode = CollectionViewMode.Table,
         )
         val saved = CompletableDeferred<AppSettings>()
         val repository = FakeAppSettingsRepository(initial) { saved.complete(it) }
@@ -58,6 +60,8 @@ class AppSettingsStoreTest {
                     ),
                 ),
                 navigationWidthDp = 320,
+                installedViewMode = CollectionViewMode.Table,
+                catalogViewMode = CollectionViewMode.Table,
             )
 
             repository.save(expected)

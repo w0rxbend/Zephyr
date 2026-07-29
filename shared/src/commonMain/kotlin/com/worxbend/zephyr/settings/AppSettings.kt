@@ -11,6 +11,8 @@ data class AppSettings(
     val recentCandidates: List<String> = emptyList(),
     val toolchainProfiles: List<ToolchainProfile> = emptyList(),
     val navigationWidthDp: Int = 0,
+    val installedViewMode: CollectionViewMode = CollectionViewMode.Cards,
+    val catalogViewMode: CollectionViewMode = CollectionViewMode.Cards,
 )
 
 const val MIN_NAVIGATION_WIDTH_DP = 190
@@ -43,4 +45,9 @@ enum class ThemePreference(val label: String) {
 enum class UiDensity(val label: String) {
     Compact("Compact"),
     Comfortable("Comfortable"),
+}
+
+enum class CollectionViewMode(val label: String) {
+    Cards("Cards"),
+    Table("Table"),
 }

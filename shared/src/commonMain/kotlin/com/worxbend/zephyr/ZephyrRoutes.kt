@@ -49,6 +49,7 @@ import com.worxbend.zephyr.domain.SdkmanTransaction
 import com.worxbend.zephyr.domain.displayNameFor
 import com.worxbend.zephyr.domain.toJavaVersion
 import com.worxbend.zephyr.settings.AppSettings
+import com.worxbend.zephyr.settings.CollectionViewMode
 import com.worxbend.zephyr.viewmodel.ZephyrRoute
 import com.worxbend.zephyr.viewmodel.ZephyrUiState
 import com.worxbend.zephyr.viewmodel.ZephyrViewModel
@@ -72,7 +73,13 @@ internal fun Content(
                 viewModel::setVersionProtected,
                 onClean,
             )
-            ZephyrRoute.InstalledSdks -> InstalledSdksScreen(state, viewModel::navigate, onClean)
+            ZephyrRoute.InstalledSdks -> InstalledSdksScreen(
+                state,
+                settings,
+                onSettingsChange,
+                viewModel::navigate,
+                onClean,
+            )
             ZephyrRoute.BrowseJdks -> BrowseScreen(
                 state = state,
                 viewModel = viewModel,
@@ -86,6 +93,10 @@ internal fun Content(
                 items = state.catalog.filter { it.kind == CandidateKind.Sdk },
                 loading = state.isCatalogLoading,
                 favoriteCandidates = settings.favoriteCandidates,
+                viewMode = settings.catalogViewMode,
+                onViewModeChange = { mode ->
+                    onSettingsChange { it.copy(catalogViewMode = mode) }
+                },
                 onFavoriteChange = { candidate, favorite ->
                     onSettingsChange {
                         it.copy(
@@ -185,6 +196,8 @@ private fun InstalledJdkScreen(
 @Composable
 private fun InstalledSdksScreen(
     state: ZephyrUiState.Ready,
+    settings: AppSettings,
+    onSettingsChange: ((AppSettings) -> AppSettings) -> Unit,
     onNavigate: (ZephyrRoute) -> Unit,
     onClean: (String, List<String>) -> Unit,
 ) {
@@ -204,6 +217,14 @@ private fun InstalledSdksScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             SearchField(query, { query = it }, "Search installed SDKs", Modifier.width(300.dp))
+            ZephyrSegmentedControl(
+                options = CollectionViewMode.entries,
+                selected = settings.installedViewMode,
+                label = CollectionViewMode::label,
+                onSelected = { mode ->
+                    onSettingsChange { it.copy(installedViewMode = mode) }
+                },
+            )
             Text(
                 "${filtered.size} shown",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -217,12 +238,21 @@ private fun InstalledSdksScreen(
         } else if (filtered.isEmpty()) {
             EmptyState("No matching SDKs", "No installed packages match \"$query\".", "Clear search") { query = "" }
         } else {
-            CandidateGrid(
-                candidates = filtered,
-                protectedVersions = state.protectedVersions,
-                onOpen = { onNavigate(ZephyrRoute.SdkDetail(it.name)) },
-                onClean = onClean,
-            )
+            if (settings.installedViewMode == CollectionViewMode.Cards) {
+                CandidateGrid(
+                    candidates = filtered,
+                    protectedVersions = state.protectedVersions,
+                    onOpen = { onNavigate(ZephyrRoute.SdkDetail(it.name)) },
+                    onClean = onClean,
+                )
+            } else {
+                CandidateTable(
+                    candidates = filtered,
+                    protectedVersions = state.protectedVersions,
+                    onOpen = { onNavigate(ZephyrRoute.SdkDetail(it.name)) },
+                    onClean = onClean,
+                )
+            }
         }
     }
 }
@@ -233,6 +263,8 @@ private fun BrowseScreen(
     items: List<CandidateCatalogItem>,
     loading: Boolean,
     favoriteCandidates: Set<String>,
+    viewMode: CollectionViewMode,
+    onViewModeChange: (CollectionViewMode) -> Unit,
     onFavoriteChange: (String, Boolean) -> Unit,
     onOpen: (CandidateCatalogItem) -> Unit,
 ) {
@@ -269,6 +301,12 @@ private fun BrowseScreen(
                 label = CatalogFilter::label,
                 onSelected = { catalogFilter = it },
             )
+            ZephyrSegmentedControl(
+                options = CollectionViewMode.entries,
+                selected = viewMode,
+                label = CollectionViewMode::label,
+                onSelected = onViewModeChange,
+            )
             Text(
                 "${filtered.size} shown",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -286,21 +324,30 @@ private fun BrowseScreen(
                 catalogFilter = CatalogFilter.All
             }
         } else if (!loading) {
-            val spacing = LocalZephyrMetrics.current.spacing
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(250.dp),
-                verticalArrangement = Arrangement.spacedBy(spacing),
-                horizontalArrangement = Arrangement.spacedBy(spacing),
-            ) {
-                items(filtered, key = { it.name }) { item ->
-                    val favorite = item.name in favoriteCandidates
-                    PackageCard(
-                        item = item,
-                        isFavorite = favorite,
-                        onToggleFavorite = { onFavoriteChange(item.name, !favorite) },
-                        onClick = { onOpen(item) },
-                    )
+            if (viewMode == CollectionViewMode.Cards) {
+                val spacing = LocalZephyrMetrics.current.spacing
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(250.dp),
+                    verticalArrangement = Arrangement.spacedBy(spacing),
+                    horizontalArrangement = Arrangement.spacedBy(spacing),
+                ) {
+                    items(filtered, key = { it.name }) { item ->
+                        val favorite = item.name in favoriteCandidates
+                        PackageCard(
+                            item = item,
+                            isFavorite = favorite,
+                            onToggleFavorite = { onFavoriteChange(item.name, !favorite) },
+                            onClick = { onOpen(item) },
+                        )
+                    }
                 }
+            } else {
+                PackageTable(
+                    packages = filtered,
+                    favoriteCandidates = favoriteCandidates,
+                    onFavoriteChange = onFavoriteChange,
+                    onOpen = onOpen,
+                )
             }
         }
     }

@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -54,6 +56,89 @@ internal fun CandidateGrid(
                     onClean(candidate.name, candidate.localOnlyVersions - protectedLocalOnly.toSet())
                 },
             )
+        }
+    }
+}
+
+@Composable
+internal fun CandidateTable(
+    candidates: List<Candidate>,
+    protectedVersions: Set<ProtectedVersion> = emptySet(),
+    onOpen: (Candidate) -> Unit,
+    onClean: (String, List<String>) -> Unit,
+) {
+    val spacing = LocalZephyrMetrics.current.spacing
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(spacing)) {
+        items(candidates, key = Candidate::name) { candidate ->
+            val protectedLocalOnly = candidate.localOnlyVersions.filter { version ->
+                ProtectedVersion(candidate.name, version) in protectedVersions
+            }
+            ZephyrClickablePanel(onClick = { onOpen(candidate) }, modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(LocalZephyrMetrics.current.panelPadding),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CandidateIcon(candidate.kind)
+                    Column(Modifier.weight(1f)) {
+                        Text(candidate.displayName, fontWeight = FontWeight.SemiBold)
+                        Text(candidate.name, style = MaterialTheme.typography.bodySmall)
+                    }
+                    Text(
+                        "${candidate.installedVersions.count { it.isInstalled }} installed",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    candidate.defaultVersion?.let { Badge("Default: $it", BadgeTone.Primary) }
+                    if (candidate.hasLocalOnlyVersions) {
+                        Badge("${candidate.localOnlyVersionCount} local-only", BadgeTone.Warning)
+                    }
+                    CopyTextButton(candidate.name, "Copy key")
+                    if (candidate.hasLocalOnlyVersions && protectedLocalOnly.size < candidate.localOnlyVersionCount) {
+                        OutlinedButton(
+                            onClick = {
+                                onClean(candidate.name, candidate.localOnlyVersions - protectedLocalOnly.toSet())
+                            },
+                        ) {
+                            Text("Clean")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun PackageTable(
+    packages: List<CandidateCatalogItem>,
+    favoriteCandidates: Set<String>,
+    onFavoriteChange: (String, Boolean) -> Unit,
+    onOpen: (CandidateCatalogItem) -> Unit,
+) {
+    val spacing = LocalZephyrMetrics.current.spacing
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(spacing)) {
+        items(packages, key = CandidateCatalogItem::name) { item ->
+            val favorite = item.name in favoriteCandidates
+            ZephyrClickablePanel(onClick = { onOpen(item) }, modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(LocalZephyrMetrics.current.panelPadding),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CandidateIcon(item.kind)
+                    Column(Modifier.weight(1f)) {
+                        Text(item.displayName, fontWeight = FontWeight.SemiBold)
+                        Text(item.name, style = MaterialTheme.typography.bodySmall)
+                    }
+                    item.stableVersion?.let { Badge("Stable: $it", BadgeTone.Success) }
+                    if (item.isInstalled) Badge("Installed", BadgeTone.Primary)
+                    if (favorite) Badge("Favorite", BadgeTone.Primary)
+                    CopyTextButton(item.name, "Copy key")
+                    OutlinedButton(onClick = { onFavoriteChange(item.name, !favorite) }) {
+                        Text(if (favorite) "★" else "☆")
+                    }
+                }
+            }
         }
     }
 }
