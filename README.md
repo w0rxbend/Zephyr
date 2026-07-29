@@ -108,6 +108,14 @@ Navigation is grouped into Workspace, Discover, Maintenance, and application sec
 - Applying a profile creates a reviewed batch install containing only missing versions; it does not change defaults or remove extra versions.
 - Saving an existing name replaces that profile, and profiles can be deleted without changing the SDKMAN installation.
 
+### Project toolchain import
+
+- Choose a project `.sdkmanrc` with the native desktop file picker.
+- Zephyr parses local `candidate=version` entries only; blank lines and comments are ignored.
+- Duplicate, malformed, or unsafe identifiers are excluded and reported with line-specific warnings.
+- The review classifies each valid target as current default, installed but requiring a default change, or requiring installation.
+- Import is read-only and displays only the selected file name, not its machine-specific path.
+
 ### Installed JDK screen
 
 Displays installed Java versions as cards. Supports:

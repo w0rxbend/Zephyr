@@ -22,6 +22,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,6 +45,8 @@ import com.worxbend.zephyr.domain.javaProviderName
 import com.worxbend.zephyr.domain.recoveryGuidance
 import com.worxbend.zephyr.domain.searchOperationJournal
 import com.worxbend.zephyr.data.formatLocalTimestamp
+import com.worxbend.zephyr.data.SdkmanRcDocument
+import com.worxbend.zephyr.data.createProjectToolchainService
 import com.worxbend.zephyr.settings.AppSettings
 import com.worxbend.zephyr.settings.ThemePreference
 import com.worxbend.zephyr.settings.ToolchainProfile
@@ -51,6 +54,7 @@ import com.worxbend.zephyr.settings.UiDensity
 import com.worxbend.zephyr.viewmodel.ZephyrRoute
 import com.worxbend.zephyr.viewmodel.ZephyrUiState
 import com.worxbend.zephyr.viewmodel.ZephyrViewModel
+import kotlinx.coroutines.launch
 
 @Composable
 internal fun OverviewScreen(
@@ -684,6 +688,128 @@ internal fun ToolchainProfilesScreen(
                                     if (isMissing) BadgeTone.Warning else BadgeTone.Success,
                                 )
                             }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun ProjectToolchainImportScreen(
+    state: ZephyrUiState.Ready,
+) {
+    val metrics = LocalZephyrMetrics.current
+    val service = remember { createProjectToolchainService() }
+    val scope = rememberCoroutineScope()
+    var document by remember { mutableStateOf<SdkmanRcDocument?>(null) }
+    var loading by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val diff = document?.let { compareProjectToolchain(it.targets, state.candidates) }.orEmpty()
+
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(metrics.spacing * 2),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                PageTitle(
+                    "Project Toolchain Import",
+                    "Read a project .sdkmanrc and review its required local changes without modifying SDKMAN.",
+                )
+            }
+            ZephyrToolbarButton(
+                label = if (loading) "Choosing…" else "Choose .sdkmanrc",
+                onClick = {
+                    scope.launch {
+                        loading = true
+                        error = null
+                        runCatching { service.chooseAndRead() }
+                            .onSuccess { selected -> if (selected != null) document = selected }
+                            .onFailure { failure -> error = failure.message ?: "Unable to read the selected file." }
+                        loading = false
+                    }
+                },
+                enabled = !loading,
+            )
+        }
+        error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        val current = document
+        if (current == null) {
+            EmptyState(
+                "Choose a project toolchain",
+                "Zephyr reads candidate=version entries locally and shows a reviewable diff.",
+            )
+            return@Column
+        }
+        ZephyrPanel(Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(metrics.panelPadding),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(current.fileName, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "${current.targets.size} target(s) • ${current.warnings.size} warning(s)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+        if (current.warnings.isNotEmpty()) {
+            ZephyrPanel(Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.padding(metrics.panelPadding),
+                    verticalArrangement = Arrangement.spacedBy(5.dp),
+                ) {
+                    PanelHeading("Parser warnings", "Ignored lines do not enter the review")
+                    current.warnings.forEach { warning ->
+                        Text("• $warning", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+        }
+        if (diff.isEmpty()) {
+            EmptyState("No valid targets", "The selected file contains no valid candidate=version entries.")
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(metrics.spacing),
+            ) {
+                items(diff, key = { "${it.target.candidate}:${it.target.version}" }) { item ->
+                    ZephyrPanel(Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(metrics.panelPadding),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    "${item.target.candidate} ${item.target.version}",
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                                Text(
+                                    state.candidates.firstOrNull { it.name == item.target.candidate }?.displayName
+                                        ?: displayNameFor(item.target.candidate),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Badge(
+                                item.status.label,
+                                when (item.status) {
+                                    ProjectTargetStatus.Current -> BadgeTone.Success
+                                    ProjectTargetStatus.DefaultChange -> BadgeTone.Primary
+                                    ProjectTargetStatus.Install -> BadgeTone.Warning
+                                },
+                            )
                         }
                     }
                 }

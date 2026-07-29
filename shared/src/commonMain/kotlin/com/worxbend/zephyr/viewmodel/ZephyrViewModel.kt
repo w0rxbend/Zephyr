@@ -52,6 +52,7 @@ sealed interface ZephyrRoute {
     data object UpdateCenter : ZephyrRoute
     data object BatchUninstall : ZephyrRoute
     data object Profiles : ZephyrRoute
+    data object ProjectImport : ZephyrRoute
     data object Diagnostics : ZephyrRoute
     data object History : ZephyrRoute
     data object Settings : ZephyrRoute

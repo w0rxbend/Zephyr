@@ -489,6 +489,12 @@ private fun WorkbenchSidebar(
             state.route is ZephyrRoute.Profiles,
             { onNavigate(ZephyrRoute.Profiles) },
         )
+        ZephyrNavigationItem(
+            "↥",
+            "Import .sdkmanrc",
+            state.route is ZephyrRoute.ProjectImport,
+            { onNavigate(ZephyrRoute.ProjectImport) },
+        )
 
         ZephyrSectionLabel("Discover", Modifier.padding(top = 7.dp))
         ZephyrNavigationItem("+J", "Browse JDKs", state.route is ZephyrRoute.BrowseJdks, { onNavigate(ZephyrRoute.BrowseJdks) })

@@ -48,6 +48,7 @@ The first product slice delivers:
 26. Typed batch installs with combined disk estimates, sequential execution, and persistent per-item progress/results.
 27. Typed batch uninstall with default/protected exclusions, exact reclaim estimates, and sequential per-item results.
 28. Persistent named toolchain profiles captured from defaults, compared with local installs, and applicable through reviewed batches.
+29. Native `.sdkmanrc` import with strict parsing, ignored-line warnings, and a read-only local-state diff.
 
 ## Delivery log
 
@@ -70,7 +71,8 @@ The first product slice delivers:
 | FLOW-06 Batch install | Delivered | Update Center selections produce one typed plan, run sequentially, continue after item failures, and report every outcome. |
 | FLOW-07 Batch uninstall | Delivered | Default and protected versions are excluded before selection; reviewed removals run sequentially with repository re-enforcement. |
 | FLOW-08 Toolchain profiles | Delivered | Named default-version sets persist, report installed/missing targets, and install only missing entries through batch review. |
-| FLOW-09 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
+| FLOW-09 Project toolchain import | Delivered | Native file selection parses candidate/version entries and classifies current, default-change, and install requirements without mutation. |
+| FLOW-10 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
 
 ## Groomed feature backlog
 
