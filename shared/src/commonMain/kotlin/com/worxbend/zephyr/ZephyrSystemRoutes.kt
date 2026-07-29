@@ -57,6 +57,7 @@ import com.worxbend.zephyr.settings.AppSettings
 import com.worxbend.zephyr.settings.CleanupGracePeriod
 import com.worxbend.zephyr.settings.MetadataRefreshSchedule
 import com.worxbend.zephyr.settings.MotionPreference
+import com.worxbend.zephyr.settings.OperationNotificationPolicy
 import com.worxbend.zephyr.settings.ThemePreference
 import com.worxbend.zephyr.settings.TextScale
 import com.worxbend.zephyr.settings.ToolchainProfile
@@ -1721,6 +1722,19 @@ internal fun SettingsScreen(
                         label = UpdateNotificationPolicy::label,
                         onSelected = { selected ->
                             onSettingsChange { it.copy(updateNotificationPolicy = selected) }
+                        },
+                    )
+                }
+                ZephyrSettingsRow(
+                    title = "Operation notifications",
+                    description = "Show path-free desktop notices when reviewed operations finish.",
+                ) {
+                    ZephyrSegmentedControl(
+                        options = OperationNotificationPolicy.entries,
+                        selected = settings.operationNotificationPolicy,
+                        label = OperationNotificationPolicy::label,
+                        onSelected = { selected ->
+                            onSettingsChange { it.copy(operationNotificationPolicy = selected) }
                         },
                     )
                 }

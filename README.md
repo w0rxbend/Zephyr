@@ -136,6 +136,12 @@ Navigation is grouped into Workspace, Discover, Maintenance, and application sec
 - Any loaded catalog refresh can produce a notification without requiring the Browse or Update Center page to be open.
 - Notices are deduplicated per update set, include only candidate names and target versions, and use `notify-send` when available.
 
+### Operation notifications
+
+- Settings provides Off, Long operations, and All completions policies for reviewed toolchain work.
+- The default long-operation threshold is ten seconds, and each completed journal entry is notified at most once.
+- Desktop text reports only status and reviewed step counts; command output and filesystem paths stay inside Zephyr.
+
 ### Local-only cleanup grace
 
 - Settings provides opt-in Off, 7-day, 30-day, and 90-day review thresholds.

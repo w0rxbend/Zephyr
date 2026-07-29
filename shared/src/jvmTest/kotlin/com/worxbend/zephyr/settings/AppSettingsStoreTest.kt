@@ -20,6 +20,7 @@ class AppSettingsStoreTest {
             motionPreference = MotionPreference.Reduced,
             metadataRefreshSchedule = MetadataRefreshSchedule.EverySixHours,
             updateNotificationPolicy = UpdateNotificationPolicy.UpdatesOnly,
+            operationNotificationPolicy = OperationNotificationPolicy.LongRunning,
             cleanupGracePeriod = CleanupGracePeriod.ThirtyDays,
             localOnlyObservations = listOf(
                 LocalOnlyObservation("java", "17.0.1-tem", 1_000L),
@@ -65,6 +66,7 @@ class AppSettingsStoreTest {
                 motionPreference = MotionPreference.Full,
                 metadataRefreshSchedule = MetadataRefreshSchedule.Daily,
                 updateNotificationPolicy = UpdateNotificationPolicy.AllChecks,
+                operationNotificationPolicy = OperationNotificationPolicy.AllCompletions,
                 cleanupGracePeriod = CleanupGracePeriod.NinetyDays,
                 localOnlyObservations = listOf(
                     LocalOnlyObservation("gradle", "7.6", 234_567L),

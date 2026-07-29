@@ -10,6 +10,7 @@ data class AppSettings(
     val motionPreference: MotionPreference = MotionPreference.System,
     val metadataRefreshSchedule: MetadataRefreshSchedule = MetadataRefreshSchedule.Off,
     val updateNotificationPolicy: UpdateNotificationPolicy = UpdateNotificationPolicy.Off,
+    val operationNotificationPolicy: OperationNotificationPolicy = OperationNotificationPolicy.Off,
     val cleanupGracePeriod: CleanupGracePeriod = CleanupGracePeriod.Off,
     val localOnlyObservations: List<LocalOnlyObservation> = emptyList(),
     val showSdkmanHome: Boolean = true,
@@ -130,6 +131,12 @@ enum class UpdateNotificationPolicy(val label: String) {
     Off("Off"),
     UpdatesOnly("Updates only"),
     AllChecks("All checks"),
+}
+
+enum class OperationNotificationPolicy(val label: String) {
+    Off("Off"),
+    LongRunning("Long operations"),
+    AllCompletions("All completions"),
 }
 
 enum class CleanupGracePeriod(

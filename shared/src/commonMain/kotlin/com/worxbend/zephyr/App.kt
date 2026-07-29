@@ -34,6 +34,7 @@ import com.worxbend.zephyr.domain.SdkmanSelfUpdateStatus
 import com.worxbend.zephyr.domain.displayNameFor
 import com.worxbend.zephyr.settings.AppSettingsStore
 import com.worxbend.zephyr.settings.ThemePreference
+import com.worxbend.zephyr.settings.OperationNotificationPolicy
 import com.worxbend.zephyr.settings.UpdateNotificationPolicy
 import com.worxbend.zephyr.settings.createAppSettingsRepository
 import com.worxbend.zephyr.settings.reconcileLocalOnlyObservations
@@ -59,6 +60,7 @@ fun App() {
     var systemDarkTheme by remember { mutableStateOf(false) }
     var systemReducedMotion by remember { mutableStateOf(false) }
     var lastUpdateNotificationKey by remember { mutableStateOf<String?>(null) }
+    var lastOperationNotificationId by remember { mutableStateOf<Long?>(null) }
     LaunchedEffect(Unit) {
         systemDarkTheme = isSystemDarkMode()
         systemReducedMotion = isSystemReducedMotion()
@@ -97,6 +99,23 @@ fun App() {
         if (notificationKey == lastUpdateNotificationKey) return@LaunchedEffect
         lastUpdateNotificationKey = notificationKey
         notificationService.show(notification.title, notification.message)
+    }
+    LaunchedEffect(state, settings.operationNotificationPolicy) {
+        if (settings.operationNotificationPolicy == OperationNotificationPolicy.Off) {
+            lastOperationNotificationId = null
+            return@LaunchedEffect
+        }
+        val ready = state as? ZephyrUiState.Ready ?: return@LaunchedEffect
+        val entry = ready.operationJournal
+            .asSequence()
+            .filter { it.completedAtEpochMillis != null }
+            .maxByOrNull { it.id }
+            ?: return@LaunchedEffect
+        if (entry.id == lastOperationNotificationId) return@LaunchedEffect
+        lastOperationNotificationId = entry.id
+        operationNotification(settings.operationNotificationPolicy, entry)?.let { notification ->
+            notificationService.show(notification.title, notification.message)
+        }
     }
     LaunchedEffect(state, settings.cleanupGracePeriod) {
         val ready = state as? ZephyrUiState.Ready ?: return@LaunchedEffect

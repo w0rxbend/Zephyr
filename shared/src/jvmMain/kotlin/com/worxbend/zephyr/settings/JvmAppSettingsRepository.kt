@@ -18,6 +18,10 @@ internal class JvmAppSettingsRepository(
             motionPreference = preferences.enumValue(MOTION_KEY, MotionPreference.System),
             metadataRefreshSchedule = preferences.enumValue(REFRESH_SCHEDULE_KEY, MetadataRefreshSchedule.Off),
             updateNotificationPolicy = preferences.enumValue(NOTIFICATION_POLICY_KEY, UpdateNotificationPolicy.Off),
+            operationNotificationPolicy = preferences.enumValue(
+                OPERATION_NOTIFICATION_POLICY_KEY,
+                OperationNotificationPolicy.Off,
+            ),
             cleanupGracePeriod = preferences.enumValue(CLEANUP_GRACE_KEY, CleanupGracePeriod.Off),
             localOnlyObservations = preferences.localOnlyObservations(LOCAL_ONLY_OBSERVATIONS_KEY),
             showSdkmanHome = preferences.getBoolean(SHOW_SDKMAN_HOME_KEY, true),
@@ -39,6 +43,7 @@ internal class JvmAppSettingsRepository(
         preferences.put(MOTION_KEY, settings.motionPreference.name)
         preferences.put(REFRESH_SCHEDULE_KEY, settings.metadataRefreshSchedule.name)
         preferences.put(NOTIFICATION_POLICY_KEY, settings.updateNotificationPolicy.name)
+        preferences.put(OPERATION_NOTIFICATION_POLICY_KEY, settings.operationNotificationPolicy.name)
         preferences.put(CLEANUP_GRACE_KEY, settings.cleanupGracePeriod.name)
         preferences.put(LOCAL_ONLY_OBSERVATIONS_KEY, settings.localOnlyObservations.encodeLocalOnlyObservations())
         preferences.putBoolean(SHOW_SDKMAN_HOME_KEY, settings.showSdkmanHome)
@@ -201,6 +206,7 @@ internal class JvmAppSettingsRepository(
         const val MOTION_KEY = "motion"
         const val REFRESH_SCHEDULE_KEY = "metadata-refresh-schedule"
         const val NOTIFICATION_POLICY_KEY = "update-notification-policy"
+        const val OPERATION_NOTIFICATION_POLICY_KEY = "operation-notification-policy"
         const val CLEANUP_GRACE_KEY = "cleanup-grace"
         const val LOCAL_ONLY_OBSERVATIONS_KEY = "local-only-observations"
         const val SHOW_SDKMAN_HOME_KEY = "show-sdkman-home"
