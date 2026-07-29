@@ -93,7 +93,11 @@ internal fun ZephyrScreen(
     }
 
     BusyOverlay(state)
-    MessageOverlay(state, viewModel::clearMessages)
+    MessageOverlay(
+        state = state,
+        onDismiss = viewModel::clearMessages,
+        onOpenRecovery = { viewModel.navigate(ZephyrRoute.History) },
+    )
 }
 
 @Composable

@@ -253,6 +253,35 @@ class ZephyrViewModelTest {
         viewModel.close()
     }
 
+    @Test
+    fun cleanupRetryIncludesOnlyVersionsStillVerifiedAsLocalOnly() {
+        val installed = remoteCandidate("java", CandidateKind.Jdk).copy(
+            installedVersions = listOf(
+                CandidateVersion("17.0.1-tem", true, false, false),
+            ),
+            hasLocalOnlyVersions = true,
+            localOnlyVersionCount = 1,
+            localOnlyVersions = listOf("17.0.1-tem"),
+        )
+        val viewModel = ZephyrViewModel(
+            FakeSdkmanRepository(installedCandidate = installed),
+            testScope(),
+        )
+
+        viewModel.retryTransaction(
+            SdkmanTransaction.CleanLocalOnly(
+                "java",
+                listOf("17.0.1-tem", "19.0.2-tem"),
+            ),
+        )
+
+        val retry = assertIs<SdkmanTransaction.CleanLocalOnly>(
+            assertIs<ZephyrUiState.Ready>(viewModel.state.value).pendingTransaction,
+        )
+        assertEquals(listOf("17.0.1-tem"), retry.versions)
+        viewModel.close()
+    }
+
     private fun testScope() = Dispatchers.Unconfined
 }
 

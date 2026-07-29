@@ -189,6 +189,28 @@ class ZephyrViewModel(
         }
     }
 
+    fun retryTransaction(transaction: SdkmanTransaction) {
+        val retry = if (transaction is SdkmanTransaction.CleanLocalOnly) {
+            val verified = (_state.value as? ZephyrUiState.Ready)
+                ?.candidates
+                ?.firstOrNull { it.name == transaction.candidate }
+                ?.localOnlyVersions
+                .orEmpty()
+                .toSet()
+            val remaining = transaction.versions.filter { it in verified }
+            if (remaining.isEmpty()) {
+                _state.updateReady {
+                    it.copy(lastOutcome = "Scan local-only versions again before retrying cleanup.")
+                }
+                return
+            }
+            transaction.copy(versions = remaining)
+        } else {
+            transaction
+        }
+        requestTransaction(retry)
+    }
+
     fun dismissTransaction() {
         _state.updateReady { it.copy(pendingTransaction = null) }
     }

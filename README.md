@@ -99,6 +99,8 @@ Every SDKMAN mutation is reviewed before execution:
 
 - Search by operation, candidate, version, status, or outcome.
 - Running, successful, and failed operations use explicit status language.
+- Failed entries provide transaction-specific recovery steps and safe actions for refresh, rescan, diagnostics, or reviewed retry.
+- Cleanup retries retain only versions that are still verified as local-only after a new scan.
 - Export writes a collision-safe CSV to `~/Downloads` when available, falling back to the user home directory.
 - Export content contains operation data but excludes the SDKMAN home path.
 

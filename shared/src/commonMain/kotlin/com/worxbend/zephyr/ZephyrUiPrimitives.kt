@@ -43,6 +43,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.worxbend.zephyr.domain.CandidateKind
+import com.worxbend.zephyr.domain.OperationStatus
 import com.worxbend.zephyr.viewmodel.ZephyrUiState
 import org.jetbrains.compose.resources.painterResource
 import zephyr.shared.generated.resources.Res
@@ -233,8 +234,14 @@ internal fun CodeBlock(text: String) {
 }
 
 @Composable
-internal fun MessageOverlay(state: ZephyrUiState.Ready, onDismiss: () -> Unit) {
+internal fun MessageOverlay(
+    state: ZephyrUiState.Ready,
+    onDismiss: () -> Unit,
+    onOpenRecovery: (() -> Unit)? = null,
+) {
     val message = state.errorMessage ?: state.lastOutcome ?: return
+    val hasFailedOperation = state.errorMessage != null &&
+        state.operationJournal.firstOrNull()?.status == OperationStatus.Failed
     LaunchedEffect(message) {
         kotlinx.coroutines.delay(10_000)
         onDismiss()
@@ -246,6 +253,9 @@ internal fun MessageOverlay(state: ZephyrUiState.Ready, onDismiss: () -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(message, color = MaterialTheme.colorScheme.inverseOnSurface, maxLines = 3, overflow = TextOverflow.Ellipsis)
+            if (hasFailedOperation && onOpenRecovery != null) {
+                TextButton(onClick = onOpenRecovery) { Text("Recovery steps") }
+            }
             TextButton(onClick = onDismiss) { Text("Dismiss") }
         }
     }

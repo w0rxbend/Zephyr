@@ -80,7 +80,7 @@ internal fun Content(
             )
             ZephyrRoute.LocalOnly -> LocalOnlyScreen(state, viewModel::navigate, viewModel::scanLocalOnly, onClean)
             ZephyrRoute.Diagnostics -> DiagnosticsScreen(state)
-            ZephyrRoute.History -> OperationHistoryScreen(state, viewModel::exportJournal)
+            ZephyrRoute.History -> OperationHistoryScreen(state, viewModel)
             ZephyrRoute.Settings -> SettingsScreen(settings, onSettingsChange)
             ZephyrRoute.About -> AboutScreen(state)
             is ZephyrRoute.JdkDetail -> CandidateDetailScreen(state, route.candidate, true, viewModel, onClean, onUninstall)

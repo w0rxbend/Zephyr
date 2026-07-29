@@ -26,7 +26,10 @@ import com.worxbend.zephyr.domain.CandidateKind
 import com.worxbend.zephyr.domain.CandidateMetadataStatus
 import com.worxbend.zephyr.domain.OperationJournalEntry
 import com.worxbend.zephyr.domain.OperationStatus
+import com.worxbend.zephyr.domain.RecoveryAction
 import com.worxbend.zephyr.domain.SdkmanSelfUpdateStatus
+import com.worxbend.zephyr.domain.SdkmanTransaction
+import com.worxbend.zephyr.domain.recoveryGuidance
 import com.worxbend.zephyr.domain.searchOperationJournal
 import com.worxbend.zephyr.data.formatLocalTimestamp
 import com.worxbend.zephyr.settings.AppSettings
@@ -161,7 +164,7 @@ internal fun DiagnosticsScreen(state: ZephyrUiState.Ready) {
 @Composable
 internal fun OperationHistoryScreen(
     state: ZephyrUiState.Ready,
-    onExport: () -> Unit,
+    viewModel: ZephyrViewModel,
 ) {
     val metrics = LocalZephyrMetrics.current
     var query by remember { mutableStateOf("") }
@@ -189,7 +192,7 @@ internal fun OperationHistoryScreen(
             )
             ZephyrToolbarButton(
                 label = if (state.journalExportInProgress) "Exporting…" else "Export CSV",
-                onClick = onExport,
+                onClick = viewModel::exportJournal,
                 enabled = state.operationJournal.isNotEmpty() && !state.journalExportInProgress,
             )
         }
@@ -209,7 +212,10 @@ internal fun OperationHistoryScreen(
                 verticalArrangement = Arrangement.spacedBy(metrics.spacing),
             ) {
                 items(entries, key = { it.id }) { entry ->
-                    OperationJournalCard(entry)
+                    OperationJournalCard(
+                        entry = entry,
+                        onRecoveryAction = { action -> viewModel.handleRecoveryAction(entry, action) },
+                    )
                 }
             }
         }
@@ -217,7 +223,10 @@ internal fun OperationHistoryScreen(
 }
 
 @Composable
-private fun OperationJournalCard(entry: OperationJournalEntry) {
+private fun OperationJournalCard(
+    entry: OperationJournalEntry,
+    onRecoveryAction: (RecoveryAction) -> Unit,
+) {
     val metrics = LocalZephyrMetrics.current
     val tone = when (entry.status) {
         OperationStatus.Running -> StatusTone.Accent
@@ -264,7 +273,45 @@ private fun OperationJournalCard(entry: OperationJournalEntry) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            if (entry.status == OperationStatus.Failed) {
+                val guidance = entry.transaction.recoveryGuidance()
+                Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    Text(
+                        guidance.title,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    guidance.steps.forEach { step ->
+                        Text(
+                            "• $step",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(7.dp),
+                        verticalArrangement = Arrangement.spacedBy(7.dp),
+                    ) {
+                        guidance.actions.forEach { action ->
+                            ZephyrToolbarButton(action.label, onClick = { onRecoveryAction(action) })
+                        }
+                    }
+                }
+            }
         }
+    }
+}
+
+private fun ZephyrViewModel.handleRecoveryAction(
+    entry: OperationJournalEntry,
+    action: RecoveryAction,
+) {
+    when (action) {
+        RecoveryAction.Retry -> retryTransaction(entry.transaction)
+        RecoveryAction.RefreshInstalled -> refreshInstalled()
+        RecoveryAction.RefreshMetadata -> requestTransaction(SdkmanTransaction.RefreshMetadata)
+        RecoveryAction.ScanLocalOnly -> scanLocalOnly()
+        RecoveryAction.OpenDiagnostics -> navigate(ZephyrRoute.Diagnostics)
     }
 }
 
