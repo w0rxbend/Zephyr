@@ -129,6 +129,7 @@ internal fun headerTitle(state: ZephyrUiState.Ready): String =
     when (val route = state.route) {
         ZephyrRoute.Overview -> "Overview"
         ZephyrRoute.Diagnostics -> "Diagnostics"
+        ZephyrRoute.History -> "Operation History"
         ZephyrRoute.Settings -> "Settings"
         ZephyrRoute.About -> "About"
         ZephyrRoute.InstalledJdk -> "Installed JDK"

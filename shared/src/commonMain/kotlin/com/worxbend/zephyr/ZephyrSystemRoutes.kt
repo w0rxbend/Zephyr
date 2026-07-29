@@ -7,17 +7,28 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.worxbend.zephyr.domain.CandidateKind
 import com.worxbend.zephyr.domain.CandidateMetadataStatus
+import com.worxbend.zephyr.domain.OperationJournalEntry
+import com.worxbend.zephyr.domain.OperationStatus
 import com.worxbend.zephyr.domain.SdkmanSelfUpdateStatus
+import com.worxbend.zephyr.domain.searchOperationJournal
+import com.worxbend.zephyr.data.formatLocalTimestamp
 import com.worxbend.zephyr.settings.AppSettings
 import com.worxbend.zephyr.settings.ThemePreference
 import com.worxbend.zephyr.settings.UiDensity
@@ -144,6 +155,116 @@ internal fun DiagnosticsScreen(state: ZephyrUiState.Ready) {
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+    }
+}
+
+@Composable
+internal fun OperationHistoryScreen(
+    state: ZephyrUiState.Ready,
+    onExport: () -> Unit,
+) {
+    val metrics = LocalZephyrMetrics.current
+    var query by remember { mutableStateOf("") }
+    val entries = state.operationJournal.searchOperationJournal(query)
+
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(metrics.spacing * 2),
+    ) {
+        PageTitle(
+            "Operation History",
+            "Review confirmed SDKMAN mutations from this Zephyr session.",
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(metrics.spacing),
+        ) {
+            SearchField(query, { query = it }, "Search operations", Modifier.width(320.dp))
+            Text(
+                "${entries.size} of ${state.operationJournal.size}",
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            ZephyrToolbarButton(
+                label = if (state.journalExportInProgress) "Exporting…" else "Export CSV",
+                onClick = onExport,
+                enabled = state.operationJournal.isNotEmpty() && !state.journalExportInProgress,
+            )
+        }
+        when {
+            state.operationJournal.isEmpty() -> EmptyState(
+                title = "No operations yet",
+                text = "Confirmed installs, default changes, removals, and maintenance actions will appear here.",
+            )
+            entries.isEmpty() -> EmptyState(
+                title = "No matching operations",
+                text = "No journal entries match \"$query\".",
+                action = "Clear search",
+                onAction = { query = "" },
+            )
+            else -> LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(metrics.spacing),
+            ) {
+                items(entries, key = { it.id }) { entry ->
+                    OperationJournalCard(entry)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OperationJournalCard(entry: OperationJournalEntry) {
+    val metrics = LocalZephyrMetrics.current
+    val tone = when (entry.status) {
+        OperationStatus.Running -> StatusTone.Accent
+        OperationStatus.Succeeded -> StatusTone.Success
+        OperationStatus.Failed -> StatusTone.Error
+    }
+    ZephyrPanel(Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(metrics.panelPadding),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(9.dp),
+            ) {
+                StatusDot(tone)
+                Text(
+                    entry.transaction.title.removeSuffix("?"),
+                    modifier = Modifier.weight(1f),
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    formatLocalTimestamp(entry.startedAtEpochMillis),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Badge(entry.status.label)
+            }
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                entry.transaction.commands.forEach { command ->
+                    Badge(command.action.label, BadgeTone.Primary)
+                    command.candidate?.let { Badge(it) }
+                    command.version?.let { Badge(it) }
+                }
+            }
+            entry.outcome?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }
 

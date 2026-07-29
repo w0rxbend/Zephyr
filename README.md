@@ -43,6 +43,7 @@ Zephyr uses user-facing labels instead of SDKMAN's internal "candidate" term:
 - **Browse SDKs** — all other remote SDKMAN candidates.
 - **Local-Only Versions** — orphan review and an explicit rescan workflow.
 - **Diagnostics** — read-only SDKMAN installation, metadata, and updater health.
+- **Operation History** — searchable session journal with timestamps, command fields, outcomes, and CSV export.
 - **Settings** — persisted theme, information density, and SDKMAN-path privacy controls.
 - **About** — application version, runtime integration, project links, and license.
 
@@ -92,6 +93,14 @@ Every SDKMAN mutation is reviewed before execution:
 - The confirmation shows the exact action, candidate, and version fields without constructing or exposing shell expressions.
 - Candidate and version identifiers are validated both when the plan is created and again at the repository boundary.
 - Destructive transactions use distinct warning styling and remain cancellable.
+- Confirmed transactions are recorded from start through success or failure in the session operation journal.
+
+### Operation journal
+
+- Search by operation, candidate, version, status, or outcome.
+- Running, successful, and failed operations use explicit status language.
+- Export writes a collision-safe CSV to `~/Downloads` when available, falling back to the user home directory.
+- Export content contains operation data but excludes the SDKMAN home path.
 
 ### SDKMAN maintenance
 

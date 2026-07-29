@@ -290,6 +290,13 @@ private fun WorkbenchSidebar(
             badge = localOnly.takeIf { it > 0 }?.toString(),
         )
         ZephyrNavigationItem("D", "Diagnostics", state.route is ZephyrRoute.Diagnostics, { onNavigate(ZephyrRoute.Diagnostics) })
+        ZephyrNavigationItem(
+            "H",
+            "Operation history",
+            state.route is ZephyrRoute.History,
+            { onNavigate(ZephyrRoute.History) },
+            badge = state.operationJournal.size.takeIf { it > 0 }?.toString(),
+        )
 
         Spacer(Modifier.weight(1f))
         Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
@@ -378,6 +385,7 @@ private fun ZephyrUiState.Ready.busyLabel(): String? =
         localOnlyScanInProgress -> "Scanning local-only versions"
         isCatalogLoading -> "Loading SDKMAN catalog"
         detailLoadingCandidate != null -> "Loading package details"
+        journalExportInProgress -> "Exporting operation journal"
         isRefreshing -> "Refreshing SDKMAN state"
         else -> null
     }

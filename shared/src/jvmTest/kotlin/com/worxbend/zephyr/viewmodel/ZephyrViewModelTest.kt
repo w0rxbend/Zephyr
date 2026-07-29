@@ -1,11 +1,15 @@
 package com.worxbend.zephyr.viewmodel
 
+import com.worxbend.zephyr.data.OperationJournalExporter
 import com.worxbend.zephyr.data.SdkmanRepository
 import com.worxbend.zephyr.domain.Candidate
 import com.worxbend.zephyr.domain.CandidateCatalogItem
 import com.worxbend.zephyr.domain.CandidateKind
 import com.worxbend.zephyr.domain.CandidateVersion
 import com.worxbend.zephyr.domain.CommandOutcome
+import com.worxbend.zephyr.domain.JournalExportResult
+import com.worxbend.zephyr.domain.OperationJournalEntry
+import com.worxbend.zephyr.domain.OperationStatus
 import com.worxbend.zephyr.domain.SdkmanSelfUpdateStatus
 import com.worxbend.zephyr.domain.SdkmanStatus
 import com.worxbend.zephyr.domain.SdkmanTransaction
@@ -204,7 +208,48 @@ class ZephyrViewModelTest {
         viewModel.confirmTransaction()
 
         assertEquals(listOf("install:java:21.0.5-tem"), repository.mutationCalls)
-        assertEquals(null, assertIs<ZephyrUiState.Ready>(viewModel.state.value).pendingTransaction)
+        val ready = assertIs<ZephyrUiState.Ready>(viewModel.state.value)
+        assertEquals(null, ready.pendingTransaction)
+        assertEquals(OperationStatus.Succeeded, ready.operationJournal.single().status)
+        assertEquals("Installed", ready.operationJournal.single().outcome)
+        viewModel.close()
+    }
+
+    @Test
+    fun exportsTheCompletedSessionJournal() {
+        val repository = FakeSdkmanRepository()
+        val exporter = FakeOperationJournalExporter()
+        var now = 1_000L
+        val viewModel = ZephyrViewModel(repository, testScope(), exporter) { now++ }
+
+        viewModel.requestTransaction(SdkmanTransaction.SetDefault("java", "21.0.5-tem"))
+        viewModel.confirmTransaction()
+        viewModel.exportJournal()
+
+        val exported = exporter.exported.single()
+        assertEquals(OperationStatus.Succeeded, exported.single().status)
+        assertEquals(1_000L, exported.single().startedAtEpochMillis)
+        assertEquals(1_001L, exported.single().completedAtEpochMillis)
+        assertEquals(
+            "Exported 1 journal entries to /tmp/zephyr-journal.csv.",
+            assertIs<ZephyrUiState.Ready>(viewModel.state.value).lastOutcome,
+        )
+        viewModel.close()
+    }
+
+    @Test
+    fun failedMutationIsRetainedInTheJournal() {
+        val repository = FakeSdkmanRepository(
+            installOutcome = CommandOutcome(false, "Download unavailable"),
+        )
+        val viewModel = ZephyrViewModel(repository, testScope())
+
+        viewModel.requestTransaction(SdkmanTransaction.Install("java", "21.0.5-tem"))
+        viewModel.confirmTransaction()
+
+        val entry = assertIs<ZephyrUiState.Ready>(viewModel.state.value).operationJournal.single()
+        assertEquals(OperationStatus.Failed, entry.status)
+        assertEquals("Download unavailable", entry.outcome)
         viewModel.close()
     }
 
@@ -234,6 +279,7 @@ private class FakeSdkmanRepository(
     private val detailStarted: CompletableDeferred<Unit>? = null,
     private val detailGate: CompletableDeferred<Unit>? = null,
     private val detailCompleted: CompletableDeferred<Unit>? = null,
+    private val installOutcome: CommandOutcome = CommandOutcome(true, "Installed"),
 ) : SdkmanRepository {
     var installedCandidatesCalls: Int = 0
         private set
@@ -288,7 +334,7 @@ private class FakeSdkmanRepository(
 
     override suspend fun install(candidate: String, version: String): CommandOutcome {
         mutationCalls += "install:$candidate:$version"
-        return CommandOutcome(true, "Installed")
+        return installOutcome
     }
 
     override suspend fun uninstall(candidate: String, version: String): CommandOutcome {
@@ -304,5 +350,14 @@ private class FakeSdkmanRepository(
     override suspend fun cleanLocalOnly(candidate: String, versions: List<String>): CommandOutcome {
         mutationCalls += "clean:$candidate:${versions.joinToString(",")}"
         return CommandOutcome(true, "Cleaned")
+    }
+}
+
+private class FakeOperationJournalExporter : OperationJournalExporter {
+    val exported = mutableListOf<List<OperationJournalEntry>>()
+
+    override suspend fun export(entries: List<OperationJournalEntry>): JournalExportResult {
+        exported += entries
+        return JournalExportResult("/tmp/zephyr-journal.csv", entries.size)
     }
 }
