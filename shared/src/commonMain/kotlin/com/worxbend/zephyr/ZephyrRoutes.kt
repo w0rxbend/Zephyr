@@ -40,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.worxbend.zephyr.data.createClipboardService
 import com.worxbend.zephyr.domain.Candidate
 import com.worxbend.zephyr.domain.CandidateCatalogItem
 import com.worxbend.zephyr.domain.CandidateKind
@@ -905,77 +906,113 @@ private fun VersionRow(
     onUninstall: (String, String) -> Unit,
 ) {
     var updateMenuOpen by remember { mutableStateOf(false) }
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainerLow)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
-            .padding(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(version.version, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (version.isDefault) Badge("Default", BadgeTone.Primary)
-                if (version.isInstalled) Badge("Installed", BadgeTone.Neutral)
-                if (version.isRemoteAvailable) Badge("Available", BadgeTone.Success) else Badge("Local only", BadgeTone.Warning)
-                if (isProtected) Badge("Protected", BadgeTone.Primary)
+    val clipboard = remember { createClipboardService() }
+    ContextActionArea(
+        actions = buildList {
+            add(ContextAction("Copy version") { clipboard.copy(version.version) })
+            if (!version.isInstalled && version.isRemoteAvailable) {
+                add(ContextAction("Install") {
+                    viewModel.requestTransaction(SdkmanTransaction.Install(candidateName, version.version))
+                })
             }
-        }
-        CopyTextButton(version.version, "Copy version")
-        if (!version.isInstalled && version.isRemoteAvailable) {
-            FilledTonalButton(
-                onClick = { viewModel.requestTransaction(SdkmanTransaction.Install(candidateName, version.version)) },
-                modifier = Modifier.height(36.dp),
-            ) {
-                Text("Install")
-            }
-        }
-        if (version.isInstalled && !version.isDefault) {
-            OutlinedButton(
-                onClick = { viewModel.requestTransaction(SdkmanTransaction.SetDefault(candidateName, version.version)) },
-                modifier = Modifier.height(36.dp),
-            ) {
-                Text("Make default")
-            }
-            if (version.isRemoteAvailable && !isProtected) {
-                OutlinedButton(onClick = { onUninstall(candidateName, version.version) }, modifier = Modifier.height(36.dp)) {
-                    Text("Uninstall")
+            if (version.isInstalled && !version.isDefault) {
+                add(ContextAction("Make default") {
+                    viewModel.requestTransaction(SdkmanTransaction.SetDefault(candidateName, version.version))
+                })
+                if (version.isRemoteAvailable && !isProtected) {
+                    add(ContextAction("Uninstall") { onUninstall(candidateName, version.version) })
                 }
             }
-        }
-        if (version.isInstalled) {
-            OutlinedButton(
-                onClick = { viewModel.setVersionProtected(candidateName, version.version, !isProtected) },
-                modifier = Modifier.height(36.dp),
-            ) {
-                Text(if (isProtected) "Unpin" else "Protect")
+            if (version.isInstalled) {
+                add(ContextAction(if (isProtected) "Unpin" else "Protect") {
+                    viewModel.setVersionProtected(candidateName, version.version, !isProtected)
+                })
             }
-        }
-        if (version.isInstalled && !version.isRemoteAvailable) {
-            if (updateTargets.isNotEmpty()) Box {
-                OutlinedButton(onClick = { updateMenuOpen = true }, modifier = Modifier.height(36.dp)) { Text("Update") }
-                DropdownMenu(expanded = updateMenuOpen, onDismissRequest = { updateMenuOpen = false }) {
-                    updateTargets.forEach { target ->
-                        DropdownMenuItem(
-                            text = { Text(target.version) },
-                            onClick = {
-                                updateMenuOpen = false
-                                viewModel.requestTransaction(SdkmanTransaction.Install(candidateName, target.version))
-                            },
-                        )
+            if (version.isInstalled && !version.isRemoteAvailable) {
+                updateTargets.forEach { target ->
+                    add(ContextAction("Install update ${target.version}") {
+                        viewModel.requestTransaction(SdkmanTransaction.Install(candidateName, target.version))
+                    })
+                }
+            }
+            if (version.isInstalled && !version.isRemoteAvailable && !version.isDefault && !isProtected) {
+                add(ContextAction("Clean") { onClean(candidateName, listOf(version.version)) })
+            }
+        },
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(version.version, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (version.isDefault) Badge("Default", BadgeTone.Primary)
+                    if (version.isInstalled) Badge("Installed", BadgeTone.Neutral)
+                    if (version.isRemoteAvailable) Badge("Available", BadgeTone.Success) else Badge("Local only", BadgeTone.Warning)
+                    if (isProtected) Badge("Protected", BadgeTone.Primary)
+                }
+            }
+            CopyTextButton(version.version, "Copy version")
+            if (!version.isInstalled && version.isRemoteAvailable) {
+                FilledTonalButton(
+                    onClick = { viewModel.requestTransaction(SdkmanTransaction.Install(candidateName, version.version)) },
+                    modifier = Modifier.height(36.dp),
+                ) {
+                    Text("Install")
+                }
+            }
+            if (version.isInstalled && !version.isDefault) {
+                OutlinedButton(
+                    onClick = { viewModel.requestTransaction(SdkmanTransaction.SetDefault(candidateName, version.version)) },
+                    modifier = Modifier.height(36.dp),
+                ) {
+                    Text("Make default")
+                }
+                if (version.isRemoteAvailable && !isProtected) {
+                    OutlinedButton(onClick = { onUninstall(candidateName, version.version) }, modifier = Modifier.height(36.dp)) {
+                        Text("Uninstall")
                     }
                 }
             }
-        }
-        if (version.isInstalled && !version.isRemoteAvailable && !version.isDefault && !isProtected) {
-            ZephyrDestructiveButton(
-                label = "Clean",
-                onClick = { onClean(candidateName, listOf(version.version)) },
-                modifier = Modifier.height(36.dp),
-            )
+            if (version.isInstalled) {
+                OutlinedButton(
+                    onClick = { viewModel.setVersionProtected(candidateName, version.version, !isProtected) },
+                    modifier = Modifier.height(36.dp),
+                ) {
+                    Text(if (isProtected) "Unpin" else "Protect")
+                }
+            }
+            if (version.isInstalled && !version.isRemoteAvailable) {
+                if (updateTargets.isNotEmpty()) Box {
+                    OutlinedButton(onClick = { updateMenuOpen = true }, modifier = Modifier.height(36.dp)) { Text("Update") }
+                    DropdownMenu(expanded = updateMenuOpen, onDismissRequest = { updateMenuOpen = false }) {
+                        updateTargets.forEach { target ->
+                            DropdownMenuItem(
+                                text = { Text(target.version) },
+                                onClick = {
+                                    updateMenuOpen = false
+                                    viewModel.requestTransaction(SdkmanTransaction.Install(candidateName, target.version))
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+            if (version.isInstalled && !version.isRemoteAvailable && !version.isDefault && !isProtected) {
+                ZephyrDestructiveButton(
+                    label = "Clean",
+                    onClick = { onClean(candidateName, listOf(version.version)) },
+                    modifier = Modifier.height(36.dp),
+                )
+            }
         }
     }
 }

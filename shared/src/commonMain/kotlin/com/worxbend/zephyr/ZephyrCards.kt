@@ -19,6 +19,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -30,6 +31,7 @@ import com.worxbend.zephyr.domain.CandidateKind
 import com.worxbend.zephyr.domain.JavaVersion
 import com.worxbend.zephyr.domain.ProtectedVersion
 import com.worxbend.zephyr.domain.javaProviderName
+import com.worxbend.zephyr.data.createClipboardService
 
 @Composable
 internal fun CandidateGrid(
@@ -68,38 +70,47 @@ internal fun CandidateTable(
     onClean: (String, List<String>) -> Unit,
 ) {
     val spacing = LocalZephyrMetrics.current.spacing
+    val clipboard = remember { createClipboardService() }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(spacing)) {
         items(candidates, key = Candidate::name) { candidate ->
             val protectedLocalOnly = candidate.localOnlyVersions.filter { version ->
                 ProtectedVersion(candidate.name, version) in protectedVersions
             }
-            ZephyrClickablePanel(onClick = { onOpen(candidate) }, modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(LocalZephyrMetrics.current.panelPadding),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    CandidateIcon(candidate.kind)
-                    Column(Modifier.weight(1f)) {
-                        Text(candidate.displayName, fontWeight = FontWeight.SemiBold)
-                        Text(candidate.name, style = MaterialTheme.typography.bodySmall)
+            val cleanable = candidate.localOnlyVersions - protectedLocalOnly.toSet()
+            ContextActionArea(
+                actions = buildList {
+                    add(ContextAction("Inspect") { onOpen(candidate) })
+                    add(ContextAction("Copy SDKMAN key") { clipboard.copy(candidate.name) })
+                    if (cleanable.isNotEmpty()) {
+                        add(ContextAction("Clean unprotected") { onClean(candidate.name, cleanable) })
                     }
-                    Text(
-                        "${candidate.installedVersions.count { it.isInstalled }} installed",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    candidate.defaultVersion?.let { Badge("Default: $it", BadgeTone.Primary) }
-                    if (candidate.hasLocalOnlyVersions) {
-                        Badge("${candidate.localOnlyVersionCount} local-only", BadgeTone.Warning)
-                    }
-                    CopyTextButton(candidate.name, "Copy key")
-                    if (candidate.hasLocalOnlyVersions && protectedLocalOnly.size < candidate.localOnlyVersionCount) {
-                        OutlinedButton(
-                            onClick = {
-                                onClean(candidate.name, candidate.localOnlyVersions - protectedLocalOnly.toSet())
-                            },
-                        ) {
-                            Text("Clean")
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                ZephyrClickablePanel(onClick = { onOpen(candidate) }, modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(LocalZephyrMetrics.current.panelPadding),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        CandidateIcon(candidate.kind)
+                        Column(Modifier.weight(1f)) {
+                            Text(candidate.displayName, fontWeight = FontWeight.SemiBold)
+                            Text(candidate.name, style = MaterialTheme.typography.bodySmall)
+                        }
+                        Text(
+                            "${candidate.installedVersions.count { it.isInstalled }} installed",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        candidate.defaultVersion?.let { Badge("Default: $it", BadgeTone.Primary) }
+                        if (candidate.hasLocalOnlyVersions) {
+                            Badge("${candidate.localOnlyVersionCount} local-only", BadgeTone.Warning)
+                        }
+                        CopyTextButton(candidate.name, "Copy key")
+                        if (cleanable.isNotEmpty()) {
+                            OutlinedButton(onClick = { onClean(candidate.name, cleanable) }) {
+                                Text("Clean")
+                            }
                         }
                     }
                 }
@@ -116,26 +127,38 @@ internal fun PackageTable(
     onOpen: (CandidateCatalogItem) -> Unit,
 ) {
     val spacing = LocalZephyrMetrics.current.spacing
+    val clipboard = remember { createClipboardService() }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(spacing)) {
         items(packages, key = CandidateCatalogItem::name) { item ->
             val favorite = item.name in favoriteCandidates
-            ZephyrClickablePanel(onClick = { onOpen(item) }, modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(LocalZephyrMetrics.current.panelPadding),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    CandidateIcon(item.kind)
-                    Column(Modifier.weight(1f)) {
-                        Text(item.displayName, fontWeight = FontWeight.SemiBold)
-                        Text(item.name, style = MaterialTheme.typography.bodySmall)
-                    }
-                    item.stableVersion?.let { Badge("Stable: $it", BadgeTone.Success) }
-                    if (item.isInstalled) Badge("Installed", BadgeTone.Primary)
-                    if (favorite) Badge("Favorite", BadgeTone.Primary)
-                    CopyTextButton(item.name, "Copy key")
-                    OutlinedButton(onClick = { onFavoriteChange(item.name, !favorite) }) {
-                        Text(if (favorite) "★" else "☆")
+            ContextActionArea(
+                actions = listOf(
+                    ContextAction("Inspect") { onOpen(item) },
+                    ContextAction("Copy SDKMAN key") { clipboard.copy(item.name) },
+                    ContextAction(if (favorite) "Remove favorite" else "Add favorite") {
+                        onFavoriteChange(item.name, !favorite)
+                    },
+                ),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                ZephyrClickablePanel(onClick = { onOpen(item) }, modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(LocalZephyrMetrics.current.panelPadding),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        CandidateIcon(item.kind)
+                        Column(Modifier.weight(1f)) {
+                            Text(item.displayName, fontWeight = FontWeight.SemiBold)
+                            Text(item.name, style = MaterialTheme.typography.bodySmall)
+                        }
+                        item.stableVersion?.let { Badge("Stable: $it", BadgeTone.Success) }
+                        if (item.isInstalled) Badge("Installed", BadgeTone.Primary)
+                        if (favorite) Badge("Favorite", BadgeTone.Primary)
+                        CopyTextButton(item.name, "Copy key")
+                        OutlinedButton(onClick = { onFavoriteChange(item.name, !favorite) }) {
+                            Text(if (favorite) "★" else "☆")
+                        }
                     }
                 }
             }
@@ -151,42 +174,53 @@ internal fun CandidateCard(
     onClean: () -> Unit,
 ) {
     val metrics = LocalZephyrMetrics.current
-    ZephyrClickablePanel(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth().heightIn(min = if (metrics.controlHeight <= 32.dp) 174.dp else 194.dp),
+    val clipboard = remember { createClipboardService() }
+    val cleanable = candidate.localOnlyVersionCount > protectedLocalOnlyCount
+    ContextActionArea(
+        actions = buildList {
+            add(ContextAction("Inspect") { onClick() })
+            add(ContextAction("Copy SDKMAN key") { clipboard.copy(candidate.name) })
+            if (cleanable) add(ContextAction("Clean unprotected") { onClean() })
+        },
+        modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(Modifier.fillMaxSize().padding(metrics.panelPadding), verticalArrangement = Arrangement.spacedBy(metrics.spacing)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                CandidateIcon(candidate.kind)
-                Column(Modifier.weight(1f)) {
-                    Text(candidate.displayName, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text("SDKMAN key: ${candidate.name}", style = MaterialTheme.typography.bodySmall)
+        ZephyrClickablePanel(
+            onClick = onClick,
+            modifier = Modifier.fillMaxWidth().heightIn(min = if (metrics.controlHeight <= 32.dp) 174.dp else 194.dp),
+        ) {
+            Column(Modifier.fillMaxSize().padding(metrics.panelPadding), verticalArrangement = Arrangement.spacedBy(metrics.spacing)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    CandidateIcon(candidate.kind)
+                    Column(Modifier.weight(1f)) {
+                        Text(candidate.displayName, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("SDKMAN key: ${candidate.name}", style = MaterialTheme.typography.bodySmall)
+                    }
+                    CopyTextButton(candidate.name, "Copy key")
                 }
-                CopyTextButton(candidate.name, "Copy key")
-            }
-            LinkText(
-                text = candidate.description ?: "${candidate.installedVersions.count { it.isInstalled }} installed version(s)",
-                modifier = Modifier.weight(1f, fill = false),
-                maxLines = 2,
-            )
-            Spacer(Modifier.weight(1f))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                candidate.defaultVersion?.let { Badge("Default: $it", BadgeTone.Primary) }
-                if (candidate.hasLocalOnlyVersions) Badge("${candidate.localOnlyVersionCount} local-only", BadgeTone.Warning)
-                if (protectedLocalOnlyCount > 0) Badge("$protectedLocalOnlyCount protected", BadgeTone.Primary)
-            }
-            if (candidate.hasLocalOnlyVersions) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    if (protectedLocalOnlyCount < candidate.localOnlyVersionCount) {
-                        OutlinedButton(onClick = onClean, modifier = Modifier.height(34.dp)) {
-                            Text("Clean unprotected", style = MaterialTheme.typography.labelLarge)
+                LinkText(
+                    text = candidate.description ?: "${candidate.installedVersions.count { it.isInstalled }} installed version(s)",
+                    modifier = Modifier.weight(1f, fill = false),
+                    maxLines = 2,
+                )
+                Spacer(Modifier.weight(1f))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    candidate.defaultVersion?.let { Badge("Default: $it", BadgeTone.Primary) }
+                    if (candidate.hasLocalOnlyVersions) Badge("${candidate.localOnlyVersionCount} local-only", BadgeTone.Warning)
+                    if (protectedLocalOnlyCount > 0) Badge("$protectedLocalOnlyCount protected", BadgeTone.Primary)
+                }
+                if (candidate.hasLocalOnlyVersions) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        if (cleanable) {
+                            OutlinedButton(onClick = onClean, modifier = Modifier.height(34.dp)) {
+                                Text("Clean unprotected", style = MaterialTheme.typography.labelLarge)
+                            }
+                        } else {
+                            Text(
+                                "All local-only versions are protected",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
-                    } else {
-                        Text(
-                            "All local-only versions are protected",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
                     }
                 }
             }
@@ -202,30 +236,42 @@ internal fun PackageCard(
     onClick: () -> Unit,
 ) {
     val metrics = LocalZephyrMetrics.current
-    ZephyrClickablePanel(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth().heightIn(min = if (metrics.controlHeight <= 32.dp) 164.dp else 184.dp),
+    val clipboard = remember { createClipboardService() }
+    ContextActionArea(
+        actions = buildList {
+            add(ContextAction("Inspect") { onClick() })
+            add(ContextAction("Copy SDKMAN key") { clipboard.copy(item.name) })
+            onToggleFavorite?.let {
+                add(ContextAction(if (isFavorite) "Remove favorite" else "Add favorite") { it() })
+            }
+        },
+        modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(Modifier.fillMaxSize().padding(metrics.panelPadding), verticalArrangement = Arrangement.spacedBy(metrics.spacing)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                CandidateIcon(item.kind)
-                Column(Modifier.weight(1f)) {
-                    Text(item.displayName, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text("SDKMAN key: ${item.name}", style = MaterialTheme.typography.bodySmall)
+        ZephyrClickablePanel(
+            onClick = onClick,
+            modifier = Modifier.fillMaxWidth().heightIn(min = if (metrics.controlHeight <= 32.dp) 164.dp else 184.dp),
+        ) {
+            Column(Modifier.fillMaxSize().padding(metrics.panelPadding), verticalArrangement = Arrangement.spacedBy(metrics.spacing)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    CandidateIcon(item.kind)
+                    Column(Modifier.weight(1f)) {
+                        Text(item.displayName, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("SDKMAN key: ${item.name}", style = MaterialTheme.typography.bodySmall)
+                    }
+                    CopyTextButton(item.name, "Copy key")
                 }
-                CopyTextButton(item.name, "Copy key")
-            }
-            LinkText(item.description ?: "Available from SDKMAN.", Modifier.weight(1f, fill = false), maxLines = 2)
-            Spacer(Modifier.weight(1f))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                item.stableVersion?.let { Badge("Stable: $it", BadgeTone.Success) }
-                if (item.isInstalled) Badge("Installed", BadgeTone.Primary)
-                if (isFavorite) Badge("Favorite", BadgeTone.Primary)
-            }
-            if (onToggleFavorite != null) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    OutlinedButton(onClick = onToggleFavorite, modifier = Modifier.height(34.dp)) {
-                        Text(if (isFavorite) "★ Favorited" else "☆ Favorite")
+                LinkText(item.description ?: "Available from SDKMAN.", Modifier.weight(1f, fill = false), maxLines = 2)
+                Spacer(Modifier.weight(1f))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    item.stableVersion?.let { Badge("Stable: $it", BadgeTone.Success) }
+                    if (item.isInstalled) Badge("Installed", BadgeTone.Primary)
+                    if (isFavorite) Badge("Favorite", BadgeTone.Primary)
+                }
+                if (onToggleFavorite != null) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        OutlinedButton(onClick = onToggleFavorite, modifier = Modifier.height(34.dp)) {
+                            Text(if (isFavorite) "★ Favorited" else "☆ Favorite")
+                        }
                     }
                 }
             }
@@ -242,31 +288,43 @@ internal fun JdkVersionCard(
     onClean: () -> Unit,
 ) {
     val metrics = LocalZephyrMetrics.current
-    ZephyrPanel {
-        Row(
-            Modifier.fillMaxWidth().padding(metrics.panelPadding),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            CandidateIcon(CandidateKind.Jdk)
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("JDK ${version.featureVersion}", fontWeight = FontWeight.SemiBold)
-                Text(version.identifier)
-                Text(version.providerName ?: javaProviderName(version.providerCode) ?: "Provider unknown", style = MaterialTheme.typography.bodySmall)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Badge("SDKMAN key: java")
-                    if (version.identifier == default) Badge("Default", BadgeTone.Primary)
-                    if (!version.isRemoteAvailable) Badge("Local only", BadgeTone.Warning)
-                    if (isProtected) Badge("Protected", BadgeTone.Primary)
-                }
-            }
-            CopyTextButton(version.identifier, "Copy version")
-            OutlinedButton(onClick = onToggleProtected) { Text(if (isProtected) "Unpin" else "Protect") }
+    val clipboard = remember { createClipboardService() }
+    ContextActionArea(
+        actions = buildList {
+            add(ContextAction("Copy version") { clipboard.copy(version.identifier) })
+            add(ContextAction(if (isProtected) "Unpin" else "Protect") { onToggleProtected() })
             if (!version.isRemoteAvailable && version.identifier != default && !isProtected) {
-                OutlinedButton(onClick = onClean) { Text("Clean") }
+                add(ContextAction("Clean") { onClean() })
             }
-            if (!version.isRemoteAvailable && version.identifier == default) {
-                Text("Choose another default first", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        },
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        ZephyrPanel {
+            Row(
+                Modifier.fillMaxWidth().padding(metrics.panelPadding),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CandidateIcon(CandidateKind.Jdk)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("JDK ${version.featureVersion}", fontWeight = FontWeight.SemiBold)
+                    Text(version.identifier)
+                    Text(version.providerName ?: javaProviderName(version.providerCode) ?: "Provider unknown", style = MaterialTheme.typography.bodySmall)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Badge("SDKMAN key: java")
+                        if (version.identifier == default) Badge("Default", BadgeTone.Primary)
+                        if (!version.isRemoteAvailable) Badge("Local only", BadgeTone.Warning)
+                        if (isProtected) Badge("Protected", BadgeTone.Primary)
+                    }
+                }
+                CopyTextButton(version.identifier, "Copy version")
+                OutlinedButton(onClick = onToggleProtected) { Text(if (isProtected) "Unpin" else "Protect") }
+                if (!version.isRemoteAvailable && version.identifier != default && !isProtected) {
+                    OutlinedButton(onClick = onClean) { Text("Clean") }
+                }
+                if (!version.isRemoteAvailable && version.identifier == default) {
+                    Text("Choose another default first", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
             }
         }
     }

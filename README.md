@@ -118,6 +118,12 @@ Navigation is grouped into Workspace, Discover, Maintenance, and application sec
 - Recovery paths include refreshing metadata, clearing filters, browsing candidates, choosing another file, capturing a profile, and selecting comparison rows.
 - The shared empty-state layout keeps guidance centered and readable at larger text scales.
 
+### Context menus
+
+- Right-click installed candidates, catalog packages, JDK cards, or version rows to open actions at the pointer.
+- Menus mirror visible inspect, copy, favorite, protect, install, make-default, uninstall, update, and cleanup controls when each action is safe.
+- Mutating context actions call the same typed transactions and confirmation previews as their visible counterparts.
+
 ### Favorites
 
 - Favorite any SDK from Browse SDKs; favorites sort before other matching catalog results.

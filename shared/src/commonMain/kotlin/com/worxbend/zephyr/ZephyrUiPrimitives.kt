@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -26,12 +28,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isSecondaryPressed
+import androidx.compose.ui.input.pointer.onPointerEvent
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -45,6 +53,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.DpOffset
 import com.worxbend.zephyr.domain.CandidateKind
 import com.worxbend.zephyr.domain.BatchItemStatus
 import com.worxbend.zephyr.domain.OperationStatus
@@ -158,6 +167,58 @@ internal fun LinkText(
         maxLines = maxLines,
         overflow = TextOverflow.Ellipsis,
     )
+}
+
+internal data class ContextAction(
+    val label: String,
+    val enabled: Boolean = true,
+    val onClick: () -> Unit,
+)
+
+@Composable
+@OptIn(ExperimentalComposeUiApi::class)
+internal fun ContextActionArea(
+    actions: List<ContextAction>,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    var offset by remember { mutableStateOf(DpOffset.Zero) }
+    val density = LocalDensity.current
+    Box(
+        modifier = modifier.onPointerEvent(
+            eventType = PointerEventType.Press,
+            pass = PointerEventPass.Initial,
+        ) { event ->
+            if (event.buttons.isSecondaryPressed) {
+                event.changes.firstOrNull()?.position?.let { position ->
+                    offset = with(density) {
+                        DpOffset(position.x.toDp(), position.y.toDp())
+                    }
+                }
+                expanded = true
+                event.changes.forEach { it.consume() }
+            }
+        },
+    ) {
+        content()
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            offset = offset,
+        ) {
+            actions.forEach { action ->
+                DropdownMenuItem(
+                    text = { Text(action.label) },
+                    onClick = {
+                        expanded = false
+                        action.onClick()
+                    },
+                    enabled = action.enabled,
+                )
+            }
+        }
+    }
 }
 
 private fun String.withLinks(linkColor: Color): AnnotatedString {

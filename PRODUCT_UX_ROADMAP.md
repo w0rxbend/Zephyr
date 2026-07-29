@@ -92,7 +92,8 @@ The first product slice delivers:
 | UX-07 Scalable typography | Delivered | A persisted 100–200% text preference scales the complete type system and fixed-height chrome together. |
 | UX-08 Reduced motion | Delivered | System, full, and reduced preferences control every indeterminate progress treatment; reduced mode uses a static labeled marker. |
 | UX-09 Empty-state guidance | Delivered | Every full-page empty state explains the condition and offers a relevant refresh, reset, browse, choose, save, or select action. |
-| UX-10 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
+| UX-10 Context menus | Delivered | Right-click menus on cards and rows mirror safe inspect, copy, favorite, protect, install, default, uninstall, update, and clean actions. |
+| AUTO-01 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
 
 ## Groomed feature backlog
 

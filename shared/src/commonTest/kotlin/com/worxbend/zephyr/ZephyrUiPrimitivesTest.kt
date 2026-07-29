@@ -2,6 +2,7 @@ package com.worxbend.zephyr
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -17,9 +18,12 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.rightClick
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.dp
 import com.worxbend.zephyr.settings.AppSettings
 import com.worxbend.zephyr.settings.MotionPreference
 import com.worxbend.zephyr.settings.ThemePreference
@@ -33,6 +37,29 @@ import kotlin.test.assertEquals
 import kotlin.test.Test
 
 class ZephyrUiPrimitivesTest {
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun rightClickOpensAndExecutesContextAction() = runComposeUiTest {
+        setContent {
+            ZephyrTheme(darkTheme = false) {
+                var result by remember { mutableStateOf("waiting") }
+                Box {
+                    ContextActionArea(
+                        actions = listOf(ContextAction("Inspect") { result = "inspected" }),
+                        modifier = Modifier.testTag("context-target"),
+                    ) {
+                        Text("Candidate", Modifier.padding(24.dp))
+                    }
+                    Text(result, Modifier.testTag("context-result"))
+                }
+            }
+        }
+
+        onNodeWithTag("context-target").performMouseInput { rightClick() }
+        onNodeWithText("Inspect").performClick()
+        onNodeWithTag("context-result").assertTextEquals("inspected")
+    }
+
     @OptIn(ExperimentalTestApi::class)
     @Test
     fun emptyStateOffersAnInteractiveNextAction() = runComposeUiTest {
