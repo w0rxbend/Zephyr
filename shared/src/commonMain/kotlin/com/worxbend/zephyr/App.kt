@@ -27,13 +27,16 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.worxbend.zephyr.data.createDesktopNotificationService
 import com.worxbend.zephyr.data.createSdkmanRepository
+import com.worxbend.zephyr.data.currentEpochMillis
 import com.worxbend.zephyr.domain.CandidateMetadataStatus
+import com.worxbend.zephyr.domain.ProtectedVersion
 import com.worxbend.zephyr.domain.SdkmanSelfUpdateStatus
 import com.worxbend.zephyr.domain.displayNameFor
 import com.worxbend.zephyr.settings.AppSettingsStore
 import com.worxbend.zephyr.settings.ThemePreference
 import com.worxbend.zephyr.settings.UpdateNotificationPolicy
 import com.worxbend.zephyr.settings.createAppSettingsRepository
+import com.worxbend.zephyr.settings.reconcileLocalOnlyObservations
 import com.worxbend.zephyr.settings.reducesMotion
 import com.worxbend.zephyr.viewmodel.ZephyrRoute
 import com.worxbend.zephyr.viewmodel.ZephyrUiState
@@ -94,6 +97,19 @@ fun App() {
         if (notificationKey == lastUpdateNotificationKey) return@LaunchedEffect
         lastUpdateNotificationKey = notificationKey
         notificationService.show(notification.title, notification.message)
+    }
+    LaunchedEffect(state, settings.cleanupGracePeriod) {
+        val ready = state as? ZephyrUiState.Ready ?: return@LaunchedEffect
+        val localOnly = ready.candidates
+            .flatMap { candidate ->
+                candidate.localOnlyVersions.map { version ->
+                    ProtectedVersion(candidate.name, version)
+                }
+            }
+            .toSet()
+        settingsStore.update {
+            it.reconcileLocalOnlyObservations(localOnly, currentEpochMillis())
+        }
     }
     val darkTheme = when (settings.themePreference) {
         ThemePreference.System -> systemDarkTheme

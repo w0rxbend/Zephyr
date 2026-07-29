@@ -37,6 +37,7 @@ import com.worxbend.zephyr.data.createClipboardService
 internal fun CandidateGrid(
     candidates: List<Candidate>,
     protectedVersions: Set<ProtectedVersion> = emptySet(),
+    reviewDueVersions: Set<ProtectedVersion> = emptySet(),
     onOpen: (Candidate) -> Unit,
     onClean: (String, List<String>) -> Unit,
 ) {
@@ -50,9 +51,13 @@ internal fun CandidateGrid(
             val protectedLocalOnly = candidate.localOnlyVersions.filter { version ->
                 ProtectedVersion(candidate.name, version) in protectedVersions
             }
+            val reviewDueCount = candidate.localOnlyVersions.count { version ->
+                ProtectedVersion(candidate.name, version) in reviewDueVersions
+            }
             CandidateCard(
                 candidate = candidate,
                 protectedLocalOnlyCount = protectedLocalOnly.size,
+                reviewDueCount = reviewDueCount,
                 onClick = { onOpen(candidate) },
                 onClean = {
                     onClean(candidate.name, candidate.localOnlyVersions - protectedLocalOnly.toSet())
@@ -170,6 +175,7 @@ internal fun PackageTable(
 internal fun CandidateCard(
     candidate: Candidate,
     protectedLocalOnlyCount: Int,
+    reviewDueCount: Int = 0,
     onClick: () -> Unit,
     onClean: () -> Unit,
 ) {
@@ -206,6 +212,7 @@ internal fun CandidateCard(
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     candidate.defaultVersion?.let { Badge("Default: $it", BadgeTone.Primary) }
                     if (candidate.hasLocalOnlyVersions) Badge("${candidate.localOnlyVersionCount} local-only", BadgeTone.Warning)
+                    if (reviewDueCount > 0) Badge("$reviewDueCount review due", BadgeTone.Error)
                     if (protectedLocalOnlyCount > 0) Badge("$protectedLocalOnlyCount protected", BadgeTone.Primary)
                 }
                 if (candidate.hasLocalOnlyVersions) {

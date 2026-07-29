@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import com.worxbend.zephyr.domain.InstallTarget
+import com.worxbend.zephyr.domain.ProtectedVersion
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -19,6 +20,10 @@ class AppSettingsStoreTest {
             motionPreference = MotionPreference.Reduced,
             metadataRefreshSchedule = MetadataRefreshSchedule.EverySixHours,
             updateNotificationPolicy = UpdateNotificationPolicy.UpdatesOnly,
+            cleanupGracePeriod = CleanupGracePeriod.ThirtyDays,
+            localOnlyObservations = listOf(
+                LocalOnlyObservation("java", "17.0.1-tem", 1_000L),
+            ),
             showSdkmanHome = false,
             favoriteCandidates = setOf("gradle", "kotlin"),
             favoriteJdkVendors = setOf("tem", "zulu"),
@@ -60,6 +65,11 @@ class AppSettingsStoreTest {
                 motionPreference = MotionPreference.Full,
                 metadataRefreshSchedule = MetadataRefreshSchedule.Daily,
                 updateNotificationPolicy = UpdateNotificationPolicy.AllChecks,
+                cleanupGracePeriod = CleanupGracePeriod.NinetyDays,
+                localOnlyObservations = listOf(
+                    LocalOnlyObservation("gradle", "7.6", 234_567L),
+                    LocalOnlyObservation("java", "17.0.1-tem", 123_456L),
+                ),
                 recentCandidates = listOf("kotlin", "gradle"),
                 toolchainProfiles = listOf(
                     ToolchainProfile(
@@ -117,6 +127,38 @@ class AppSettingsStoreTest {
         assertEquals(3_600_000L, MetadataRefreshSchedule.Hourly.intervalMillis)
         assertEquals(21_600_000L, MetadataRefreshSchedule.EverySixHours.intervalMillis)
         assertEquals(86_400_000L, MetadataRefreshSchedule.Daily.intervalMillis)
+    }
+
+    @Test
+    fun cleanupGracePolicyTracksFirstSeenAndNeverDeletes() {
+        val java = ProtectedVersion("java", "17.0.1-tem")
+        val gradle = ProtectedVersion("gradle", "7.6")
+        val initial = AppSettings(cleanupGracePeriod = CleanupGracePeriod.SevenDays)
+
+        val observed = initial.reconcileLocalOnlyObservations(setOf(java), nowEpochMillis = 1_000L)
+        val rescanned = observed.reconcileLocalOnlyObservations(setOf(java, gradle), nowEpochMillis = 2_000L)
+
+        assertEquals(1_000L, rescanned.localOnlyObservations.first { it.candidate == "java" }.firstSeenEpochMillis)
+        assertEquals(2_000L, rescanned.localOnlyObservations.first { it.candidate == "gradle" }.firstSeenEpochMillis)
+        assertEquals(
+            setOf(java),
+            rescanned.reviewDueLocalOnly(1_000L + CleanupGracePeriod.SevenDays.graceMillis!!),
+        )
+    }
+
+    @Test
+    fun disabledCleanupPolicyClearsObservationMetadata() {
+        val settings = AppSettings(
+            cleanupGracePeriod = CleanupGracePeriod.Off,
+            localOnlyObservations = listOf(LocalOnlyObservation("java", "17", 1L)),
+        )
+
+        assertEquals(
+            emptyList(),
+            settings
+                .reconcileLocalOnlyObservations(setOf(ProtectedVersion("java", "17")), 2L)
+                .localOnlyObservations,
+        )
     }
 }
 

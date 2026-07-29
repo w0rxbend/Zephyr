@@ -25,6 +25,7 @@ import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import com.worxbend.zephyr.settings.AppSettings
+import com.worxbend.zephyr.settings.CleanupGracePeriod
 import com.worxbend.zephyr.settings.MetadataRefreshSchedule
 import com.worxbend.zephyr.settings.MotionPreference
 import com.worxbend.zephyr.settings.ThemePreference
@@ -162,7 +163,7 @@ class ZephyrUiPrimitivesTest {
                         onSettingsChange = { transform -> settings = transform(settings) },
                     )
                     Text(
-                        "${settings.themePreference}:${settings.uiDensity}:${settings.textScale}:${settings.motionPreference}:${settings.metadataRefreshSchedule}:${settings.updateNotificationPolicy}",
+                        "${settings.themePreference}:${settings.uiDensity}:${settings.textScale}:${settings.motionPreference}:${settings.metadataRefreshSchedule}:${settings.updateNotificationPolicy}:${settings.cleanupGracePeriod}",
                         modifier = Modifier.testTag("appearance-settings"),
                     )
                 }
@@ -175,9 +176,10 @@ class ZephyrUiPrimitivesTest {
         onNodeWithText("Reduced").performClick()
         onNodeWithText("Every 6 hours").performClick()
         onNodeWithText("Updates only").performClick()
+        onNodeWithText("30 days").performClick()
 
         onNodeWithTag("appearance-settings").assertTextEquals(
-            "${ThemePreference.Dark}:${UiDensity.Comfortable}:${TextScale.Percent150}:${MotionPreference.Reduced}:${MetadataRefreshSchedule.EverySixHours}:${UpdateNotificationPolicy.UpdatesOnly}",
+            "${ThemePreference.Dark}:${UiDensity.Comfortable}:${TextScale.Percent150}:${MotionPreference.Reduced}:${MetadataRefreshSchedule.EverySixHours}:${UpdateNotificationPolicy.UpdatesOnly}:${CleanupGracePeriod.ThirtyDays}",
         )
     }
 

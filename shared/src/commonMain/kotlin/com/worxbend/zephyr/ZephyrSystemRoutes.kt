@@ -48,6 +48,7 @@ import com.worxbend.zephyr.data.formatLocalTimestamp
 import com.worxbend.zephyr.data.SdkmanRcDocument
 import com.worxbend.zephyr.data.createProjectToolchainService
 import com.worxbend.zephyr.settings.AppSettings
+import com.worxbend.zephyr.settings.CleanupGracePeriod
 import com.worxbend.zephyr.settings.MetadataRefreshSchedule
 import com.worxbend.zephyr.settings.MotionPreference
 import com.worxbend.zephyr.settings.ThemePreference
@@ -1478,6 +1479,19 @@ internal fun SettingsScreen(
                         label = UpdateNotificationPolicy::label,
                         onSelected = { selected ->
                             onSettingsChange { it.copy(updateNotificationPolicy = selected) }
+                        },
+                    )
+                }
+                ZephyrSettingsRow(
+                    title = "Local-only grace period",
+                    description = "Flag versions for review after this age; Zephyr never deletes them automatically.",
+                ) {
+                    ZephyrSegmentedControl(
+                        options = CleanupGracePeriod.entries,
+                        selected = settings.cleanupGracePeriod,
+                        label = CleanupGracePeriod::label,
+                        onSelected = { selected ->
+                            onSettingsChange { it.copy(cleanupGracePeriod = selected) }
                         },
                     )
                 }

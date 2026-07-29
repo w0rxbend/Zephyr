@@ -18,6 +18,8 @@ internal class JvmAppSettingsRepository(
             motionPreference = preferences.enumValue(MOTION_KEY, MotionPreference.System),
             metadataRefreshSchedule = preferences.enumValue(REFRESH_SCHEDULE_KEY, MetadataRefreshSchedule.Off),
             updateNotificationPolicy = preferences.enumValue(NOTIFICATION_POLICY_KEY, UpdateNotificationPolicy.Off),
+            cleanupGracePeriod = preferences.enumValue(CLEANUP_GRACE_KEY, CleanupGracePeriod.Off),
+            localOnlyObservations = preferences.localOnlyObservations(LOCAL_ONLY_OBSERVATIONS_KEY),
             showSdkmanHome = preferences.getBoolean(SHOW_SDKMAN_HOME_KEY, true),
             favoriteCandidates = preferences.stringSet(FAVORITE_CANDIDATES_KEY),
             favoriteJdkVendors = preferences.stringSet(FAVORITE_JDK_VENDORS_KEY),
@@ -37,6 +39,8 @@ internal class JvmAppSettingsRepository(
         preferences.put(MOTION_KEY, settings.motionPreference.name)
         preferences.put(REFRESH_SCHEDULE_KEY, settings.metadataRefreshSchedule.name)
         preferences.put(NOTIFICATION_POLICY_KEY, settings.updateNotificationPolicy.name)
+        preferences.put(CLEANUP_GRACE_KEY, settings.cleanupGracePeriod.name)
+        preferences.put(LOCAL_ONLY_OBSERVATIONS_KEY, settings.localOnlyObservations.encodeLocalOnlyObservations())
         preferences.putBoolean(SHOW_SDKMAN_HOME_KEY, settings.showSdkmanHome)
         preferences.put(FAVORITE_CANDIDATES_KEY, settings.favoriteCandidates.encode())
         preferences.put(FAVORITE_JDK_VENDORS_KEY, settings.favoriteJdkVendors.encode())
@@ -151,6 +155,45 @@ internal class JvmAppSettingsRepository(
             .map { PROFILE_ENCODER.encodeToString(it.toByteArray(StandardCharsets.UTF_8)) }
             .joinToString("\n")
 
+    private fun Preferences.localOnlyObservations(key: String): List<LocalOnlyObservation> =
+        get(key, "")
+            .lineSequence()
+            .mapNotNull { encoded ->
+                runCatching {
+                    val fields = String(PROFILE_DECODER.decode(encoded), StandardCharsets.UTF_8)
+                        .split(PROFILE_FIELD_SEPARATOR)
+                    if (fields.size != 3) return@runCatching null
+                    LocalOnlyObservation(
+                        candidate = fields[0],
+                        version = fields[1],
+                        firstSeenEpochMillis = fields[2].toLong(),
+                    ).takeIf {
+                        it.candidate.isNotBlank() &&
+                            it.version.isNotBlank() &&
+                            it.firstSeenEpochMillis >= 0
+                    }
+                }.getOrNull()
+            }
+            .toList()
+
+    private fun List<LocalOnlyObservation>.encodeLocalOnlyObservations(): String =
+        asSequence()
+            .filter {
+                it.candidate.isNotBlank() &&
+                    it.version.isNotBlank() &&
+                    it.firstSeenEpochMillis >= 0
+            }
+            .sortedWith(compareBy(LocalOnlyObservation::candidate, LocalOnlyObservation::version))
+            .map {
+                listOf(
+                    it.candidate,
+                    it.version,
+                    it.firstSeenEpochMillis.toString(),
+                ).joinToString(PROFILE_FIELD_SEPARATOR.toString())
+            }
+            .map { PROFILE_ENCODER.encodeToString(it.toByteArray(StandardCharsets.UTF_8)) }
+            .joinToString("\n")
+
     private companion object {
         const val THEME_KEY = "theme"
         const val DENSITY_KEY = "density"
@@ -158,6 +201,8 @@ internal class JvmAppSettingsRepository(
         const val MOTION_KEY = "motion"
         const val REFRESH_SCHEDULE_KEY = "metadata-refresh-schedule"
         const val NOTIFICATION_POLICY_KEY = "update-notification-policy"
+        const val CLEANUP_GRACE_KEY = "cleanup-grace"
+        const val LOCAL_ONLY_OBSERVATIONS_KEY = "local-only-observations"
         const val SHOW_SDKMAN_HOME_KEY = "show-sdkman-home"
         const val FAVORITE_CANDIDATES_KEY = "favorite-candidates"
         const val FAVORITE_JDK_VENDORS_KEY = "favorite-jdk-vendors"

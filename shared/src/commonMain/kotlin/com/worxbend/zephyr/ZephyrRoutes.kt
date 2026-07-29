@@ -41,6 +41,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.worxbend.zephyr.data.createClipboardService
+import com.worxbend.zephyr.data.currentEpochMillis
 import com.worxbend.zephyr.domain.Candidate
 import com.worxbend.zephyr.domain.CandidateCatalogItem
 import com.worxbend.zephyr.domain.CandidateKind
@@ -51,8 +52,10 @@ import com.worxbend.zephyr.domain.SdkmanTransaction
 import com.worxbend.zephyr.domain.displayNameFor
 import com.worxbend.zephyr.domain.toJavaVersion
 import com.worxbend.zephyr.settings.AppSettings
+import com.worxbend.zephyr.settings.CleanupGracePeriod
 import com.worxbend.zephyr.settings.CollectionViewMode
 import com.worxbend.zephyr.settings.SavedJdkFilter
+import com.worxbend.zephyr.settings.reviewDueLocalOnly
 import com.worxbend.zephyr.viewmodel.ZephyrRoute
 import com.worxbend.zephyr.viewmodel.ZephyrUiState
 import com.worxbend.zephyr.viewmodel.ZephyrViewModel
@@ -110,7 +113,14 @@ internal fun Content(
                 onOpen = { viewModel.navigate(ZephyrRoute.SdkDetail(it.name)) },
                 onRefresh = { viewModel.requestTransaction(SdkmanTransaction.RefreshMetadata) },
             )
-            ZephyrRoute.LocalOnly -> LocalOnlyScreen(state, viewModel::navigate, viewModel::scanLocalOnly, onClean)
+            ZephyrRoute.LocalOnly -> LocalOnlyScreen(
+                state = state,
+                cleanupGracePeriod = settings.cleanupGracePeriod,
+                reviewDueVersions = settings.reviewDueLocalOnly(currentEpochMillis()),
+                onNavigate = viewModel::navigate,
+                onScan = viewModel::scanLocalOnly,
+                onClean = onClean,
+            )
             ZephyrRoute.UpdateCenter -> UpdateCenterScreen(state, viewModel)
             ZephyrRoute.BatchUninstall -> BatchUninstallScreen(state, viewModel)
             ZephyrRoute.Profiles -> ToolchainProfilesScreen(state, viewModel, settings, onSettingsChange)
@@ -681,12 +691,17 @@ private fun Set<String>.updated(value: String, included: Boolean): Set<String> =
 @Composable
 private fun LocalOnlyScreen(
     state: ZephyrUiState.Ready,
+    cleanupGracePeriod: CleanupGracePeriod,
+    reviewDueVersions: Set<ProtectedVersion>,
     onNavigate: (ZephyrRoute) -> Unit,
     onScan: () -> Unit,
     onClean: (String, List<String>) -> Unit,
 ) {
     val items = state.candidates.filter { it.hasLocalOnlyVersions }
     val versionCount = items.sumOf { it.localOnlyVersionCount }
+    val reviewDueCount = reviewDueVersions.count { target ->
+        items.any { it.name == target.candidate && target.version in it.localOnlyVersions }
+    }
     Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxSize()) {
         PageTitle(
             "Local-Only Versions",
@@ -705,7 +720,14 @@ private fun LocalOnlyScreen(
                         fontWeight = FontWeight.SemiBold,
                     )
                     Text(
-                        "Zephyr re-verifies every selected version against remote metadata before cleanup.",
+                        when {
+                            reviewDueCount > 0 ->
+                                "$reviewDueCount version(s) passed the ${cleanupGracePeriod.label} grace period. Review is still required."
+                            cleanupGracePeriod != CleanupGracePeriod.Off ->
+                                "The ${cleanupGracePeriod.label} grace policy is active; cleanup always requires review."
+                            else ->
+                                "Zephyr re-verifies every selected version against remote metadata before cleanup."
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -719,6 +741,7 @@ private fun LocalOnlyScreen(
             CandidateGrid(
                 candidates = items,
                 protectedVersions = state.protectedVersions,
+                reviewDueVersions = reviewDueVersions,
                 onOpen = { candidate ->
                     onNavigate(if (candidate.kind == CandidateKind.Jdk) ZephyrRoute.JdkDetail(candidate.name) else ZephyrRoute.SdkDetail(candidate.name))
                 },

@@ -136,6 +136,12 @@ Navigation is grouped into Workspace, Discover, Maintenance, and application sec
 - Any loaded catalog refresh can produce a notification without requiring the Browse or Update Center page to be open.
 - Notices are deduplicated per update set, include only candidate names and target versions, and use `notify-send` when available.
 
+### Local-only cleanup grace
+
+- Settings provides opt-in Off, 7-day, 30-day, and 90-day review thresholds.
+- Zephyr persists the first time each candidate/version is observed as local-only and marks overdue counts on the Local-Only page.
+- The policy never deletes automatically: cleanup still requires a user action, transaction preview, protection checks, and repository re-verification.
+
 ### Favorites
 
 - Favorite any SDK from Browse SDKs; favorites sort before other matching catalog results.

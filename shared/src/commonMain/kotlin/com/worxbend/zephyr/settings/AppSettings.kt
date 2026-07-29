@@ -1,6 +1,7 @@
 package com.worxbend.zephyr.settings
 
 import com.worxbend.zephyr.domain.InstallTarget
+import com.worxbend.zephyr.domain.ProtectedVersion
 
 data class AppSettings(
     val themePreference: ThemePreference = ThemePreference.System,
@@ -9,6 +10,8 @@ data class AppSettings(
     val motionPreference: MotionPreference = MotionPreference.System,
     val metadataRefreshSchedule: MetadataRefreshSchedule = MetadataRefreshSchedule.Off,
     val updateNotificationPolicy: UpdateNotificationPolicy = UpdateNotificationPolicy.Off,
+    val cleanupGracePeriod: CleanupGracePeriod = CleanupGracePeriod.Off,
+    val localOnlyObservations: List<LocalOnlyObservation> = emptyList(),
     val showSdkmanHome: Boolean = true,
     val favoriteCandidates: Set<String> = emptySet(),
     val favoriteJdkVendors: Set<String> = emptySet(),
@@ -27,6 +30,38 @@ data class SavedJdkFilter(
     val providerCode: String?,
     val sort: String,
 )
+
+data class LocalOnlyObservation(
+    val candidate: String,
+    val version: String,
+    val firstSeenEpochMillis: Long,
+)
+
+fun AppSettings.reconcileLocalOnlyObservations(
+    current: Set<ProtectedVersion>,
+    nowEpochMillis: Long,
+): AppSettings {
+    if (cleanupGracePeriod == CleanupGracePeriod.Off) {
+        return if (localOnlyObservations.isEmpty()) this else copy(localOnlyObservations = emptyList())
+    }
+    val existing = localOnlyObservations.associateBy { it.candidate to it.version }
+    val next = current
+        .map { target ->
+            existing[target.candidate to target.version]
+                ?: LocalOnlyObservation(target.candidate, target.version, nowEpochMillis)
+        }
+        .sortedWith(compareBy(LocalOnlyObservation::candidate, LocalOnlyObservation::version))
+    return if (next == localOnlyObservations) this else copy(localOnlyObservations = next)
+}
+
+fun AppSettings.reviewDueLocalOnly(nowEpochMillis: Long): Set<ProtectedVersion> {
+    val graceMillis = cleanupGracePeriod.graceMillis ?: return emptySet()
+    return localOnlyObservations
+        .asSequence()
+        .filter { nowEpochMillis - it.firstSeenEpochMillis >= graceMillis }
+        .map { ProtectedVersion(it.candidate, it.version) }
+        .toSet()
+}
 
 const val MIN_NAVIGATION_WIDTH_DP = 190
 const val MAX_NAVIGATION_WIDTH_DP = 360
@@ -95,6 +130,16 @@ enum class UpdateNotificationPolicy(val label: String) {
     Off("Off"),
     UpdatesOnly("Updates only"),
     AllChecks("All checks"),
+}
+
+enum class CleanupGracePeriod(
+    val label: String,
+    val graceMillis: Long?,
+) {
+    Off("Off", null),
+    SevenDays("7 days", 7L * 24L * 60L * 60L * 1_000L),
+    ThirtyDays("30 days", 30L * 24L * 60L * 60L * 1_000L),
+    NinetyDays("90 days", 90L * 24L * 60L * 60L * 1_000L),
 }
 
 enum class CollectionViewMode(val label: String) {
