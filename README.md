@@ -88,6 +88,12 @@ Navigation is grouped into Workspace, Discover, Maintenance, and application sec
 - Active search, status, vendor, and sort choices render as visible badges with one **Clear filters** action.
 - Filter and sort composition is covered by deterministic presentation tests.
 
+### Saved filters
+
+- Name and save any active Browse JDK query/status/vendor/sort combination.
+- Saved presets persist locally, apply all fields together, and appear directly below the filter controls.
+- Saving the same name replaces the previous preset; the adjacent × action removes a preset without changing SDKMAN data.
+
 ### Favorites
 
 - Favorite any SDK from Browse SDKs; favorites sort before other matching catalog results.

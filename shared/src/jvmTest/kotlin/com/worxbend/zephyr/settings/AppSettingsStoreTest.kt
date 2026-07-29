@@ -25,6 +25,9 @@ class AppSettingsStoreTest {
             navigationWidthDp = 286,
             installedViewMode = CollectionViewMode.Table,
             catalogViewMode = CollectionViewMode.Table,
+            savedJdkFilters = listOf(
+                SavedJdkFilter("Temurin", "", "Available", "tem", "Version"),
+            ),
         )
         val saved = CompletableDeferred<AppSettings>()
         val repository = FakeAppSettingsRepository(initial) { saved.complete(it) }
@@ -62,6 +65,9 @@ class AppSettingsStoreTest {
                 navigationWidthDp = 320,
                 installedViewMode = CollectionViewMode.Table,
                 catalogViewMode = CollectionViewMode.Table,
+                savedJdkFilters = listOf(
+                    SavedJdkFilter("Local Zulu", "17", "LocalOnly", "zulu", "Vendor"),
+                ),
             )
 
             repository.save(expected)

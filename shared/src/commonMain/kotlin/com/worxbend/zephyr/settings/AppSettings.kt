@@ -13,6 +13,15 @@ data class AppSettings(
     val navigationWidthDp: Int = 0,
     val installedViewMode: CollectionViewMode = CollectionViewMode.Cards,
     val catalogViewMode: CollectionViewMode = CollectionViewMode.Cards,
+    val savedJdkFilters: List<SavedJdkFilter> = emptyList(),
+)
+
+data class SavedJdkFilter(
+    val name: String,
+    val query: String,
+    val status: String,
+    val providerCode: String?,
+    val sort: String,
 )
 
 const val MIN_NAVIGATION_WIDTH_DP = 190

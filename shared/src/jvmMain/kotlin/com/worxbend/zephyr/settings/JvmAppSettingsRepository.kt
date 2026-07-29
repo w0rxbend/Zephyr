@@ -22,6 +22,7 @@ internal class JvmAppSettingsRepository(
             navigationWidthDp = preferences.getInt(NAVIGATION_WIDTH_KEY, 0).normalizedNavigationWidth(),
             installedViewMode = preferences.enumValue(INSTALLED_VIEW_MODE_KEY, CollectionViewMode.Cards),
             catalogViewMode = preferences.enumValue(CATALOG_VIEW_MODE_KEY, CollectionViewMode.Cards),
+            savedJdkFilters = preferences.savedJdkFilters(SAVED_JDK_FILTERS_KEY),
         )
     }
 
@@ -36,6 +37,7 @@ internal class JvmAppSettingsRepository(
         preferences.putInt(NAVIGATION_WIDTH_KEY, settings.navigationWidthDp.normalizedNavigationWidth())
         preferences.put(INSTALLED_VIEW_MODE_KEY, settings.installedViewMode.name)
         preferences.put(CATALOG_VIEW_MODE_KEY, settings.catalogViewMode.name)
+        preferences.put(SAVED_JDK_FILTERS_KEY, settings.savedJdkFilters.encodeSavedJdkFilters())
         preferences.flush()
     }
 
@@ -107,6 +109,40 @@ internal class JvmAppSettingsRepository(
             .map { PROFILE_ENCODER.encodeToString(it.toByteArray(StandardCharsets.UTF_8)) }
             .joinToString("\n")
 
+    private fun Preferences.savedJdkFilters(key: String): List<SavedJdkFilter> =
+        get(key, "")
+            .lineSequence()
+            .mapNotNull { encoded ->
+                runCatching {
+                    val fields = String(PROFILE_DECODER.decode(encoded), StandardCharsets.UTF_8)
+                        .split(PROFILE_FIELD_SEPARATOR)
+                    if (fields.size != 5) return@runCatching null
+                    SavedJdkFilter(
+                        name = fields[0],
+                        query = fields[1],
+                        status = fields[2],
+                        providerCode = fields[3].ifEmpty { null },
+                        sort = fields[4],
+                    ).takeIf { it.name.isNotBlank() }
+                }.getOrNull()
+            }
+            .toList()
+
+    private fun List<SavedJdkFilter>.encodeSavedJdkFilters(): String =
+        asSequence()
+            .filter { it.name.isNotBlank() }
+            .map { filter ->
+                listOf(
+                    filter.name.trim(),
+                    filter.query,
+                    filter.status,
+                    filter.providerCode.orEmpty(),
+                    filter.sort,
+                ).joinToString(PROFILE_FIELD_SEPARATOR.toString())
+            }
+            .map { PROFILE_ENCODER.encodeToString(it.toByteArray(StandardCharsets.UTF_8)) }
+            .joinToString("\n")
+
     private companion object {
         const val THEME_KEY = "theme"
         const val DENSITY_KEY = "density"
@@ -118,6 +154,7 @@ internal class JvmAppSettingsRepository(
         const val NAVIGATION_WIDTH_KEY = "navigation-width-dp"
         const val INSTALLED_VIEW_MODE_KEY = "installed-view-mode"
         const val CATALOG_VIEW_MODE_KEY = "catalog-view-mode"
+        const val SAVED_JDK_FILTERS_KEY = "saved-jdk-filters"
         const val PROFILE_FIELD_SEPARATOR = '\u001F'
         const val TARGET_FIELD_SEPARATOR = '\u001E'
         val PROFILE_ENCODER: Base64.Encoder = Base64.getUrlEncoder().withoutPadding()

@@ -28,7 +28,9 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -50,6 +52,7 @@ import com.worxbend.zephyr.domain.displayNameFor
 import com.worxbend.zephyr.domain.toJavaVersion
 import com.worxbend.zephyr.settings.AppSettings
 import com.worxbend.zephyr.settings.CollectionViewMode
+import com.worxbend.zephyr.settings.SavedJdkFilter
 import com.worxbend.zephyr.viewmodel.ZephyrRoute
 import com.worxbend.zephyr.viewmodel.ZephyrUiState
 import com.worxbend.zephyr.viewmodel.ZephyrViewModel
@@ -369,6 +372,7 @@ private fun BrowseScreen(
     var providerFilter by remember { mutableStateOf<String?>(null) }
     var versionSort by remember { mutableStateOf(JavaVersionSort.Catalog) }
     var providerMenuOpen by remember { mutableStateOf(false) }
+    var savedFilterName by remember { mutableStateOf("") }
     var collapsedGroups by remember(grouping, query, statusFilter, providerFilter, versionSort) {
         mutableStateOf(emptySet<String>())
     }
@@ -481,6 +485,74 @@ private fun BrowseScreen(
                         versionSort = JavaVersionSort.Catalog
                     },
                 )
+                OutlinedTextField(
+                    value = savedFilterName,
+                    onValueChange = { savedFilterName = it.take(40) },
+                    modifier = Modifier.width(180.dp),
+                    singleLine = true,
+                    label = { Text("Filter name") },
+                )
+                ZephyrToolbarButton(
+                    label = "Save filter",
+                    onClick = {
+                        val saved = SavedJdkFilter(
+                            name = savedFilterName.trim(),
+                            query = query,
+                            status = statusFilter.name,
+                            providerCode = providerFilter,
+                            sort = versionSort.name,
+                        )
+                        onSettingsChange {
+                            it.copy(
+                                savedJdkFilters = (
+                                    it.savedJdkFilters.filterNot { existing ->
+                                        existing.name.equals(saved.name, ignoreCase = true)
+                                    } + saved
+                                    ).sortedBy { filter -> filter.name.lowercase() },
+                            )
+                        }
+                        savedFilterName = ""
+                    },
+                    enabled = savedFilterName.isNotBlank(),
+                )
+            }
+        }
+        if (settings.savedJdkFilters.isNotEmpty()) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
+                verticalArrangement = Arrangement.spacedBy(7.dp),
+            ) {
+                Text(
+                    "Saved:",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                settings.savedJdkFilters.forEach { saved ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        ZephyrToolbarButton(
+                            label = saved.name,
+                            onClick = {
+                                query = saved.query
+                                statusFilter = JavaVersionStatusFilter.entries
+                                    .firstOrNull { it.name == saved.status }
+                                    ?: JavaVersionStatusFilter.All
+                                providerFilter = saved.providerCode
+                                versionSort = JavaVersionSort.entries
+                                    .firstOrNull { it.name == saved.sort }
+                                    ?: JavaVersionSort.Catalog
+                            },
+                        )
+                        TextButton(
+                            onClick = {
+                                onSettingsChange {
+                                    it.copy(savedJdkFilters = it.savedJdkFilters - saved)
+                                }
+                            },
+                        ) {
+                            Text("×")
+                        }
+                    }
+                }
             }
         }
 
