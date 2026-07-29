@@ -116,6 +116,14 @@ Navigation is grouped into Workspace, Discover, Maintenance, and application sec
 - The review classifies each valid target as current default, installed but requiring a default change, or requiring installation.
 - Import is read-only and displays only the selected file name, not its machine-specific path.
 
+### Project toolchain export
+
+- Select any subset of persisted candidate defaults and export them as a project `.sdkmanrc`.
+- Output is deterministic, candidate-sorted, and includes a Zephyr generator comment.
+- A native save dialog chooses the destination and shows an explicit confirmation before replacing an existing file.
+- Cancelling either the save dialog or overwrite confirmation leaves the filesystem unchanged.
+- The success message displays only the destination file name and exported target count.
+
 ### Installed JDK screen
 
 Displays installed Java versions as cards. Supports:

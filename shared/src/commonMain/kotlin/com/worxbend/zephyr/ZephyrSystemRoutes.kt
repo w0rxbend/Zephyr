@@ -818,6 +818,119 @@ internal fun ProjectToolchainImportScreen(
     }
 }
 
+@Composable
+internal fun ProjectToolchainExportScreen(state: ZephyrUiState.Ready) {
+    val metrics = LocalZephyrMetrics.current
+    val service = remember { createProjectToolchainService() }
+    val scope = rememberCoroutineScope()
+    val defaults = state.candidates.mapNotNull { candidate ->
+        candidate.defaultVersion?.let { version ->
+            Triple(candidate.name, candidate.displayName, InstallTarget(candidate.name, version))
+        }
+    }
+    val defaultIds = defaults.map { it.first }
+    var selected by remember(defaultIds) { mutableStateOf(defaultIds.toSet()) }
+    var exporting by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf<String?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(metrics.spacing * 2),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                PageTitle(
+                    "Project Toolchain Export",
+                    "Choose persisted defaults and generate a deterministic .sdkmanrc for a project.",
+                )
+            }
+            ZephyrToolbarButton(
+                label = if (exporting) "Exporting…" else "Export selected (${selected.size})",
+                onClick = {
+                    val targets = defaults.filter { it.first in selected }.map { it.third }
+                    scope.launch {
+                        exporting = true
+                        error = null
+                        message = null
+                        runCatching { service.chooseAndWrite(targets) }
+                            .onSuccess { result ->
+                                if (result != null) {
+                                    message = "Exported ${result.exportedTargets} defaults to ${result.fileName}."
+                                }
+                            }
+                            .onFailure { failure ->
+                                error = failure.message ?: "Unable to export .sdkmanrc."
+                            }
+                        exporting = false
+                    }
+                },
+                enabled = !exporting && selected.isNotEmpty(),
+            )
+        }
+        message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
+        error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        if (defaults.isEmpty()) {
+            EmptyState(
+                "No defaults to export",
+                "Set a persisted default for at least one installed candidate first.",
+            )
+            return@Column
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ZephyrToolbarButton(
+                label = if (selected.size == defaults.size) "Clear selection" else "Select all",
+                onClick = {
+                    selected = if (selected.size == defaults.size) emptySet() else defaultIds.toSet()
+                },
+            )
+            Text(
+                "Existing files require an explicit overwrite confirmation.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(metrics.spacing),
+        ) {
+            items(defaults, key = { it.first }) { (candidate, displayName, target) ->
+                ZephyrPanel(Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(metrics.panelPadding),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(
+                            checked = candidate in selected,
+                            onCheckedChange = { checked ->
+                                selected = if (checked) selected + candidate else selected - candidate
+                            },
+                        )
+                        Column(Modifier.weight(1f)) {
+                            Text(displayName, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                "${target.candidate}=${target.version}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Badge("Persisted default", BadgeTone.Primary)
+                    }
+                }
+            }
+        }
+    }
+}
+
 private fun batchStatusTone(status: BatchItemStatus): BadgeTone =
     when (status) {
         BatchItemStatus.Succeeded -> BadgeTone.Success
