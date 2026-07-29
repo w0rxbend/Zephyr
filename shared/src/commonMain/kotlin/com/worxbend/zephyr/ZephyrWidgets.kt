@@ -22,10 +22,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -102,6 +106,7 @@ internal fun ZephyrNavigationItem(
     badge: String? = null,
 ) {
     val metrics = LocalZephyrMetrics.current
+    var focused by remember { mutableStateOf(false) }
     val background = if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent
     val contentColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
     Row(
@@ -109,6 +114,12 @@ internal fun ZephyrNavigationItem(
             .fillMaxWidth()
             .height(metrics.controlHeight)
             .background(background, RoundedCornerShape(metrics.cornerRadius))
+            .border(
+                1.dp,
+                if (focused) MaterialTheme.colorScheme.primary else Color.Transparent,
+                RoundedCornerShape(metrics.cornerRadius),
+            )
+            .onFocusChanged { focused = it.isFocused }
             .clickable(role = Role.Button, onClick = onClick)
             .padding(horizontal = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -154,10 +165,12 @@ internal fun ZephyrToolbarButton(
 ) {
     val metrics = LocalZephyrMetrics.current
     val interactionSource = remember { MutableInteractionSource() }
+    var focused by remember { mutableStateOf(false) }
     Surface(
         modifier = modifier
             .height(metrics.controlHeight)
             .alpha(if (enabled) 1f else 0.5f)
+            .onFocusChanged { focused = it.isFocused }
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -167,7 +180,10 @@ internal fun ZephyrToolbarButton(
             ),
         color = MaterialTheme.colorScheme.surfaceContainer,
         shape = RoundedCornerShape(metrics.cornerRadius),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        border = BorderStroke(
+            1.dp,
+            if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+        ),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 11.dp),

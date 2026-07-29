@@ -63,6 +63,13 @@ Navigation is grouped into Workspace, Discover, Maintenance, and application sec
 - Frequent commands also have direct shortcuts: `Ctrl/Cmd+Shift+R` refreshes local state, `Ctrl/Cmd+Shift+L` scans local-only versions, and `Ctrl/Cmd+Shift+D` opens Diagnostics.
 - Command shortcuts route through the same ViewModel operations as visible controls, preserving busy-state and transaction safeguards.
 
+### Keyboard navigation
+
+- Tab and Shift+Tab move focus; Enter or Space activates the focused control. Custom sidebar and toolbar controls show a primary-color focus border.
+- `Ctrl/Cmd+Shift+O` opens Overview, `J` opens Installed JDK, `S` opens Installed SDKs, `U` opens Update Center, `D` opens Diagnostics, and `H` opens Operation History.
+- The full shortcut reference is available in Settings and in command-palette result hints.
+- Global shortcut routing is tested independently from UI event delivery.
+
 ### Favorites
 
 - Favorite any SDK from Browse SDKs; favorites sort before other matching catalog results.

@@ -139,6 +139,13 @@ internal fun ZephyrScreen(
                 if (event.type != KeyEventType.KeyDown || (!event.isCtrlPressed && !event.isMetaPressed)) {
                     false
                 } else {
+                    val workspaceRoute = event.key.toWorkspaceShortcutKey()?.let { key ->
+                        resolveWorkspaceShortcut(
+                            key = key,
+                            primaryPressed = true,
+                            shiftPressed = event.isShiftPressed,
+                        )
+                    }
                     when {
                         event.key == Key.K && !event.isShiftPressed -> {
                             commandPaletteOpen = false
@@ -148,6 +155,10 @@ internal fun ZephyrScreen(
                         event.key == Key.P && event.isShiftPressed -> {
                             globalSearchOpen = false
                             commandPaletteOpen = true
+                            true
+                        }
+                        workspaceRoute != null -> {
+                            activateSearchTarget(GlobalSearchTarget.Navigate(workspaceRoute))
                             true
                         }
                         event.key == Key.R && event.isShiftPressed -> {
@@ -160,10 +171,6 @@ internal fun ZephyrScreen(
                             activateSearchTarget(
                                 GlobalSearchTarget.Execute(GlobalSearchAction.ScanLocalOnly),
                             )
-                            true
-                        }
-                        event.key == Key.D && event.isShiftPressed -> {
-                            activateSearchTarget(GlobalSearchTarget.Navigate(ZephyrRoute.Diagnostics))
                             true
                         }
                         else -> false
@@ -319,6 +326,17 @@ private fun DiskImpactSummary(estimate: DiskImpactEstimate) {
         }
     }
 }
+
+private fun Key.toWorkspaceShortcutKey(): WorkspaceShortcutKey? =
+    when (this) {
+        Key.O -> WorkspaceShortcutKey.O
+        Key.J -> WorkspaceShortcutKey.J
+        Key.S -> WorkspaceShortcutKey.S
+        Key.U -> WorkspaceShortcutKey.U
+        Key.D -> WorkspaceShortcutKey.D
+        Key.H -> WorkspaceShortcutKey.H
+        else -> null
+    }
 
 @Composable
 private fun PlannedCommandRow(

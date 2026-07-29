@@ -1338,7 +1338,10 @@ internal fun SettingsScreen(
 ) {
     val metrics = LocalZephyrMetrics.current
     Column(
-        modifier = Modifier.fillMaxSize().widthIn(max = 920.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .widthIn(max = 920.dp)
+            .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(metrics.spacing * 2),
     ) {
         PageTitle("Settings", "Personalize Zephyr. Changes are saved for this desktop user.")
@@ -1380,6 +1383,17 @@ internal fun SettingsScreen(
                         checked = settings.showSdkmanHome,
                         onCheckedChange = { visible -> onSettingsChange { it.copy(showSdkmanHome = visible) } },
                     )
+                }
+            }
+        }
+        ZephyrPanel(Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.padding(metrics.panelPadding),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                PanelHeading("Keyboard shortcuts", "Use Zephyr without leaving the keyboard")
+                keyboardShortcutHelp.forEach { shortcut ->
+                    KeyValueRow(shortcut.description, shortcut.keys)
                 }
             }
         }

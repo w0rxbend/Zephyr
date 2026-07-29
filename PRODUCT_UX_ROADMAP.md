@@ -52,6 +52,7 @@ The first product slice delivers:
 30. Selectable `.sdkmanrc` export with deterministic output, native destination selection, and explicit overwrite confirmation.
 31. Multi-version candidate comparison with explicit vendor, install, default, availability, local-only, and protection columns.
 32. Shared native clipboard actions for candidate keys, versions, diagnostics, and validated equivalent SDKMAN commands.
+33. Documented keyboard navigation with global workspace shortcuts, deterministic resolution tests, and visible custom-control focus.
 
 ## Delivery log
 
@@ -78,7 +79,8 @@ The first product slice delivers:
 | FLOW-10 Project toolchain export | Delivered | Selected defaults render deterministically and native saving never replaces an existing file without explicit confirmation. |
 | FLOW-11 Candidate comparison | Delivered | Two or more loaded versions render in a compact table with vendor and explicit lifecycle/safety status. |
 | FLOW-12 Copy actions | Delivered | Technical identifiers, visible diagnostics, and typed equivalent commands expose reusable native clipboard actions with outcome feedback. |
-| UX-01 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
+| UX-01 Keyboard navigation | Delivered | Global route/action shortcuts, Tab focus guidance, resolver tests, and visible sidebar/toolbar focus support keyboard-only use. |
+| UX-02 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
 
 ## Groomed feature backlog
 

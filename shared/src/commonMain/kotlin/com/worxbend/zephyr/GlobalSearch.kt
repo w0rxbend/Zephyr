@@ -116,20 +116,20 @@ internal fun commandPaletteItems(items: List<GlobalSearchItem>): List<GlobalSear
 
 private fun MutableList<GlobalSearchItem>.addPageItems() {
     listOf(
-        Triple("Overview", ZephyrRoute.Overview, null),
-        Triple("Installed JDK", ZephyrRoute.InstalledJdk, null),
-        Triple("Installed SDKs", ZephyrRoute.InstalledSdks, null),
+        Triple("Overview", ZephyrRoute.Overview, "Ctrl/⌘ Shift O"),
+        Triple("Installed JDK", ZephyrRoute.InstalledJdk, "Ctrl/⌘ Shift J"),
+        Triple("Installed SDKs", ZephyrRoute.InstalledSdks, "Ctrl/⌘ Shift S"),
         Triple("Browse JDKs", ZephyrRoute.BrowseJdks, null),
         Triple("Browse SDKs", ZephyrRoute.BrowseSdks, null),
         Triple("Local-only versions", ZephyrRoute.LocalOnly, null),
-        Triple("Update Center", ZephyrRoute.UpdateCenter, null),
+        Triple("Update Center", ZephyrRoute.UpdateCenter, "Ctrl/⌘ Shift U"),
         Triple("Batch Uninstall", ZephyrRoute.BatchUninstall, null),
         Triple("Toolchain Profiles", ZephyrRoute.Profiles, null),
         Triple("Import .sdkmanrc", ZephyrRoute.ProjectImport, null),
         Triple("Export .sdkmanrc", ZephyrRoute.ProjectExport, null),
         Triple("Candidate Comparison", ZephyrRoute.Comparison, null),
         Triple("Diagnostics", ZephyrRoute.Diagnostics, "Ctrl/⌘ Shift D"),
-        Triple("Operation history", ZephyrRoute.History, null),
+        Triple("Operation history", ZephyrRoute.History, "Ctrl/⌘ Shift H"),
         Triple("Settings", ZephyrRoute.Settings, null),
         Triple("About Zephyr", ZephyrRoute.About, null),
     ).forEach { (title, route, shortcut) ->
