@@ -495,6 +495,14 @@ private fun WorkbenchSidebar(
             { onNavigate(ZephyrRoute.LocalOnly) },
             badge = localOnly.takeIf { it > 0 }?.toString(),
         )
+        val updates = availableCandidateUpdates(state.candidates, state.catalog).size
+        ZephyrNavigationItem(
+            "↑",
+            "Update Center",
+            state.route is ZephyrRoute.UpdateCenter,
+            { onNavigate(ZephyrRoute.UpdateCenter) },
+            badge = updates.takeIf { it > 0 }?.toString(),
+        )
         ZephyrNavigationItem("D", "Diagnostics", state.route is ZephyrRoute.Diagnostics, { onNavigate(ZephyrRoute.Diagnostics) })
         ZephyrNavigationItem(
             "H",

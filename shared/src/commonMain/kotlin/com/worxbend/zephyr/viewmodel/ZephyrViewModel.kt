@@ -46,6 +46,7 @@ sealed interface ZephyrRoute {
     data object BrowseJdks : ZephyrRoute
     data object BrowseSdks : ZephyrRoute
     data object LocalOnly : ZephyrRoute
+    data object UpdateCenter : ZephyrRoute
     data object Diagnostics : ZephyrRoute
     data object History : ZephyrRoute
     data object Settings : ZephyrRoute
@@ -184,6 +185,7 @@ class ZephyrViewModel(
                 loadDetail("java")
             }
             ZephyrRoute.BrowseSdks -> ensureCatalog()
+            ZephyrRoute.UpdateCenter -> ensureCatalog()
             else -> Unit
         }
     }

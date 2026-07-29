@@ -76,6 +76,14 @@ Navigation is grouped into Workspace, Discover, Maintenance, and application sec
 - The list keeps six unique SDKMAN candidate keys, moves revisited items to the front, and persists between launches.
 - Recent entries resolve to JDK or SDK detail routes using current local/catalog metadata, with a safe key-based fallback.
 
+### Update Center
+
+- Update Center compares every installed candidate with its stable SDKMAN catalog target.
+- Candidates whose stable target is not installed are grouped into JDK and SDK updates.
+- Select all or individual updates, inspect candidate details, or review the next selected install.
+- Every update remains an ordinary typed install transaction with network preflight, disk-impact estimate, confirmation, and journal history.
+- Refreshing Update Center metadata is explicit and uses the same confirmed SDKMAN metadata transaction as the toolbar.
+
 ### Installed JDK screen
 
 Displays installed Java versions as cards. Supports:

@@ -14,8 +14,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -106,6 +108,7 @@ internal fun OverviewScreen(
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         ZephyrToolbarButton("Browse JDKs", onClick = { viewModel.navigate(ZephyrRoute.BrowseJdks) })
                         ZephyrToolbarButton("Browse SDKs", onClick = { viewModel.navigate(ZephyrRoute.BrowseSdks) })
+                        ZephyrToolbarButton("Update Center", onClick = { viewModel.navigate(ZephyrRoute.UpdateCenter) })
                         ZephyrToolbarButton("Refresh local state", onClick = viewModel::refreshInstalled)
                         ZephyrToolbarButton("Scan local-only", onClick = viewModel::scanLocalOnly)
                     }
@@ -196,6 +199,174 @@ internal fun OverviewScreen(
                                     label = "★ ${javaProviderName(vendor) ?: vendor}",
                                     onClick = { viewModel.navigate(ZephyrRoute.BrowseJdks) },
                                 )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun UpdateCenterScreen(
+    state: ZephyrUiState.Ready,
+    viewModel: ZephyrViewModel,
+) {
+    val metrics = LocalZephyrMetrics.current
+    val updates = availableCandidateUpdates(state.candidates, state.catalog)
+    val updateIds = updates.map { "${it.candidate}:${it.targetVersion}" }
+    var selected by remember { mutableStateOf(emptySet<String>()) }
+    LaunchedEffect(updateIds) {
+        selected = selected.intersect(updateIds.toSet())
+    }
+
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(metrics.spacing * 2),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Column(Modifier.weight(1f)) {
+                PageTitle(
+                    "Update Center",
+                    "Stable SDKMAN targets that are not installed in your current toolchain.",
+                )
+            }
+            ZephyrToolbarButton(
+                label = "Refresh metadata",
+                onClick = { viewModel.requestTransaction(SdkmanTransaction.RefreshMetadata) },
+                enabled = !state.isRefreshing && !state.isCatalogLoading,
+            )
+        }
+
+        when {
+            state.isCatalogLoading -> {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    androidx.compose.material3.CircularProgressIndicator()
+                    Text("Loading SDKMAN update metadata…")
+                }
+            }
+            state.catalog.isEmpty() -> {
+                EmptyState(
+                    "Update metadata unavailable",
+                    "Load the SDKMAN catalog to check installed candidates for stable updates.",
+                    "Refresh metadata",
+                ) {
+                    viewModel.requestTransaction(SdkmanTransaction.RefreshMetadata)
+                }
+            }
+            updates.isEmpty() -> {
+                EmptyState(
+                    "Toolchain is current",
+                    "Every installed candidate with a stable catalog target already has that version installed.",
+                    "Browse SDKs",
+                ) {
+                    viewModel.navigate(ZephyrRoute.BrowseSdks)
+                }
+            }
+            else -> {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    ZephyrToolbarButton(
+                        label = if (selected.size == updates.size) "Clear selection" else "Select all",
+                        onClick = {
+                            selected = if (selected.size == updates.size) emptySet() else updateIds.toSet()
+                        },
+                    )
+                    Text(
+                        "${selected.size} selected • ${updates.size} update(s)",
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    ZephyrToolbarButton(
+                        label = "Review next selected",
+                        onClick = {
+                            updates.firstOrNull { "${it.candidate}:${it.targetVersion}" in selected }?.let {
+                                viewModel.requestTransaction(
+                                    SdkmanTransaction.Install(it.candidate, it.targetVersion),
+                                )
+                            }
+                        },
+                        enabled = selected.isNotEmpty(),
+                    )
+                }
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(metrics.spacing),
+                ) {
+                    updates.groupBy { it.kind }.forEach { (kind, group) ->
+                        item {
+                            Text(
+                                if (kind == CandidateKind.Jdk) "JDK updates" else "SDK updates",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                        items(group, key = { "${it.candidate}:${it.targetVersion}" }) { update ->
+                            val id = "${update.candidate}:${update.targetVersion}"
+                            ZephyrPanel(Modifier.fillMaxWidth()) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(metrics.panelPadding),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    Checkbox(
+                                        checked = id in selected,
+                                        onCheckedChange = { checked ->
+                                            selected = if (checked) selected + id else selected - id
+                                        },
+                                    )
+                                    CandidateIcon(update.kind)
+                                    Column(
+                                        modifier = Modifier.weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(5.dp),
+                                    ) {
+                                        Text(update.displayName, fontWeight = FontWeight.SemiBold)
+                                        Text(
+                                            "${update.currentVersion ?: "No default"} → ${update.targetVersion}",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                        )
+                                        FlowRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                                            Badge("SDKMAN key: ${update.candidate}")
+                                            Badge("Stable target", BadgeTone.Success)
+                                        }
+                                    }
+                                    ZephyrToolbarButton(
+                                        label = "Inspect",
+                                        onClick = {
+                                            viewModel.navigate(
+                                                if (update.kind == CandidateKind.Jdk) {
+                                                    ZephyrRoute.JdkDetail(update.candidate)
+                                                } else {
+                                                    ZephyrRoute.SdkDetail(update.candidate)
+                                                },
+                                            )
+                                        },
+                                    )
+                                    ZephyrToolbarButton(
+                                        label = "Review update",
+                                        onClick = {
+                                            viewModel.requestTransaction(
+                                                SdkmanTransaction.Install(
+                                                    update.candidate,
+                                                    update.targetVersion,
+                                                ),
+                                            )
+                                        },
+                                    )
+                                }
                             }
                         }
                     }
