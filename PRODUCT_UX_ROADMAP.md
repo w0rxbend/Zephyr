@@ -46,6 +46,7 @@ The first product slice delivers:
 24. Persistent, bounded recent-candidate history with Overview shortcuts back to the last viewed details.
 25. Consolidated Update Center with stable-target detection, JDK/SDK grouping, selection, inspection, and reviewed installs.
 26. Typed batch installs with combined disk estimates, sequential execution, and persistent per-item progress/results.
+27. Typed batch uninstall with default/protected exclusions, exact reclaim estimates, and sequential per-item results.
 
 ## Delivery log
 
@@ -66,7 +67,8 @@ The first product slice delivers:
 | FLOW-04 Recent items | Delivered | Candidate detail navigation records a deduplicated six-item MRU list and exposes it on Overview across sessions. |
 | FLOW-05 Update center | Delivered | Installed candidates with uninstalled stable targets are grouped, selectable, inspectable, and routed through typed install review. |
 | FLOW-06 Batch install | Delivered | Update Center selections produce one typed plan, run sequentially, continue after item failures, and report every outcome. |
-| FLOW-07 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
+| FLOW-07 Batch uninstall | Delivered | Default and protected versions are excluded before selection; reviewed removals run sequentially with repository re-enforcement. |
+| FLOW-08 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
 
 ## Groomed feature backlog
 

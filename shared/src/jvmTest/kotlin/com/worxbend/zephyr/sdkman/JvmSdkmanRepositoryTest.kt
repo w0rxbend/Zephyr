@@ -202,6 +202,24 @@ class JvmSdkmanRepositoryTest {
     }
 
     @Test
+    fun repositoryBoundaryBlocksDefaultUninstall() = runBlocking {
+        val home = Files.createTempDirectory("zephyr-sdkman-test-").toString().toPath()
+        try {
+            createSdkmanHome(home)
+            val runner = RecordingRunner()
+            val repository = JvmSdkmanRepository(FileSystem.SYSTEM, { home }) { runner }
+
+            val outcome = repository.uninstall("java", "21.0.5-tem")
+
+            assertFalse(outcome.success)
+            assertTrue(outcome.message.contains("another default"))
+            assertFalse(runner.commands.any { it is SdkmanCommand.Uninstall })
+        } finally {
+            FileSystem.SYSTEM.deleteRecursively(home, mustExist = false)
+        }
+    }
+
+    @Test
     fun protectedVersionsPersistAcrossStoreInstances() {
         val preferences = Preferences.userRoot().node("/com/worxbend/zephyr/test/${UUID.randomUUID()}")
         try {

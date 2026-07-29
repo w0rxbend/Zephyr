@@ -92,6 +92,14 @@ Navigation is grouped into Workspace, Discover, Maintenance, and application sec
 - Update Center shows pending, running, successful, and failed status per target, while the status bar reports overall progress.
 - The operation journal records the full batch command list and summary outcome.
 
+### Batch uninstall
+
+- Batch Uninstall lists every installed version but disables selection for persisted defaults and protected pins.
+- Eligible versions can be selected across candidates and reviewed in one destructive typed transaction.
+- The preview lists every removal and calculates the exact combined reclaimable size.
+- Removals run sequentially with pending/running/success/failure status per version, continuing after individual failures.
+- Repository checks still reject protected or default versions if local state changes between selection and execution.
+
 ### Installed JDK screen
 
 Displays installed Java versions as cards. Supports:

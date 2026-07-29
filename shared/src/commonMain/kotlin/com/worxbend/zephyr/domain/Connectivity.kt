@@ -22,6 +22,7 @@ val SdkmanTransaction.requiresNetwork: Boolean
         SdkmanTransaction.SelfUpdate,
         -> true
         is SdkmanTransaction.Uninstall,
+        is SdkmanTransaction.BatchUninstall,
         is SdkmanTransaction.SetDefault,
         -> false
     }

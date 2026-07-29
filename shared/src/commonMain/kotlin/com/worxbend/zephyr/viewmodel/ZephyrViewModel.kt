@@ -11,6 +11,7 @@ import com.worxbend.zephyr.domain.CandidateCatalogItem
 import com.worxbend.zephyr.domain.CandidateMetadataStatus
 import com.worxbend.zephyr.domain.BatchInstallProgress
 import com.worxbend.zephyr.domain.BatchItemStatus
+import com.worxbend.zephyr.domain.BatchUninstallProgress
 import com.worxbend.zephyr.domain.CommandOutcome
 import com.worxbend.zephyr.domain.ConnectivityState
 import com.worxbend.zephyr.domain.ConnectivityStatus
@@ -49,6 +50,7 @@ sealed interface ZephyrRoute {
     data object BrowseSdks : ZephyrRoute
     data object LocalOnly : ZephyrRoute
     data object UpdateCenter : ZephyrRoute
+    data object BatchUninstall : ZephyrRoute
     data object Diagnostics : ZephyrRoute
     data object History : ZephyrRoute
     data object Settings : ZephyrRoute
@@ -80,6 +82,7 @@ sealed interface ZephyrUiState {
         val journalExportInProgress: Boolean = false,
         val diagnosticsExportInProgress: Boolean = false,
         val batchInstallProgress: List<BatchInstallProgress> = emptyList(),
+        val batchUninstallProgress: List<BatchUninstallProgress> = emptyList(),
         val protectedVersions: Set<ProtectedVersion> = emptySet(),
         val connectivityStatus: ConnectivityStatus = ConnectivityStatus(ConnectivityState.Unknown),
         val integrityChecks: List<IntegrityCheck> = emptyList(),
@@ -325,6 +328,7 @@ class ZephyrViewModel(
             is SdkmanTransaction.Install -> install(transaction.candidate, transaction.version, journalId)
             is SdkmanTransaction.BatchInstall -> batchInstall(transaction, journalId)
             is SdkmanTransaction.Uninstall -> uninstall(transaction.candidate, transaction.version, journalId)
+            is SdkmanTransaction.BatchUninstall -> batchUninstall(transaction, journalId)
             is SdkmanTransaction.SetDefault -> setDefault(transaction.candidate, transaction.version, journalId)
             is SdkmanTransaction.CleanLocalOnly -> cleanLocalOnly(transaction.candidate, transaction.versions, journalId)
             SdkmanTransaction.RefreshMetadata -> refreshMetadata(journalId)
@@ -581,6 +585,45 @@ class ZephyrViewModel(
         }
     }
 
+    private fun batchUninstall(transaction: SdkmanTransaction.BatchUninstall, journalId: Long) {
+        launchOperation {
+            if (!beginRefresh()) return@launchOperation
+            var progress = transaction.targets.map { BatchUninstallProgress(it) }
+            _state.updateReady { it.copy(batchUninstallProgress = progress) }
+            transaction.targets.forEachIndexed { index, target ->
+                progress = progress.updateBatchUninstallItem(index, BatchItemStatus.Running)
+                _state.updateReady { it.copy(batchUninstallProgress = progress) }
+                val outcome = runCatchingCancellable {
+                    repository.uninstall(target.candidate, target.version)
+                }.getOrElse { failure ->
+                    CommandOutcome(false, failure.message ?: "Uninstall failed.")
+                }
+                progress = progress.updateBatchUninstallItem(
+                    index = index,
+                    status = if (outcome.success) BatchItemStatus.Succeeded else BatchItemStatus.Failed,
+                    outcome = outcome.message,
+                )
+                _state.updateReady { it.copy(batchUninstallProgress = progress) }
+            }
+            val candidates = runCatchingCancellable { repository.installedCandidates() }
+                .getOrElse { (_state.value as? ZephyrUiState.Ready)?.candidates.orEmpty() }
+            val succeeded = progress.count { it.status == BatchItemStatus.Succeeded }
+            val summary = "$succeeded of ${progress.size} selected uninstalls succeeded."
+            val allSucceeded = succeeded == progress.size
+            completeJournalEntry(journalId, allSucceeded, summary)
+            _state.updateReady {
+                it.copy(
+                    candidates = candidates,
+                    catalog = it.catalog.withInstalledCandidates(candidates),
+                    batchUninstallProgress = progress,
+                    isRefreshing = false,
+                    lastOutcome = summary,
+                    errorMessage = if (allSucceeded) null else summary,
+                )
+            }
+        }
+    }
+
     fun uninstall(candidate: String, version: String, journalId: Long? = null) = mutate(journalId) {
         repository.uninstall(candidate, version)
     }
@@ -828,6 +871,15 @@ private fun List<BatchInstallProgress>.updateBatchItem(
     status: BatchItemStatus,
     outcome: String? = null,
 ): List<BatchInstallProgress> =
+    mapIndexed { itemIndex, item ->
+        if (itemIndex == index) item.copy(status = status, outcome = outcome) else item
+    }
+
+private fun List<BatchUninstallProgress>.updateBatchUninstallItem(
+    index: Int,
+    status: BatchItemStatus,
+    outcome: String? = null,
+): List<BatchUninstallProgress> =
     mapIndexed { itemIndex, item ->
         if (itemIndex == index) item.copy(status = status, outcome = outcome) else item
     }

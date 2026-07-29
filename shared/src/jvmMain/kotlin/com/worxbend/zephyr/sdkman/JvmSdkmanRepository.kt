@@ -343,6 +343,22 @@ class JvmSdkmanRepository(
                 candidate = transaction.candidate,
                 availableBytes = available,
             )
+            is SdkmanTransaction.BatchUninstall -> {
+                val estimates = transaction.targets.map { target ->
+                    reclaimableEstimate(
+                        versions = listOf(target.version),
+                        candidate = target.candidate,
+                        availableBytes = available,
+                    )
+                }
+                DiskImpactEstimate(
+                    kind = DiskImpactKind.Reclaimable,
+                    bytes = estimates.sumOf { it.bytes ?: 0L },
+                    availableBytes = available,
+                    confidence = EstimateConfidence.Exact,
+                    explanation = "Exact combined size of ${transaction.targets.size} selected local version directories.",
+                )
+            }
             is SdkmanTransaction.CleanLocalOnly -> reclaimableEstimate(
                 versions = transaction.versions,
                 candidate = transaction.candidate,
@@ -416,6 +432,9 @@ class JvmSdkmanRepository(
 
     override suspend fun uninstall(candidate: String, version: String): CommandOutcome {
         invalidCommandInput(candidate, version)?.let { return it }
+        if (defaultVersionFor(candidate) == version) {
+            return CommandOutcome(false, "Choose another default before uninstalling $version.")
+        }
         if (ProtectedVersion(candidate, version) in protectedVersionStore.load()) {
             return CommandOutcome(false, "Unpin $version before uninstalling it.")
         }

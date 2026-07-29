@@ -504,6 +504,12 @@ private fun WorkbenchSidebar(
             { onNavigate(ZephyrRoute.UpdateCenter) },
             badge = updates.takeIf { it > 0 }?.toString(),
         )
+        ZephyrNavigationItem(
+            "−",
+            "Batch Uninstall",
+            state.route is ZephyrRoute.BatchUninstall,
+            { onNavigate(ZephyrRoute.BatchUninstall) },
+        )
         ZephyrNavigationItem("D", "Diagnostics", state.route is ZephyrRoute.Diagnostics, { onNavigate(ZephyrRoute.Diagnostics) })
         ZephyrNavigationItem(
             "H",
@@ -611,6 +617,12 @@ private fun HeaderThemeButton(
 
 private fun ZephyrUiState.Ready.busyLabel(): String? =
     when {
+        batchUninstallProgress.any { it.status == BatchItemStatus.Running } -> {
+            val completed = batchUninstallProgress.count {
+                it.status == BatchItemStatus.Succeeded || it.status == BatchItemStatus.Failed
+            }
+            "Uninstalling ${completed + 1} of ${batchUninstallProgress.size}"
+        }
         batchInstallProgress.any { it.status == BatchItemStatus.Running } -> {
             val completed = batchInstallProgress.count {
                 it.status == BatchItemStatus.Succeeded || it.status == BatchItemStatus.Failed

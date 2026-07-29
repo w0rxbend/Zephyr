@@ -97,6 +97,7 @@ internal fun Content(
             )
             ZephyrRoute.LocalOnly -> LocalOnlyScreen(state, viewModel::navigate, viewModel::scanLocalOnly, onClean)
             ZephyrRoute.UpdateCenter -> UpdateCenterScreen(state, viewModel)
+            ZephyrRoute.BatchUninstall -> BatchUninstallScreen(state, viewModel)
             ZephyrRoute.Diagnostics -> DiagnosticsScreen(
                 state,
                 viewModel::refreshIntegrity,

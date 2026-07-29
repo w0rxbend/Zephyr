@@ -54,6 +54,18 @@ fun SdkmanTransaction.recoveryGuidance(): RecoveryGuidance =
                 RecoveryAction.Retry,
             ),
         )
+        is SdkmanTransaction.BatchUninstall -> RecoveryGuidance(
+            title = "Some selected versions were not removed",
+            steps = listOf(
+                "Review per-item results; successful removals do not need to be repeated.",
+                "Refresh local state because defaults or protection may have changed.",
+                "Select only currently eligible versions in Batch Uninstall.",
+            ),
+            actions = listOf(
+                RecoveryAction.RefreshInstalled,
+                RecoveryAction.OpenDiagnostics,
+            ),
+        )
         is SdkmanTransaction.SetDefault -> RecoveryGuidance(
             title = "The default version was not changed",
             steps = listOf(

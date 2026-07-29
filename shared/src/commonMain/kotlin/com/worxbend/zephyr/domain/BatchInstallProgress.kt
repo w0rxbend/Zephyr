@@ -12,3 +12,9 @@ data class BatchInstallProgress(
     val status: BatchItemStatus = BatchItemStatus.Pending,
     val outcome: String? = null,
 )
+
+data class BatchUninstallProgress(
+    val target: UninstallTarget,
+    val status: BatchItemStatus = BatchItemStatus.Pending,
+    val outcome: String? = null,
+)

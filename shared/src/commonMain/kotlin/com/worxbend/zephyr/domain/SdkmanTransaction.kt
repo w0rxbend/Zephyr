@@ -70,6 +70,25 @@ sealed interface SdkmanTransaction {
         override val commands = listOf(PlannedSdkmanCommand(SdkmanCommandAction.Uninstall, candidate, version))
     }
 
+    data class BatchUninstall(
+        val targets: List<UninstallTarget>,
+    ) : SdkmanTransaction {
+        init {
+            require(targets.isNotEmpty()) { "A batch uninstall requires at least one target." }
+            targets.forEach { requireValidTarget(it.candidate, it.version) }
+            require(targets.distinct().size == targets.size) { "Batch uninstall targets must be unique." }
+        }
+
+        override val title = "Uninstall ${targets.size} versions?"
+        override val description =
+            "Zephyr will remove the selected non-default, unprotected versions sequentially and report every result."
+        override val confirmationLabel = "Uninstall selected"
+        override val destructive = true
+        override val commands = targets.map {
+            PlannedSdkmanCommand(SdkmanCommandAction.Uninstall, it.candidate, it.version)
+        }
+    }
+
     data class SetDefault(
         val candidate: String,
         val version: String,
@@ -125,6 +144,11 @@ sealed interface SdkmanTransaction {
 }
 
 data class InstallTarget(
+    val candidate: String,
+    val version: String,
+)
+
+data class UninstallTarget(
     val candidate: String,
     val version: String,
 )

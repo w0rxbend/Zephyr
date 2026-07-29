@@ -284,6 +284,12 @@ internal fun MessageOverlay(
 @Composable
 internal fun BusyOverlay(state: ZephyrUiState.Ready) {
     val label = when {
+        state.batchUninstallProgress.any { it.status == BatchItemStatus.Running } -> {
+            val completed = state.batchUninstallProgress.count {
+                it.status == BatchItemStatus.Succeeded || it.status == BatchItemStatus.Failed
+            }
+            "Uninstalling version ${completed + 1} of ${state.batchUninstallProgress.size}"
+        }
         state.batchInstallProgress.any { it.status == BatchItemStatus.Running } -> {
             val completed = state.batchInstallProgress.count {
                 it.status == BatchItemStatus.Succeeded || it.status == BatchItemStatus.Failed

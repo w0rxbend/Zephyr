@@ -27,6 +27,7 @@ import com.worxbend.zephyr.domain.SdkmanSelfUpdateStatus
 import com.worxbend.zephyr.domain.SdkmanStatus
 import com.worxbend.zephyr.domain.SdkmanTransaction
 import com.worxbend.zephyr.domain.SupportBundleExportResult
+import com.worxbend.zephyr.domain.UninstallTarget
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.filterIsInstance
@@ -257,6 +258,33 @@ class ZephyrViewModelTest {
         assertEquals(
             listOf(BatchItemStatus.Succeeded, BatchItemStatus.Succeeded),
             ready.batchInstallProgress.map { it.status },
+        )
+        assertEquals(OperationStatus.Succeeded, ready.operationJournal.single().status)
+        viewModel.close()
+    }
+
+    @Test
+    fun batchUninstallRunsTargetsSequentiallyAndRetainsPerItemResults() {
+        val repository = FakeSdkmanRepository()
+        val viewModel = ZephyrViewModel(repository, testScope())
+        val transaction = SdkmanTransaction.BatchUninstall(
+            listOf(
+                UninstallTarget("gradle", "8.10"),
+                UninstallTarget("kotlin", "2.1.0"),
+            ),
+        )
+
+        viewModel.requestTransaction(transaction)
+        viewModel.confirmTransaction()
+
+        assertEquals(
+            listOf("uninstall:gradle:8.10", "uninstall:kotlin:2.1.0"),
+            repository.mutationCalls,
+        )
+        val ready = assertIs<ZephyrUiState.Ready>(viewModel.state.value)
+        assertEquals(
+            listOf(BatchItemStatus.Succeeded, BatchItemStatus.Succeeded),
+            ready.batchUninstallProgress.map { it.status },
         )
         assertEquals(OperationStatus.Succeeded, ready.operationJournal.single().status)
         viewModel.close()
