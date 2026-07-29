@@ -6,6 +6,7 @@ data class AppSettings(
     val themePreference: ThemePreference = ThemePreference.System,
     val uiDensity: UiDensity = UiDensity.Compact,
     val textScale: TextScale = TextScale.Percent100,
+    val motionPreference: MotionPreference = MotionPreference.System,
     val showSdkmanHome: Boolean = true,
     val favoriteCandidates: Set<String> = emptySet(),
     val favoriteJdkVendors: Set<String> = emptySet(),
@@ -64,6 +65,19 @@ enum class TextScale(val label: String, val factor: Float) {
     Percent175("175%", 1.75f),
     Percent200("200%", 2f),
 }
+
+enum class MotionPreference(val label: String) {
+    System("System"),
+    Full("Full"),
+    Reduced("Reduced"),
+}
+
+fun MotionPreference.reducesMotion(systemReducedMotion: Boolean): Boolean =
+    when (this) {
+        MotionPreference.System -> systemReducedMotion
+        MotionPreference.Full -> false
+        MotionPreference.Reduced -> true
+    }
 
 enum class CollectionViewMode(val label: String) {
     Cards("Cards"),

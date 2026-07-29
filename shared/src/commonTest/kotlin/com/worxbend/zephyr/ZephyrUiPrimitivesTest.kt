@@ -13,6 +13,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -20,6 +21,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.unit.sp
 import com.worxbend.zephyr.settings.AppSettings
+import com.worxbend.zephyr.settings.MotionPreference
 import com.worxbend.zephyr.settings.ThemePreference
 import com.worxbend.zephyr.settings.TextScale
 import com.worxbend.zephyr.settings.UiDensity
@@ -31,6 +33,18 @@ import kotlin.test.assertEquals
 import kotlin.test.Test
 
 class ZephyrUiPrimitivesTest {
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun reducedMotionUsesStaticProgressSemantics() = runComposeUiTest {
+        setContent {
+            ZephyrTheme(darkTheme = false, reducedMotion = true) {
+                ZephyrProgressIndicator()
+            }
+        }
+
+        onNodeWithContentDescription("In progress; reduced motion").assertExists()
+    }
+
     @Test
     fun typographyScalesThroughTwoHundredPercent() {
         assertEquals(13.sp, typographyFor(TextScale.Percent100).bodyMedium.fontSize)
@@ -97,7 +111,7 @@ class ZephyrUiPrimitivesTest {
                         onSettingsChange = { transform -> settings = transform(settings) },
                     )
                     Text(
-                        "${settings.themePreference}:${settings.uiDensity}:${settings.textScale}",
+                        "${settings.themePreference}:${settings.uiDensity}:${settings.textScale}:${settings.motionPreference}",
                         modifier = Modifier.testTag("appearance-settings"),
                     )
                 }
@@ -107,9 +121,10 @@ class ZephyrUiPrimitivesTest {
         onNodeWithText("Dark").performClick()
         onNodeWithText("Comfortable").performClick()
         onNodeWithText("150%").performClick()
+        onNodeWithText("Reduced").performClick()
 
         onNodeWithTag("appearance-settings").assertTextEquals(
-            "${ThemePreference.Dark}:${UiDensity.Comfortable}:${TextScale.Percent150}",
+            "${ThemePreference.Dark}:${UiDensity.Comfortable}:${TextScale.Percent150}:${MotionPreference.Reduced}",
         )
     }
 

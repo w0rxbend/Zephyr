@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeContentPadding
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -33,6 +32,7 @@ import com.worxbend.zephyr.domain.displayNameFor
 import com.worxbend.zephyr.settings.AppSettingsStore
 import com.worxbend.zephyr.settings.ThemePreference
 import com.worxbend.zephyr.settings.createAppSettingsRepository
+import com.worxbend.zephyr.settings.reducesMotion
 import com.worxbend.zephyr.viewmodel.ZephyrRoute
 import com.worxbend.zephyr.viewmodel.ZephyrUiState
 import com.worxbend.zephyr.viewmodel.ZephyrViewModel
@@ -50,8 +50,10 @@ fun App() {
     val state by viewModel.state.collectAsState()
     val settings by settingsStore.state.collectAsState()
     var systemDarkTheme by remember { mutableStateOf(false) }
+    var systemReducedMotion by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         systemDarkTheme = isSystemDarkMode()
+        systemReducedMotion = isSystemReducedMotion()
     }
     val darkTheme = when (settings.themePreference) {
         ThemePreference.System -> systemDarkTheme
@@ -63,6 +65,7 @@ fun App() {
         darkTheme = darkTheme,
         density = settings.uiDensity,
         textScale = settings.textScale,
+        reducedMotion = settings.motionPreference.reducesMotion(systemReducedMotion),
     ) {
         Surface(Modifier.fillMaxSize()) {
             when (val current = state) {
@@ -99,7 +102,7 @@ private fun SdkmanMissingPreview() {
 private fun LoadingScreen() {
     Box(Modifier.fillMaxSize().safeContentPadding(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            CircularProgressIndicator()
+            ZephyrProgressIndicator()
             Text("Loading SDKMAN state")
         }
     }

@@ -90,7 +90,8 @@ The first product slice delivers:
 | UX-05 Saved filters | Delivered | Named JDK query/status/vendor/sort presets persist locally, apply atomically, replace by name, and can be removed. |
 | UX-06 Accessible status language | Delivered | Status markers use distinct symbols and semantic labels; emphasized badges pair their text and color with tone-specific symbols. |
 | UX-07 Scalable typography | Delivered | A persisted 100–200% text preference scales the complete type system and fixed-height chrome together. |
-| UX-08 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
+| UX-08 Reduced motion | Delivered | System, full, and reduced preferences control every indeterminate progress treatment; reduced mode uses a static labeled marker. |
+| UX-09 through ECO-08 | Planned | Prioritized below and implemented sequentially. |
 
 ## Groomed feature backlog
 

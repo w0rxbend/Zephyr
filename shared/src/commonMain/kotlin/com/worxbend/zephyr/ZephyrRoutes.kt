@@ -22,7 +22,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
@@ -316,7 +315,7 @@ private fun BrowseScreen(
                 style = MaterialTheme.typography.bodySmall,
             )
         }
-        if (loading) CircularProgressIndicator()
+        if (loading) ZephyrProgressIndicator()
         if (!loading && filtered.isEmpty()) {
             EmptyState(
                 if (query.isBlank()) "Catalog Empty" else "No Results",
@@ -557,7 +556,7 @@ private fun BrowseScreen(
         }
 
         if (state.detailLoadingCandidate == "java" && jdkPackage == null) {
-            CircularProgressIndicator()
+            ZephyrProgressIndicator()
             return@Column
         }
         if (jdkPackage == null) {
@@ -742,7 +741,7 @@ private fun CandidateDetailScreen(
             }
         }
         if (candidate == null || state.detailLoadingCandidate == candidateName && state.selectedCandidate == null) {
-            CircularProgressIndicator()
+            ZephyrProgressIndicator()
         } else if (jdk) {
             JdkDetailVersions(candidate, state.protectedVersions, viewModel, onClean, onUninstall)
         } else {

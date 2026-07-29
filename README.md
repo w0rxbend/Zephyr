@@ -106,6 +106,12 @@ Navigation is grouped into Workspace, Discover, Maintenance, and application sec
 - Scaling is applied to the complete Material type system, including headings, body copy, labels, and dialogs.
 - Navigation, toolbar, status bar, panel, and control metrics grow with text so larger labels are not clipped.
 
+### Reduced motion
+
+- The System motion setting honors the GNOME `enable-animations` desktop preference when available.
+- Full and Reduced settings provide persisted explicit overrides.
+- Reduced mode replaces all indeterminate spinning progress indicators with a static, semantically labeled progress marker.
+
 ### Favorites
 
 - Favorite any SDK from Browse SDKs; favorites sort before other matching catalog results.

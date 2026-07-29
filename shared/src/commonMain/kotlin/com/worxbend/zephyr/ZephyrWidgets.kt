@@ -21,6 +21,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -350,6 +351,29 @@ internal fun StatusDot(
             color = color,
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.Bold,
+        )
+    }
+}
+
+@Composable
+internal fun ZephyrProgressIndicator(
+    modifier: Modifier = Modifier,
+    compact: Boolean = false,
+) {
+    val size = if (compact) 18.dp else 40.dp
+    if (LocalReducedMotion.current) {
+        Box(
+            modifier = modifier
+                .size(size)
+                .semantics { contentDescription = "In progress; reduced motion" },
+            contentAlignment = Alignment.Center,
+        ) {
+            StatusDot(StatusTone.Accent)
+        }
+    } else {
+        CircularProgressIndicator(
+            modifier = modifier.size(size),
+            strokeWidth = if (compact) 2.dp else 4.dp,
         )
     }
 }

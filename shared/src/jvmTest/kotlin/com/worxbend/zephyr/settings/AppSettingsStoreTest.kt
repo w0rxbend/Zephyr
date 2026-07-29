@@ -16,6 +16,7 @@ class AppSettingsStoreTest {
             themePreference = ThemePreference.Dark,
             uiDensity = UiDensity.Comfortable,
             textScale = TextScale.Percent150,
+            motionPreference = MotionPreference.Reduced,
             showSdkmanHome = false,
             favoriteCandidates = setOf("gradle", "kotlin"),
             favoriteJdkVendors = setOf("tem", "zulu"),
@@ -54,6 +55,7 @@ class AppSettingsStoreTest {
                 favoriteCandidates = setOf("kotlin", "gradle"),
                 favoriteJdkVendors = setOf("zulu", "tem"),
                 textScale = TextScale.Percent200,
+                motionPreference = MotionPreference.Full,
                 recentCandidates = listOf("kotlin", "gradle"),
                 toolchainProfiles = listOf(
                     ToolchainProfile(
@@ -95,6 +97,14 @@ class AppSettingsStoreTest {
         assertEquals(MIN_NAVIGATION_WIDTH_DP, 100.normalizedNavigationWidth())
         assertEquals(MAX_NAVIGATION_WIDTH_DP, 500.normalizedNavigationWidth())
         assertEquals(0, 0.normalizedNavigationWidth())
+    }
+
+    @Test
+    fun motionPreferenceHonorsSystemAndExplicitOverrides() {
+        assertEquals(true, MotionPreference.System.reducesMotion(systemReducedMotion = true))
+        assertEquals(false, MotionPreference.System.reducesMotion(systemReducedMotion = false))
+        assertEquals(false, MotionPreference.Full.reducesMotion(systemReducedMotion = true))
+        assertEquals(true, MotionPreference.Reduced.reducesMotion(systemReducedMotion = false))
     }
 }
 

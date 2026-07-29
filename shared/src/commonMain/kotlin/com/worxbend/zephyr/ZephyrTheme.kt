@@ -29,17 +29,22 @@ internal data class ZephyrMetrics(
 )
 
 internal val LocalZephyrMetrics = staticCompositionLocalOf { CompactMetrics }
+internal val LocalReducedMotion = staticCompositionLocalOf { false }
 
 @Composable
 internal fun ZephyrTheme(
     darkTheme: Boolean,
     density: UiDensity = UiDensity.Compact,
     textScale: TextScale = TextScale.Percent100,
+    reducedMotion: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val baseMetrics = if (density == UiDensity.Compact) CompactMetrics else ComfortableMetrics
     val metrics = baseMetrics.scaledForText(textScale.factor)
-    CompositionLocalProvider(LocalZephyrMetrics provides metrics) {
+    CompositionLocalProvider(
+        LocalZephyrMetrics provides metrics,
+        LocalReducedMotion provides reducedMotion,
+    ) {
         MaterialTheme(
             colorScheme = if (darkTheme) ZephyrDarkColors else ZephyrLightColors,
             typography = typographyFor(textScale),

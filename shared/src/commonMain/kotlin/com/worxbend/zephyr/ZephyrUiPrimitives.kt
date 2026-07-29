@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -381,7 +380,7 @@ internal fun BusyOverlay(state: ZephyrUiState.Ready) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+            ZephyrProgressIndicator(compact = true)
             Text(label, style = MaterialTheme.typography.labelMedium)
         }
     }

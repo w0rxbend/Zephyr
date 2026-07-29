@@ -48,6 +48,7 @@ import com.worxbend.zephyr.data.formatLocalTimestamp
 import com.worxbend.zephyr.data.SdkmanRcDocument
 import com.worxbend.zephyr.data.createProjectToolchainService
 import com.worxbend.zephyr.settings.AppSettings
+import com.worxbend.zephyr.settings.MotionPreference
 import com.worxbend.zephyr.settings.ThemePreference
 import com.worxbend.zephyr.settings.TextScale
 import com.worxbend.zephyr.settings.ToolchainProfile
@@ -261,7 +262,7 @@ internal fun UpdateCenterScreen(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    androidx.compose.material3.CircularProgressIndicator()
+                    ZephyrProgressIndicator()
                     Text("Loading SDKMAN update metadata…")
                 }
             }
@@ -1380,6 +1381,17 @@ internal fun SettingsScreen(
                         selected = settings.textScale,
                         label = TextScale::label,
                         onSelected = { selected -> onSettingsChange { it.copy(textScale = selected) } },
+                    )
+                }
+                ZephyrSettingsRow(
+                    title = "Motion",
+                    description = "Follow the desktop preference or explicitly use full or reduced motion.",
+                ) {
+                    ZephyrSegmentedControl(
+                        options = MotionPreference.entries,
+                        selected = settings.motionPreference,
+                        label = MotionPreference::label,
+                        onSelected = { selected -> onSettingsChange { it.copy(motionPreference = selected) } },
                     )
                 }
                 ZephyrSettingsRow(
