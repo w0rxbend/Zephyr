@@ -48,9 +48,11 @@ import com.worxbend.zephyr.domain.CandidateCatalogItem
 import com.worxbend.zephyr.domain.CandidateKind
 import com.worxbend.zephyr.domain.CandidateVersion
 import com.worxbend.zephyr.domain.JavaVersion
+import com.worxbend.zephyr.domain.JDK_VENDOR_KNOWLEDGE_VERSION
 import com.worxbend.zephyr.domain.ProtectedVersion
 import com.worxbend.zephyr.domain.SdkmanTransaction
 import com.worxbend.zephyr.domain.displayNameFor
+import com.worxbend.zephyr.domain.jdkVendorKnowledge
 import com.worxbend.zephyr.domain.toJavaVersion
 import com.worxbend.zephyr.settings.AppSettings
 import com.worxbend.zephyr.settings.CleanupGracePeriod
@@ -565,6 +567,41 @@ private fun BrowseScreen(
                     },
                     enabled = savedFilterName.isNotBlank(),
                 )
+            }
+        }
+        providerFilter?.let(::jdkVendorKnowledge)?.let { knowledge ->
+            ZephyrPanel(Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(LocalZephyrMetrics.current.panelPadding),
+                    verticalArrangement = Arrangement.spacedBy(5.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(knowledge.displayName, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                "Maintained by ${knowledge.maintainer}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Badge("Knowledge $JDK_VENDOR_KNOWLEDGE_VERSION", BadgeTone.Primary)
+                    }
+                    Text(knowledge.summary, style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        knowledge.supportCharacteristics,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        "Source: ${knowledge.sourceUrl}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.tertiary,
+                    )
+                }
             }
         }
         if (settings.savedJdkFilters.isNotEmpty()) {

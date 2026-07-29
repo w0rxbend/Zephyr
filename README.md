@@ -154,6 +154,12 @@ Navigation is grouped into Workspace, Discover, Maintenance, and application sec
 - Startup hydrates Browse from that cache before network access; offline refresh keeps cached results usable instead of replacing them with an empty error state.
 - Browse headers and the status bar distinguish cached from live metadata and show a stable human-readable cache age.
 
+### JDK vendor knowledge
+
+- Browse JDK vendor filters expose curated maintainer, distribution, and support-characteristic context.
+- The built-in knowledge set is versioned by review date, uses unique SDKMAN vendor codes, and attaches an authoritative HTTPS source to every entry.
+- Support summaries are informational; linked vendor policies remain the authority for licensing and lifecycle decisions.
+
 ### Local-only cleanup grace
 
 - Settings provides opt-in Off, 7-day, 30-day, and 90-day review thresholds.

@@ -98,17 +98,7 @@ fun javaProviderCode(identifier: String?): String? =
     identifier?.substringAfterLast('-', missingDelimiterValue = "")?.takeIf { it.isNotBlank() }
 
 fun javaProviderName(code: String?): String? =
-    when (code) {
-        "tem" -> "Eclipse Temurin"
-        "zulu" -> "Azul Zulu"
-        "amzn" -> "Amazon Corretto"
-        "graal" -> "GraalVM"
-        "librca" -> "BellSoft Liberica"
-        "ms" -> "Microsoft"
-        "oracle" -> "Oracle"
-        null -> null
-        else -> code
-    }
+    code?.let { jdkVendorKnowledge(it)?.displayName ?: it }
 
 fun CandidateVersion.toJavaVersion(): JavaVersion {
     val providerCode = javaProviderCode(version)
