@@ -148,6 +148,12 @@ Navigation is grouped into Workspace, Discover, Maintenance, and application sec
 - Zephyr opens a supported Linux terminal, sources SDKMAN, and runs `sdk use` only inside the launched child shell.
 - SDKMAN home, candidate, and version values travel through child-process environment variables rather than interpolated shell text; persisted defaults remain unchanged.
 
+### Environment snapshots
+
+- The Environment Snapshot workspace captures every installed SDKMAN version and persisted default.
+- Exports use a versioned, deterministic `.zephyr-snapshot` format with native save selection and explicit overwrite confirmation.
+- A session baseline exposes stable candidate-level differences in defaults and added or removed versions.
+
 ### Favorites
 
 - Favorite any SDK from Browse SDKs; favorites sort before other matching catalog results.

@@ -54,6 +54,7 @@ sealed interface ZephyrRoute {
     data object Profiles : ZephyrRoute
     data object ProjectImport : ZephyrRoute
     data object ProjectExport : ZephyrRoute
+    data object EnvironmentSnapshot : ZephyrRoute
     data object Comparison : ZephyrRoute
     data object Diagnostics : ZephyrRoute
     data object History : ZephyrRoute

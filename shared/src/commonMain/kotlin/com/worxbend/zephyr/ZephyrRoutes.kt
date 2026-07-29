@@ -127,6 +127,7 @@ internal fun Content(
             ZephyrRoute.Profiles -> ToolchainProfilesScreen(state, viewModel, settings, onSettingsChange)
             ZephyrRoute.ProjectImport -> ProjectToolchainImportScreen(state)
             ZephyrRoute.ProjectExport -> ProjectToolchainExportScreen(state, viewModel)
+            ZephyrRoute.EnvironmentSnapshot -> EnvironmentSnapshotScreen(state, viewModel)
             ZephyrRoute.Comparison -> CandidateComparisonScreen(state, viewModel)
             ZephyrRoute.Diagnostics -> DiagnosticsScreen(
                 state,

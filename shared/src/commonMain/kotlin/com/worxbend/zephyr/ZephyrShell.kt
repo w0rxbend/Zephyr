@@ -555,6 +555,12 @@ private fun WorkbenchSidebar(
             state.route is ZephyrRoute.ProjectExport,
             { onNavigate(ZephyrRoute.ProjectExport) },
         )
+        ZephyrNavigationItem(
+            "◎",
+            "Environment Snapshot",
+            state.route is ZephyrRoute.EnvironmentSnapshot,
+            { onNavigate(ZephyrRoute.EnvironmentSnapshot) },
+        )
 
         ZephyrSectionLabel("Discover", Modifier.padding(top = 7.dp))
         ZephyrNavigationItem("+J", "Browse JDKs", state.route is ZephyrRoute.BrowseJdks, { onNavigate(ZephyrRoute.BrowseJdks) })

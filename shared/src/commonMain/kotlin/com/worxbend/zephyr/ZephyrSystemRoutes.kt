@@ -45,6 +45,10 @@ import com.worxbend.zephyr.domain.javaProviderName
 import com.worxbend.zephyr.domain.recoveryGuidance
 import com.worxbend.zephyr.domain.searchOperationJournal
 import com.worxbend.zephyr.data.formatLocalTimestamp
+import com.worxbend.zephyr.data.captureEnvironmentSnapshot
+import com.worxbend.zephyr.data.createEnvironmentSnapshotService
+import com.worxbend.zephyr.data.currentEpochMillis
+import com.worxbend.zephyr.data.diffEnvironmentSnapshots
 import com.worxbend.zephyr.data.SdkmanRcDocument
 import com.worxbend.zephyr.data.createProjectToolchainService
 import com.worxbend.zephyr.settings.AppSettings
@@ -958,6 +962,161 @@ internal fun ProjectToolchainExportScreen(
                             )
                         }
                         Badge("Persisted default", BadgeTone.Primary)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun EnvironmentSnapshotScreen(
+    state: ZephyrUiState.Ready,
+    viewModel: ZephyrViewModel,
+) {
+    val metrics = LocalZephyrMetrics.current
+    val service = remember { createEnvironmentSnapshotService() }
+    val scope = rememberCoroutineScope()
+    val current = remember(state.candidates) {
+        captureEnvironmentSnapshot(state.candidates, currentEpochMillis())
+    }
+    var baseline by remember { mutableStateOf<com.worxbend.zephyr.data.EnvironmentSnapshot?>(null) }
+    var exporting by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf<String?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val changes = baseline?.let { diffEnvironmentSnapshots(it, current) }.orEmpty()
+    val versionCount = current.candidates.sumOf { it.installedVersions.size }
+
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(metrics.spacing * 2),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                PageTitle(
+                    "Environment Snapshot",
+                    "Capture installed SDKMAN versions and persisted defaults in a deterministic, portable file.",
+                )
+            }
+            ZephyrToolbarButton(
+                label = "Capture baseline",
+                onClick = {
+                    baseline = captureEnvironmentSnapshot(state.candidates, currentEpochMillis())
+                    message = "Baseline captured for this session."
+                    error = null
+                },
+                enabled = current.candidates.isNotEmpty(),
+            )
+            ZephyrToolbarButton(
+                label = if (exporting) "Exporting…" else "Export snapshot",
+                onClick = {
+                    scope.launch {
+                        exporting = true
+                        message = null
+                        error = null
+                        runCatching { service.chooseAndWrite(current) }
+                            .onSuccess { result ->
+                                if (result != null) {
+                                    message = "Exported ${result.versionCount} version(s) to ${result.fileName}."
+                                }
+                            }
+                            .onFailure { failure ->
+                                error = failure.message ?: "Unable to export the environment snapshot."
+                            }
+                        exporting = false
+                    }
+                },
+                enabled = !exporting && current.candidates.isNotEmpty(),
+            )
+        }
+        message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
+        error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        if (current.candidates.isEmpty()) {
+            EmptyState(
+                "Nothing to capture",
+                "Install a JDK or SDK with SDKMAN, then return to create an environment snapshot.",
+                "Browse SDKs",
+            ) {
+                viewModel.navigate(ZephyrRoute.BrowseSdks)
+            }
+            return@Column
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(metrics.spacing),
+        ) {
+            ZephyrMetricTile(
+                label = "Candidates",
+                value = current.candidates.size.toString(),
+                detail = "with installed versions or defaults",
+                tone = StatusTone.Accent,
+                modifier = Modifier.weight(1f),
+            )
+            ZephyrMetricTile(
+                label = "Installed versions",
+                value = versionCount.toString(),
+                detail = "included in export",
+                tone = StatusTone.Success,
+                modifier = Modifier.weight(1f),
+            )
+            ZephyrMetricTile(
+                label = "Baseline diff",
+                value = if (baseline == null) "Not captured" else "${changes.size} changed",
+                detail = if (baseline == null) "Capture to compare during this session" else "stable candidate-level comparison",
+                tone = if (changes.isEmpty()) StatusTone.Success else StatusTone.Warning,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(metrics.spacing),
+        ) {
+            items(current.candidates, key = { it.candidate }) { candidate ->
+                val change = changes.firstOrNull { it.candidate == candidate.candidate }
+                ZephyrPanel(Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(metrics.panelPadding),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(displayNameFor(candidate.candidate), fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    candidate.candidate,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            candidate.defaultVersion?.let { Badge("Default $it", BadgeTone.Primary) }
+                            Badge("${candidate.installedVersions.size} installed", BadgeTone.Success)
+                        }
+                        Text(
+                            candidate.installedVersions.joinToString("  •  "),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        change?.let {
+                            val summary = buildList {
+                                if (it.previousDefault != it.currentDefault) {
+                                    add("default ${it.previousDefault ?: "none"} → ${it.currentDefault ?: "none"}")
+                                }
+                                if (it.addedVersions.isNotEmpty()) add("added ${it.addedVersions.joinToString()}")
+                                if (it.removedVersions.isNotEmpty()) add("removed ${it.removedVersions.joinToString()}")
+                            }
+                            Text(
+                                summary.joinToString(" • "),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.tertiary,
+                            )
+                        }
                     }
                 }
             }
