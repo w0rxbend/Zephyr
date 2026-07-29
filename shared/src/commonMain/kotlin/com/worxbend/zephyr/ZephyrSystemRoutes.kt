@@ -57,6 +57,7 @@ import com.worxbend.zephyr.data.SdkmanRcDocument
 import com.worxbend.zephyr.data.createProjectToolchainService
 import com.worxbend.zephyr.data.ProxyConfiguration
 import com.worxbend.zephyr.data.createProxyConfigurationService
+import com.worxbend.zephyr.data.createSdkmanHomeConfigurationService
 import com.worxbend.zephyr.settings.AppSettings
 import com.worxbend.zephyr.settings.CleanupGracePeriod
 import com.worxbend.zephyr.settings.MetadataRefreshSchedule
@@ -1651,14 +1652,18 @@ internal fun SettingsScreen(
 ) {
     val metrics = LocalZephyrMetrics.current
     val proxyService = remember { createProxyConfigurationService() }
+    val sdkmanHomeService = remember { createSdkmanHomeConfigurationService() }
     val scope = rememberCoroutineScope()
     var proxyConfiguration by remember { mutableStateOf(ProxyConfiguration()) }
     var proxyPort by remember { mutableStateOf("8080") }
     var proxyPassword by remember { mutableStateOf("") }
     var proxyMessage by remember { mutableStateOf<String?>(null) }
+    var customSdkmanHome by remember { mutableStateOf<String?>(null) }
+    var sdkmanHomeMessage by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(proxyService) {
         proxyConfiguration = proxyService.load()
         proxyPort = proxyConfiguration.port.toString()
+        customSdkmanHome = sdkmanHomeService.configuredPath()
     }
     Column(
         modifier = Modifier
@@ -1729,6 +1734,54 @@ internal fun SettingsScreen(
                         enabled = settings.navigationWidthDp != 0,
                     )
                 }
+            }
+        }
+        ZephyrPanel(Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(metrics.panelPadding),
+                verticalArrangement = Arrangement.spacedBy(9.dp),
+            ) {
+                PanelHeading(
+                    "SDKMAN installation",
+                    "Choose an explicit SDKMAN home only when automatic discovery is not appropriate.",
+                )
+                KeyValueRow("Active after restart", customSdkmanHome ?: "Automatic discovery")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ZephyrToolbarButton(
+                        label = "Choose SDKMAN home…",
+                        onClick = {
+                            scope.launch {
+                                sdkmanHomeService.chooseAndSave()?.let { result ->
+                                    sdkmanHomeMessage = result.message
+                                    if (result.success) customSdkmanHome = result.path
+                                }
+                            }
+                        },
+                    )
+                    ZephyrToolbarButton(
+                        label = "Use automatic discovery",
+                        onClick = {
+                            scope.launch {
+                                val result = sdkmanHomeService.clear()
+                                sdkmanHomeMessage = result.message
+                                customSdkmanHome = null
+                            }
+                        },
+                        enabled = customSdkmanHome != null,
+                    )
+                }
+                sdkmanHomeMessage?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Text(
+                    "Selection is accepted only when bin/sdkman-init.sh and candidates/ are present.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
         ZephyrPanel(Modifier.fillMaxWidth()) {

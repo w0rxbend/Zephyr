@@ -172,6 +172,12 @@ Navigation is grouped into Workspace, Discover, Maintenance, and application sec
 - Proxy passwords are stored and retrieved only through Linux Secret Service via `secret-tool`; if it is unavailable, Zephyr refuses to persist the password.
 - Credentials never enter app preferences or shell command text. They are URL-encoded and scoped to the SDKMAN child-process environment.
 
+### Custom SDKMAN home
+
+- Settings can select a machine-specific SDKMAN home through the native directory chooser.
+- Zephyr validates that `bin/sdkman-init.sh` is a regular file and `candidates/` is a directory before saving the normalized path.
+- Clearing the override returns startup discovery to `SDKMAN_DIR` and then the standard user-home location; changes apply after restart.
+
 ### Local-only cleanup grace
 
 - Settings provides opt-in Off, 7-day, 30-day, and 90-day review thresholds.
