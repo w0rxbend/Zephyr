@@ -160,6 +160,12 @@ Navigation is grouped into Workspace, Discover, Maintenance, and application sec
 - The built-in knowledge set is versioned by review date, uses unique SDKMAN vendor codes, and attaches an authoritative HTTPS source to every entry.
 - Support summaries are informational; linked vendor policies remain the authority for licensing and lifecycle decisions.
 
+### Upstream release notes
+
+- Known JDK distributions and SDK candidates expose **Release notes** directly in Update Center before install review.
+- Version-specific links are used where upstreams publish stable URL patterns; otherwise Zephyr opens the official release history.
+- Both registry resolution and the native browser boundary reject non-HTTPS, credential-bearing, malformed, whitespace, and control-character URLs.
+
 ### Local-only cleanup grace
 
 - Settings provides opt-in Off, 7-day, 30-day, and 90-day review thresholds.

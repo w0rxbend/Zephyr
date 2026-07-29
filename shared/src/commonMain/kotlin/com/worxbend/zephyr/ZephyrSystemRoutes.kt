@@ -47,6 +47,7 @@ import com.worxbend.zephyr.domain.recoveryGuidance
 import com.worxbend.zephyr.domain.searchOperationJournal
 import com.worxbend.zephyr.data.formatLocalTimestamp
 import com.worxbend.zephyr.data.captureEnvironmentSnapshot
+import com.worxbend.zephyr.data.createBrowserLauncher
 import com.worxbend.zephyr.data.createEnvironmentSnapshotService
 import com.worxbend.zephyr.data.currentEpochMillis
 import com.worxbend.zephyr.data.diffEnvironmentSnapshots
@@ -236,9 +237,11 @@ internal fun UpdateCenterScreen(
     viewModel: ZephyrViewModel,
 ) {
     val metrics = LocalZephyrMetrics.current
+    val browserLauncher = remember { createBrowserLauncher() }
     val updates = availableCandidateUpdates(state.candidates, state.catalog)
     val updateIds = updates.map { "${it.candidate}:${it.targetVersion}" }
     var selected by remember { mutableStateOf(emptySet<String>()) }
+    var releaseNotesMessage by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(updateIds) {
         selected = selected.intersect(updateIds.toSet())
     }
@@ -262,6 +265,13 @@ internal fun UpdateCenterScreen(
                 label = "Refresh metadata",
                 onClick = { viewModel.requestTransaction(SdkmanTransaction.RefreshMetadata) },
                 enabled = !state.isRefreshing && !state.isCatalogLoading,
+            )
+        }
+        releaseNotesMessage?.let {
+            Text(
+                it,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
 
@@ -413,6 +423,18 @@ internal fun UpdateCenterScreen(
                                             )
                                         },
                                     )
+                                    releaseNotesUrl(update.candidate, update.targetVersion)?.let { url ->
+                                        ZephyrToolbarButton(
+                                            label = "Release notes",
+                                            onClick = {
+                                                releaseNotesMessage = if (browserLauncher.openHttps(url)) {
+                                                    "Opened upstream release notes for ${update.displayName}."
+                                                } else {
+                                                    "A browser could not be opened for the validated release-notes URL."
+                                                }
+                                            },
+                                        )
+                                    }
                                     ZephyrToolbarButton(
                                         label = "Review update",
                                         onClick = {
