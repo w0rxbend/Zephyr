@@ -107,6 +107,7 @@ class ZephyrUiPrimitivesTest {
         }
 
         onNodeWithText("Typed command plan").assertTextEquals("Typed command plan")
+        onNodeWithText("Network required").assertTextEquals("Network required")
         onNodeWithText("17.0.1-tem").assertTextEquals("17.0.1-tem")
         onNodeWithText("19.0.2-tem").assertTextEquals("19.0.2-tem")
         onNodeWithText("Reclaimable disk space").assertTextEquals("Reclaimable disk space")

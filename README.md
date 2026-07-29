@@ -121,6 +121,14 @@ Every SDKMAN mutation is reviewed before execution:
 - **Metadata** — runs `sdk update` to refresh the remote candidate catalog. Runs automatically before the first Browse load.
 - **Check Updates** — runs `sdk selfupdate` after a confirmation dialog. SDKMAN may update itself if a new version is available.
 
+### Connectivity awareness
+
+- The toolbar, status bar, Overview, and Diagnostics expose **Online**, **Offline**, **Checking**, or **Unknown** SDKMAN service state.
+- Clicking the Network control runs a short reachability probe without downloading candidate data.
+- Transaction previews state whether an action needs the network or works offline.
+- Install, metadata, self-update, Browse, detail loading, and local-only scanning run an online preflight.
+- Default changes and uninstall remain available offline; cleanup requires connectivity because the repository re-verifies remote availability immediately before removal.
+
 ### Appearance and desktop behavior
 
 - JetBrains-inspired light and dark palettes with a restrained blue accent.

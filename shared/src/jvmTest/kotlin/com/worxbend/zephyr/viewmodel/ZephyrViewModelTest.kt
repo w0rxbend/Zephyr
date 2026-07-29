@@ -7,6 +7,8 @@ import com.worxbend.zephyr.domain.CandidateCatalogItem
 import com.worxbend.zephyr.domain.CandidateKind
 import com.worxbend.zephyr.domain.CandidateVersion
 import com.worxbend.zephyr.domain.CommandOutcome
+import com.worxbend.zephyr.domain.ConnectivityState
+import com.worxbend.zephyr.domain.ConnectivityStatus
 import com.worxbend.zephyr.domain.DiskImpactEstimate
 import com.worxbend.zephyr.domain.DiskImpactKind
 import com.worxbend.zephyr.domain.EstimateConfidence
@@ -303,6 +305,28 @@ class ZephyrViewModelTest {
         viewModel.close()
     }
 
+    @Test
+    fun offlinePreflightBlocksNetworkTransactionsButAllowsLocalOnes() {
+        val repository = FakeSdkmanRepository(
+            connectivity = ConnectivityStatus(ConnectivityState.Offline, detail = "offline"),
+        )
+        val viewModel = ZephyrViewModel(repository, testScope())
+
+        viewModel.requestTransaction(SdkmanTransaction.Install("java", "21.0.5-tem"))
+
+        val offline = assertIs<ZephyrUiState.Ready>(viewModel.state.value)
+        assertEquals(null, offline.pendingTransaction)
+        assertTrue(offline.errorMessage.orEmpty().contains("offline"))
+        assertTrue(repository.mutationCalls.isEmpty())
+
+        viewModel.requestTransaction(SdkmanTransaction.Uninstall("java", "17.0.1-tem"))
+
+        assertIs<SdkmanTransaction.Uninstall>(
+            assertIs<ZephyrUiState.Ready>(viewModel.state.value).pendingTransaction,
+        )
+        viewModel.close()
+    }
+
     private fun testScope() = Dispatchers.Unconfined
 }
 
@@ -330,6 +354,7 @@ private class FakeSdkmanRepository(
     private val detailGate: CompletableDeferred<Unit>? = null,
     private val detailCompleted: CompletableDeferred<Unit>? = null,
     private val installOutcome: CommandOutcome = CommandOutcome(true, "Installed"),
+    private var connectivity: ConnectivityStatus = ConnectivityStatus(ConnectivityState.Online),
 ) : SdkmanRepository {
     var installedCandidatesCalls: Int = 0
         private set
@@ -372,6 +397,8 @@ private class FakeSdkmanRepository(
         }
         return remoteDetail?.takeIf { it.name == candidate }
     }
+
+    override suspend fun checkConnectivity(): ConnectivityStatus = connectivity
 
     override suspend fun estimateDiskImpact(transaction: SdkmanTransaction): DiskImpactEstimate =
         DiskImpactEstimate(

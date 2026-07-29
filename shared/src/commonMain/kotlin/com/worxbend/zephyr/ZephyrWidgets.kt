@@ -176,7 +176,7 @@ internal fun ZephyrToolbarButton(
         ) {
             Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1)
             detail?.let {
-                StatusDot(tone = if (it == "failed") StatusTone.Error else StatusTone.Accent)
+                StatusDot(tone = if (it == "failed" || it == "offline") StatusTone.Error else StatusTone.Accent)
                 Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }

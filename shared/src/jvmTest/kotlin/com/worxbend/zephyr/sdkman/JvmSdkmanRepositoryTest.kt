@@ -3,6 +3,7 @@ package com.worxbend.zephyr.sdkman
 import com.worxbend.zephyr.domain.DiskImpactKind
 import com.worxbend.zephyr.domain.EstimateConfidence
 import com.worxbend.zephyr.domain.ProtectedVersion
+import com.worxbend.zephyr.domain.ConnectivityState
 import com.worxbend.zephyr.domain.SdkmanTransaction
 import okio.FileSystem
 import okio.Path
@@ -214,6 +215,25 @@ class JvmSdkmanRepositoryTest {
             preferences.removeNode()
             Preferences.userRoot().flush()
         }
+    }
+
+    @Test
+    fun reportsSdkmanEndpointReachabilityWithoutRunningACommand() = runBlocking {
+        val runner = RecordingRunner()
+        val online = JvmSdkmanRepository(
+            fileSystem = FileSystem.SYSTEM,
+            connectivityProbe = { true },
+            commandRunnerFactory = { runner },
+        )
+        val offline = JvmSdkmanRepository(
+            fileSystem = FileSystem.SYSTEM,
+            connectivityProbe = { false },
+            commandRunnerFactory = { runner },
+        )
+
+        assertEquals(ConnectivityState.Online, online.checkConnectivity().state)
+        assertEquals(ConnectivityState.Offline, offline.checkConnectivity().state)
+        assertTrue(runner.commands.isEmpty())
     }
 
     @Test

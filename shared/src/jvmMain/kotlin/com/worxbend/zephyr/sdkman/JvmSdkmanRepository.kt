@@ -5,6 +5,8 @@ import com.worxbend.zephyr.domain.Candidate
 import com.worxbend.zephyr.domain.CandidateCatalogItem
 import com.worxbend.zephyr.domain.CandidateVersion
 import com.worxbend.zephyr.domain.CommandOutcome
+import com.worxbend.zephyr.domain.ConnectivityState
+import com.worxbend.zephyr.domain.ConnectivityStatus
 import com.worxbend.zephyr.domain.DiskImpactEstimate
 import com.worxbend.zephyr.domain.DiskImpactKind
 import com.worxbend.zephyr.domain.EstimateConfidence
@@ -20,6 +22,10 @@ import com.worxbend.zephyr.logging.ZephyrLogger
 import okio.FileSystem
 import okio.Path
 import okio.Path.Companion.toPath
+import java.net.InetSocketAddress
+import java.net.Socket
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
@@ -27,6 +33,7 @@ class JvmSdkmanRepository(
     private val fileSystem: FileSystem,
     private val sdkmanHomeResolver: () -> Path = ::defaultSdkmanHome,
     private val protectedVersionStore: ProtectedVersionStore = InMemoryProtectedVersionStore(),
+    private val connectivityProbe: suspend () -> Boolean = ::probeSdkmanService,
     private val commandRunnerFactory: (Path) -> SdkmanCommandRunner,
 ) : SdkmanRepository {
     private var sdkmanHome: Path? = null
@@ -177,6 +184,32 @@ class JvmSdkmanRepository(
             localOnlyVersionCount = localOnly.size,
             localOnlyVersions = localOnly,
         )
+    }
+
+    override suspend fun checkConnectivity(): ConnectivityStatus {
+        val checkedAt = System.currentTimeMillis()
+        return try {
+            if (connectivityProbe()) {
+                ConnectivityStatus(
+                    state = ConnectivityState.Online,
+                    checkedAtEpochMillis = checkedAt,
+                    detail = "SDKMAN service is reachable.",
+                )
+            } else {
+                ConnectivityStatus(
+                    state = ConnectivityState.Offline,
+                    checkedAtEpochMillis = checkedAt,
+                    detail = "SDKMAN service is not reachable from this session.",
+                )
+            }
+        } catch (exception: Exception) {
+            ZephyrLogger.warn("SDKMAN connectivity check failed: ${exception.message}")
+            ConnectivityStatus(
+                state = ConnectivityState.Offline,
+                checkedAtEpochMillis = checkedAt,
+                detail = "SDKMAN service is not reachable from this session.",
+            )
+        }
     }
 
     override suspend fun estimateDiskImpact(transaction: SdkmanTransaction): DiskImpactEstimate {
@@ -462,7 +495,17 @@ private fun medianSize(sortedSizes: List<Long>): Long {
     }
 }
 
+private suspend fun probeSdkmanService(): Boolean = withContext(Dispatchers.IO) {
+    Socket().use { socket ->
+        socket.connect(InetSocketAddress(SDKMAN_SERVICE_HOST, HTTPS_PORT), CONNECTIVITY_TIMEOUT_MILLIS)
+    }
+    true
+}
+
 private const val MAX_DISK_ESTIMATE_ENTRIES = 1_000_000
+private const val SDKMAN_SERVICE_HOST = "api.sdkman.io"
+private const val HTTPS_PORT = 443
+private const val CONNECTIVITY_TIMEOUT_MILLIS = 1_500
 
 private fun defaultSdkmanHome(): Path {
     val configured = System.getenv("SDKMAN_DIR")?.takeIf { it.isNotBlank() }

@@ -8,6 +8,8 @@ import com.worxbend.zephyr.domain.Candidate
 import com.worxbend.zephyr.domain.CandidateCatalogItem
 import com.worxbend.zephyr.domain.CandidateMetadataStatus
 import com.worxbend.zephyr.domain.CommandOutcome
+import com.worxbend.zephyr.domain.ConnectivityState
+import com.worxbend.zephyr.domain.ConnectivityStatus
 import com.worxbend.zephyr.domain.DiskImpactEstimate
 import com.worxbend.zephyr.domain.DiskImpactKind
 import com.worxbend.zephyr.domain.EstimateConfidence
@@ -17,6 +19,7 @@ import com.worxbend.zephyr.domain.ProtectedVersion
 import com.worxbend.zephyr.domain.SdkmanSelfUpdateStatus
 import com.worxbend.zephyr.domain.SdkmanStatus
 import com.worxbend.zephyr.domain.SdkmanTransaction
+import com.worxbend.zephyr.domain.requiresNetwork
 import com.worxbend.zephyr.domain.withInstalledCandidates
 import com.worxbend.zephyr.logging.ZephyrLogger
 import kotlinx.coroutines.CoroutineDispatcher
@@ -69,6 +72,7 @@ sealed interface ZephyrUiState {
         val operationJournal: List<OperationJournalEntry> = emptyList(),
         val journalExportInProgress: Boolean = false,
         val protectedVersions: Set<ProtectedVersion> = emptySet(),
+        val connectivityStatus: ConnectivityStatus = ConnectivityStatus(ConnectivityState.Unknown),
     ) : ZephyrUiState
 }
 
@@ -118,6 +122,7 @@ class ZephyrViewModel(
                         lastOutcome = "Loaded ${candidates.size} installed SDKMAN package(s).",
                         protectedVersions = protectedVersions,
                     )
+                    refreshConnectivity()
                 }
             }.onFailure { failure ->
                 ZephyrLogger.error("Initial SDKMAN load failed.", failure)
@@ -138,6 +143,7 @@ class ZephyrViewModel(
                             lastOutcome = null,
                             protectedVersions = loadProtectedVersions(),
                         )
+                        refreshConnectivity()
                     } else {
                         _state.value = ZephyrUiState.SdkmanMissing(detected.reason ?: failure.message ?: "SDKMAN could not be found.")
                     }
@@ -199,6 +205,15 @@ class ZephyrViewModel(
             )
         }
         scope.launch {
+            if (transaction.requiresNetwork && !checkOnline()) {
+                _state.updateReady {
+                    it.copy(
+                        transactionPreviewLoading = false,
+                        errorMessage = "This operation requires the SDKMAN service, but Zephyr is offline.",
+                    )
+                }
+                return@launch
+            }
             val estimate = runCatchingCancellable {
                 repository.estimateDiskImpact(transaction)
             }.getOrElse { failure ->
@@ -216,6 +231,16 @@ class ZephyrViewModel(
                     transactionPreviewLoading = false,
                 )
             }
+        }
+    }
+
+    fun refreshConnectivity() {
+        if (_state.value !is ZephyrUiState.Ready) return
+        _state.updateReady {
+            it.copy(connectivityStatus = it.connectivityStatus.copy(state = ConnectivityState.Checking))
+        }
+        scope.launch {
+            checkOnline()
         }
     }
 
@@ -414,6 +439,10 @@ class ZephyrViewModel(
         launchOperation {
             if (_state.value !is ZephyrUiState.Ready) return@launchOperation
             _state.updateReady { it.copy(localOnlyScanInProgress = true, errorMessage = null) }
+            if (!checkOnline()) {
+                fail("Local-only scanning requires the SDKMAN service, but Zephyr is offline.")
+                return@launchOperation
+            }
             runCatchingCancellable {
                 val audited = repository.installedCandidates().map { local ->
                     repository.mergedCandidate(local.name) ?: local
@@ -456,6 +485,10 @@ class ZephyrViewModel(
         launchQueuedOperation {
             if ((_state.value as? ZephyrUiState.Ready)?.catalog?.isNotEmpty() == true) return@launchQueuedOperation
             _state.updateReady { it.copy(isCatalogLoading = true) }
+            if (!checkOnline()) {
+                fail("Catalog loading requires the SDKMAN service, but Zephyr is offline.")
+                return@launchQueuedOperation
+            }
             runCatchingCancellable {
                 val catalog = repository.catalog(refreshMetadata = true)
                 _state.updateReady { it.copy(catalog = catalog, isCatalogLoading = false, lastOutcome = "Loaded ${catalog.size} SDKMAN packages.") }
@@ -478,6 +511,10 @@ class ZephyrViewModel(
                 }
             }
             if (!shouldLoad) return@launchQueuedOperation
+            if (!checkOnline()) {
+                fail("Version loading requires the SDKMAN service, but Zephyr is offline.")
+                return@launchQueuedOperation
+            }
             runCatchingCancellable {
                 val merged = repository.mergedCandidate(candidate)
                 _state.updateReady {
@@ -612,6 +649,21 @@ class ZephyrViewModel(
             ZephyrLogger.warn("Unable to load protected SDKMAN versions.", failure)
             emptySet()
         }
+
+    private suspend fun checkOnline(): Boolean {
+        val status = runCatchingCancellable {
+            repository.checkConnectivity()
+        }.getOrElse { failure ->
+            ZephyrLogger.warn("SDKMAN connectivity check failed.", failure)
+            ConnectivityStatus(
+                state = ConnectivityState.Offline,
+                checkedAtEpochMillis = clock(),
+                detail = "Connectivity could not be verified.",
+            )
+        }
+        _state.updateReady { it.copy(connectivityStatus = status) }
+        return status.state == ConnectivityState.Online
+    }
 
     private data class MutationResult(
         val outcome: CommandOutcome,

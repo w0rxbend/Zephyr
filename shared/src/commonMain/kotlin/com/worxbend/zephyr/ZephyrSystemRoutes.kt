@@ -24,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.worxbend.zephyr.domain.CandidateKind
 import com.worxbend.zephyr.domain.CandidateMetadataStatus
+import com.worxbend.zephyr.domain.ConnectivityState
 import com.worxbend.zephyr.domain.OperationJournalEntry
 import com.worxbend.zephyr.domain.OperationStatus
 import com.worxbend.zephyr.domain.RecoveryAction
@@ -106,6 +107,7 @@ internal fun OverviewScreen(
                 Column(Modifier.padding(metrics.panelPadding), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     PanelHeading("Environment health", "Read-only diagnostics")
                     HealthRow("SDKMAN detected", true)
+                    HealthRow("SDKMAN service online", state.connectivityStatus.state == ConnectivityState.Online)
                     HealthRow("CLI version available", state.sdkmanStatus.cliVersion != null)
                     HealthRow("Default JDK configured", jdk?.defaultVersion != null)
                     HealthRow("No local-only versions", localOnly == 0)
@@ -132,6 +134,11 @@ internal fun DiagnosticsScreen(state: ZephyrUiState.Ready) {
                 PanelHeading("Installation", "Local SDKMAN environment")
                 DiagnosticRow("SDKMAN home", state.sdkmanStatus.home ?: "Unavailable", state.sdkmanStatus.home != null)
                 DiagnosticRow("CLI version", sdkmanVersionLabel(state), state.sdkmanStatus.cliVersion != null)
+                DiagnosticRow(
+                    "SDKMAN service",
+                    state.connectivityStatus.state.label,
+                    state.connectivityStatus.state == ConnectivityState.Online,
+                )
                 DiagnosticRow("Installed candidates", state.candidates.size.toString(), true)
                 DiagnosticRow(
                     "Persisted default JDK",

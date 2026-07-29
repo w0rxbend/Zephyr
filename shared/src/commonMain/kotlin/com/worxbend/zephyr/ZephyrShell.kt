@@ -32,11 +32,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.worxbend.zephyr.domain.CandidateKind
+import com.worxbend.zephyr.domain.ConnectivityState
 import com.worxbend.zephyr.domain.DiskImpactEstimate
 import com.worxbend.zephyr.domain.DiskImpactKind
 import com.worxbend.zephyr.domain.PlannedSdkmanCommand
 import com.worxbend.zephyr.domain.SdkmanTransaction
 import com.worxbend.zephyr.domain.formatByteSize
+import com.worxbend.zephyr.domain.requiresNetwork
 import com.worxbend.zephyr.settings.AppSettings
 import com.worxbend.zephyr.viewmodel.ZephyrRoute
 import com.worxbend.zephyr.viewmodel.ZephyrUiState
@@ -73,6 +75,7 @@ internal fun ZephyrScreen(
             onBack = viewModel::goBack,
             onToggleTheme = onToggleTheme,
             onRefresh = viewModel::refreshInstalled,
+            onRefreshConnectivity = viewModel::refreshConnectivity,
             onRefreshMetadata = { viewModel.requestTransaction(SdkmanTransaction.RefreshMetadata) },
             onScan = viewModel::scanLocalOnly,
             onCheckUpdates = { viewModel.requestTransaction(SdkmanTransaction.SelfUpdate) },
@@ -120,6 +123,10 @@ internal fun TransactionPreviewDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text(transaction.description)
+                Badge(
+                    if (transaction.requiresNetwork) "Network required" else "Works offline",
+                    if (transaction.requiresNetwork) BadgeTone.Warning else BadgeTone.Success,
+                )
                 diskImpact?.let { DiskImpactSummary(it) }
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
@@ -234,6 +241,7 @@ private fun WorkbenchToolbar(
     onBack: () -> Unit,
     onToggleTheme: () -> Unit,
     onRefresh: () -> Unit,
+    onRefreshConnectivity: () -> Unit,
     onRefreshMetadata: () -> Unit,
     onScan: () -> Unit,
     onCheckUpdates: () -> Unit,
@@ -286,6 +294,12 @@ private fun WorkbenchToolbar(
             }
             Spacer(Modifier.weight(1f))
             HeaderThemeButton(darkTheme = darkTheme, onClick = onToggleTheme)
+            ZephyrToolbarButton(
+                label = "Network",
+                detail = state.connectivityStatus.state.label.lowercase(),
+                onClick = onRefreshConnectivity,
+                enabled = state.connectivityStatus.state != ConnectivityState.Checking,
+            )
             ZephyrToolbarButton("Refresh", onClick = onRefresh, enabled = !busy)
             ZephyrToolbarButton(
                 label = "Metadata",
@@ -385,6 +399,20 @@ private fun WorkbenchStatusBar(
         ) {
             StatusDot(if (busyLabel == null) StatusTone.Success else StatusTone.Accent)
             Text(busyLabel ?: "Ready", style = MaterialTheme.typography.labelSmall)
+            Text("•", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            StatusDot(
+                when (state.connectivityStatus.state) {
+                    ConnectivityState.Online -> StatusTone.Success
+                    ConnectivityState.Offline -> StatusTone.Error
+                    ConnectivityState.Checking -> StatusTone.Accent
+                    ConnectivityState.Unknown -> StatusTone.Neutral
+                },
+            )
+            Text(
+                state.connectivityStatus.state.label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Text("•", color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(
                 "${state.candidates.size} candidates",
