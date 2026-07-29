@@ -36,6 +36,7 @@ import com.worxbend.zephyr.settings.reducesMotion
 import com.worxbend.zephyr.viewmodel.ZephyrRoute
 import com.worxbend.zephyr.viewmodel.ZephyrUiState
 import com.worxbend.zephyr.viewmodel.ZephyrViewModel
+import kotlinx.coroutines.delay
 
 @Composable
 fun App() {
@@ -54,6 +55,13 @@ fun App() {
     LaunchedEffect(Unit) {
         systemDarkTheme = isSystemDarkMode()
         systemReducedMotion = isSystemReducedMotion()
+    }
+    LaunchedEffect(settings.metadataRefreshSchedule) {
+        val interval = settings.metadataRefreshSchedule.intervalMillis ?: return@LaunchedEffect
+        while (true) {
+            delay(interval)
+            viewModel.refreshMetadataIfIdle()
+        }
     }
     val darkTheme = when (settings.themePreference) {
         ThemePreference.System -> systemDarkTheme

@@ -60,6 +60,7 @@ import com.worxbend.zephyr.domain.formatByteSize
 import com.worxbend.zephyr.domain.copyableCommand
 import com.worxbend.zephyr.domain.requiresNetwork
 import com.worxbend.zephyr.settings.AppSettings
+import com.worxbend.zephyr.settings.MetadataRefreshSchedule
 import com.worxbend.zephyr.settings.recordRecentCandidate
 import com.worxbend.zephyr.settings.MAX_NAVIGATION_WIDTH_DP
 import com.worxbend.zephyr.settings.MIN_NAVIGATION_WIDTH_DP
@@ -235,7 +236,11 @@ internal fun ZephyrScreen(
                 },
             )
         }
-        WorkbenchStatusBar(state = state, showSdkmanHome = settings.showSdkmanHome)
+        WorkbenchStatusBar(
+            state = state,
+            showSdkmanHome = settings.showSdkmanHome,
+            metadataRefreshSchedule = settings.metadataRefreshSchedule,
+        )
     }
 
     BusyOverlay(state)
@@ -632,6 +637,7 @@ private fun NavigationResizeHandle(
 private fun WorkbenchStatusBar(
     state: ZephyrUiState.Ready,
     showSdkmanHome: Boolean,
+    metadataRefreshSchedule: MetadataRefreshSchedule,
 ) {
     val metrics = LocalZephyrMetrics.current
     val busyLabel = state.busyLabel()
@@ -673,6 +679,14 @@ private fun WorkbenchStatusBar(
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            if (metadataRefreshSchedule != MetadataRefreshSchedule.Off) {
+                Text("•", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    "Auto refresh: ${metadataRefreshSchedule.label}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             Spacer(Modifier.weight(1f))
             if (showSdkmanHome) {
                 Text(

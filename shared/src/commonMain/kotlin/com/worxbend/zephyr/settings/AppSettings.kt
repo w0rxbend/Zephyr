@@ -7,6 +7,7 @@ data class AppSettings(
     val uiDensity: UiDensity = UiDensity.Compact,
     val textScale: TextScale = TextScale.Percent100,
     val motionPreference: MotionPreference = MotionPreference.System,
+    val metadataRefreshSchedule: MetadataRefreshSchedule = MetadataRefreshSchedule.Off,
     val showSdkmanHome: Boolean = true,
     val favoriteCandidates: Set<String> = emptySet(),
     val favoriteJdkVendors: Set<String> = emptySet(),
@@ -78,6 +79,16 @@ fun MotionPreference.reducesMotion(systemReducedMotion: Boolean): Boolean =
         MotionPreference.Full -> false
         MotionPreference.Reduced -> true
     }
+
+enum class MetadataRefreshSchedule(
+    val label: String,
+    val intervalMillis: Long?,
+) {
+    Off("Off", null),
+    Hourly("Hourly", 60L * 60L * 1_000L),
+    EverySixHours("Every 6 hours", 6L * 60L * 60L * 1_000L),
+    Daily("Daily", 24L * 60L * 60L * 1_000L),
+}
 
 enum class CollectionViewMode(val label: String) {
     Cards("Cards"),

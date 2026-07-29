@@ -124,6 +124,12 @@ Navigation is grouped into Workspace, Discover, Maintenance, and application sec
 - Menus mirror visible inspect, copy, favorite, protect, install, make-default, uninstall, update, and cleanup controls when each action is safe.
 - Mutating context actions call the same typed transactions and confirmation previews as their visible counterparts.
 
+### Scheduled metadata refresh
+
+- Settings provides opt-in Off, Hourly, Every 6 hours, and Daily SDKMAN metadata schedules.
+- Scheduling runs only while Zephyr is open and skips refreshes when offline, busy, or waiting for transaction confirmation.
+- The active cadence is shown in the bottom status bar; scheduled completion is reported through the normal outcome surface.
+
 ### Favorites
 
 - Favorite any SDK from Browse SDKs; favorites sort before other matching catalog results.

@@ -16,6 +16,7 @@ internal class JvmAppSettingsRepository(
             uiDensity = preferences.enumValue(DENSITY_KEY, UiDensity.Compact),
             textScale = preferences.enumValue(TEXT_SCALE_KEY, TextScale.Percent100),
             motionPreference = preferences.enumValue(MOTION_KEY, MotionPreference.System),
+            metadataRefreshSchedule = preferences.enumValue(REFRESH_SCHEDULE_KEY, MetadataRefreshSchedule.Off),
             showSdkmanHome = preferences.getBoolean(SHOW_SDKMAN_HOME_KEY, true),
             favoriteCandidates = preferences.stringSet(FAVORITE_CANDIDATES_KEY),
             favoriteJdkVendors = preferences.stringSet(FAVORITE_JDK_VENDORS_KEY),
@@ -33,6 +34,7 @@ internal class JvmAppSettingsRepository(
         preferences.put(DENSITY_KEY, settings.uiDensity.name)
         preferences.put(TEXT_SCALE_KEY, settings.textScale.name)
         preferences.put(MOTION_KEY, settings.motionPreference.name)
+        preferences.put(REFRESH_SCHEDULE_KEY, settings.metadataRefreshSchedule.name)
         preferences.putBoolean(SHOW_SDKMAN_HOME_KEY, settings.showSdkmanHome)
         preferences.put(FAVORITE_CANDIDATES_KEY, settings.favoriteCandidates.encode())
         preferences.put(FAVORITE_JDK_VENDORS_KEY, settings.favoriteJdkVendors.encode())
@@ -152,6 +154,7 @@ internal class JvmAppSettingsRepository(
         const val DENSITY_KEY = "density"
         const val TEXT_SCALE_KEY = "text-scale"
         const val MOTION_KEY = "motion"
+        const val REFRESH_SCHEDULE_KEY = "metadata-refresh-schedule"
         const val SHOW_SDKMAN_HOME_KEY = "show-sdkman-home"
         const val FAVORITE_CANDIDATES_KEY = "favorite-candidates"
         const val FAVORITE_JDK_VENDORS_KEY = "favorite-jdk-vendors"

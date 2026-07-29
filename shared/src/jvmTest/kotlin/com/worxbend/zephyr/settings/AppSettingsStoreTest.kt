@@ -17,6 +17,7 @@ class AppSettingsStoreTest {
             uiDensity = UiDensity.Comfortable,
             textScale = TextScale.Percent150,
             motionPreference = MotionPreference.Reduced,
+            metadataRefreshSchedule = MetadataRefreshSchedule.EverySixHours,
             showSdkmanHome = false,
             favoriteCandidates = setOf("gradle", "kotlin"),
             favoriteJdkVendors = setOf("tem", "zulu"),
@@ -56,6 +57,7 @@ class AppSettingsStoreTest {
                 favoriteJdkVendors = setOf("zulu", "tem"),
                 textScale = TextScale.Percent200,
                 motionPreference = MotionPreference.Full,
+                metadataRefreshSchedule = MetadataRefreshSchedule.Daily,
                 recentCandidates = listOf("kotlin", "gradle"),
                 toolchainProfiles = listOf(
                     ToolchainProfile(
@@ -105,6 +107,14 @@ class AppSettingsStoreTest {
         assertEquals(false, MotionPreference.System.reducesMotion(systemReducedMotion = false))
         assertEquals(false, MotionPreference.Full.reducesMotion(systemReducedMotion = true))
         assertEquals(true, MotionPreference.Reduced.reducesMotion(systemReducedMotion = false))
+    }
+
+    @Test
+    fun metadataRefreshSchedulesAreOptInAndBounded() {
+        assertEquals(null, MetadataRefreshSchedule.Off.intervalMillis)
+        assertEquals(3_600_000L, MetadataRefreshSchedule.Hourly.intervalMillis)
+        assertEquals(21_600_000L, MetadataRefreshSchedule.EverySixHours.intervalMillis)
+        assertEquals(86_400_000L, MetadataRefreshSchedule.Daily.intervalMillis)
     }
 }
 

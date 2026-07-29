@@ -452,39 +452,56 @@ class ZephyrViewModel(
 
     fun refreshMetadata(journalId: Long? = null) {
         launchOperation {
-            if (_state.value !is ZephyrUiState.Ready) return@launchOperation
-            _state.updateReady { ready ->
-                ready.copy(
-                    sdkmanStatus = ready.sdkmanStatus.copy(metadataStatus = CandidateMetadataStatus.Refreshing),
-                    isCatalogLoading = true,
+            refreshMetadataLocked(journalId, scheduled = false)
+        }
+    }
+
+    fun refreshMetadataIfIdle() {
+        launchOperation {
+            val ready = _state.value as? ZephyrUiState.Ready ?: return@launchOperation
+            if (ready.hasActiveOperation() || ready.pendingTransaction != null) return@launchOperation
+            if (!checkOnline()) return@launchOperation
+            refreshMetadataLocked(journalId = null, scheduled = true)
+        }
+    }
+
+    private suspend fun refreshMetadataLocked(journalId: Long?, scheduled: Boolean) {
+        if (_state.value !is ZephyrUiState.Ready) return
+        _state.updateReady { ready ->
+            ready.copy(
+                sdkmanStatus = ready.sdkmanStatus.copy(metadataStatus = CandidateMetadataStatus.Refreshing),
+                isCatalogLoading = true,
+            )
+        }
+        runCatchingCancellable {
+            val outcome = repository.refreshCandidateMetadata()
+            if (!outcome.success) ZephyrLogger.warn("Candidate metadata refresh failed: ${outcome.message}")
+            outcome to repository.catalog(refreshMetadata = false)
+        }.onSuccess { (outcome, catalog) ->
+            completeJournalEntry(journalId, outcome.success, outcome.message)
+            val metadataStatus = if (outcome.success) CandidateMetadataStatus.Refreshed else CandidateMetadataStatus.Failed(outcome.message)
+            _state.updateReady {
+                it.copy(
+                    sdkmanStatus = it.sdkmanStatus.copy(metadataStatus = metadataStatus),
+                    catalog = catalog,
+                    isCatalogLoading = false,
+                    lastOutcome = if (scheduled) {
+                        "Scheduled metadata refresh completed. Loaded ${catalog.size} packages."
+                    } else {
+                        "${outcome.message} Loaded ${catalog.size} packages."
+                    },
+                    errorMessage = if (outcome.success) null else outcome.message,
                 )
             }
-            runCatchingCancellable {
-                val outcome = repository.refreshCandidateMetadata()
-                if (!outcome.success) ZephyrLogger.warn("Candidate metadata refresh failed: ${outcome.message}")
-                outcome to repository.catalog(refreshMetadata = false)
-            }.onSuccess { (outcome, catalog) ->
-                completeJournalEntry(journalId, outcome.success, outcome.message)
-                val metadataStatus = if (outcome.success) CandidateMetadataStatus.Refreshed else CandidateMetadataStatus.Failed(outcome.message)
-                _state.updateReady {
-                    it.copy(
-                        sdkmanStatus = it.sdkmanStatus.copy(metadataStatus = metadataStatus),
-                        catalog = catalog,
-                        isCatalogLoading = false,
-                        lastOutcome = "${outcome.message} Loaded ${catalog.size} packages.",
-                        errorMessage = if (outcome.success) null else outcome.message,
-                    )
-                }
-            }.onFailure {
-                ZephyrLogger.warn("Candidate metadata refresh failed.", it)
-                completeJournalEntry(journalId, false, it.message ?: "Metadata refresh failed.")
-                _state.updateReady { state ->
-                    state.copy(
-                        sdkmanStatus = state.sdkmanStatus.copy(metadataStatus = CandidateMetadataStatus.Failed(it.message.orEmpty())),
-                        isCatalogLoading = false,
-                        errorMessage = "Candidate metadata refresh failed: ${it.message}",
-                    )
-                }
+        }.onFailure {
+            ZephyrLogger.warn("Candidate metadata refresh failed.", it)
+            completeJournalEntry(journalId, false, it.message ?: "Metadata refresh failed.")
+            _state.updateReady { state ->
+                state.copy(
+                    sdkmanStatus = state.sdkmanStatus.copy(metadataStatus = CandidateMetadataStatus.Failed(it.message.orEmpty())),
+                    isCatalogLoading = false,
+                    errorMessage = "Candidate metadata refresh failed: ${it.message}",
+                )
             }
         }
     }

@@ -79,6 +79,53 @@ class ZephyrViewModelTest {
     }
 
     @Test
+    fun scheduledMetadataRefreshRunsOnlyWhenOnlineAndIdle() {
+        val repository = FakeSdkmanRepository()
+        val viewModel = ZephyrViewModel(repository, testScope())
+
+        viewModel.refreshMetadataIfIdle()
+
+        assertEquals(1, repository.metadataRefreshCalls)
+        assertEquals(
+            "Scheduled metadata refresh completed. Loaded 0 packages.",
+            assertIs<ZephyrUiState.Ready>(viewModel.state.value).lastOutcome,
+        )
+        viewModel.close()
+    }
+
+    @Test
+    fun scheduledMetadataRefreshSkipsOfflineState() {
+        val repository = FakeSdkmanRepository(
+            connectivity = ConnectivityStatus(ConnectivityState.Offline, detail = "offline"),
+        )
+        val viewModel = ZephyrViewModel(repository, testScope())
+
+        viewModel.refreshMetadataIfIdle()
+
+        assertEquals(0, repository.metadataRefreshCalls)
+        assertEquals(
+            ConnectivityState.Offline,
+            assertIs<ZephyrUiState.Ready>(viewModel.state.value).connectivityStatus.state,
+        )
+        viewModel.close()
+    }
+
+    @Test
+    fun scheduledMetadataRefreshDoesNotInterruptPendingConfirmation() {
+        val repository = FakeSdkmanRepository()
+        val viewModel = ZephyrViewModel(repository, testScope())
+        viewModel.requestTransaction(SdkmanTransaction.Install("java", "21.0.5-tem"))
+
+        viewModel.refreshMetadataIfIdle()
+
+        assertEquals(0, repository.metadataRefreshCalls)
+        assertIs<SdkmanTransaction.Install>(
+            assertIs<ZephyrUiState.Ready>(viewModel.state.value).pendingTransaction,
+        )
+        viewModel.close()
+    }
+
+    @Test
     fun selfUpdateExceptionLeavesTheUiInteractiveAndReportsTheError() {
         val repository = FakeSdkmanRepository(selfUpdateFailure = IllegalStateException("connection reset"))
         val viewModel = ZephyrViewModel(repository, testScope())

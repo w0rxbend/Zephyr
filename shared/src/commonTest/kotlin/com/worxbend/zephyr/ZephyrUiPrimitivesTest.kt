@@ -25,6 +25,7 @@ import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import com.worxbend.zephyr.settings.AppSettings
+import com.worxbend.zephyr.settings.MetadataRefreshSchedule
 import com.worxbend.zephyr.settings.MotionPreference
 import com.worxbend.zephyr.settings.ThemePreference
 import com.worxbend.zephyr.settings.TextScale
@@ -160,7 +161,7 @@ class ZephyrUiPrimitivesTest {
                         onSettingsChange = { transform -> settings = transform(settings) },
                     )
                     Text(
-                        "${settings.themePreference}:${settings.uiDensity}:${settings.textScale}:${settings.motionPreference}",
+                        "${settings.themePreference}:${settings.uiDensity}:${settings.textScale}:${settings.motionPreference}:${settings.metadataRefreshSchedule}",
                         modifier = Modifier.testTag("appearance-settings"),
                     )
                 }
@@ -171,9 +172,10 @@ class ZephyrUiPrimitivesTest {
         onNodeWithText("Comfortable").performClick()
         onNodeWithText("150%").performClick()
         onNodeWithText("Reduced").performClick()
+        onNodeWithText("Every 6 hours").performClick()
 
         onNodeWithTag("appearance-settings").assertTextEquals(
-            "${ThemePreference.Dark}:${UiDensity.Comfortable}:${TextScale.Percent150}:${MotionPreference.Reduced}",
+            "${ThemePreference.Dark}:${UiDensity.Comfortable}:${TextScale.Percent150}:${MotionPreference.Reduced}:${MetadataRefreshSchedule.EverySixHours}",
         )
     }
 

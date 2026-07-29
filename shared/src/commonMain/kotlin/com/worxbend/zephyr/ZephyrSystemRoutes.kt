@@ -48,6 +48,7 @@ import com.worxbend.zephyr.data.formatLocalTimestamp
 import com.worxbend.zephyr.data.SdkmanRcDocument
 import com.worxbend.zephyr.data.createProjectToolchainService
 import com.worxbend.zephyr.settings.AppSettings
+import com.worxbend.zephyr.settings.MetadataRefreshSchedule
 import com.worxbend.zephyr.settings.MotionPreference
 import com.worxbend.zephyr.settings.ThemePreference
 import com.worxbend.zephyr.settings.TextScale
@@ -1446,6 +1447,24 @@ internal fun SettingsScreen(
                         label = "Reset width",
                         onClick = { onSettingsChange { it.copy(navigationWidthDp = 0) } },
                         enabled = settings.navigationWidthDp != 0,
+                    )
+                }
+            }
+        }
+        ZephyrPanel(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(metrics.panelPadding)) {
+                PanelHeading("Automation", "Opt-in background metadata maintenance")
+                ZephyrSettingsRow(
+                    title = "Metadata refresh",
+                    description = "Refresh the SDKMAN catalog only while Zephyr is open and idle.",
+                ) {
+                    ZephyrSegmentedControl(
+                        options = MetadataRefreshSchedule.entries,
+                        selected = settings.metadataRefreshSchedule,
+                        label = MetadataRefreshSchedule::label,
+                        onSelected = { selected ->
+                            onSettingsChange { it.copy(metadataRefreshSchedule = selected) }
+                        },
                     )
                 }
             }
