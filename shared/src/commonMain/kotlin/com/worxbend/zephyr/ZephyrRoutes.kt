@@ -38,6 +38,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.worxbend.zephyr.data.createClipboardService
@@ -127,6 +131,7 @@ internal fun Content(
                 reviewDueVersions = settings.reviewDueLocalOnly(currentEpochMillis()),
                 onNavigate = viewModel::navigate,
                 onScan = viewModel::scanLocalOnly,
+                onRetryFailed = viewModel::retryFailedLocalOnlyReads,
                 onClean = onClean,
             )
             ZephyrRoute.Storage -> StorageCenterScreen(state, viewModel)
@@ -140,6 +145,7 @@ internal fun Content(
             ZephyrRoute.Comparison -> CandidateComparisonScreen(state, viewModel)
             ZephyrRoute.Diagnostics -> DiagnosticsScreen(
                 state,
+                viewModel::refreshConnectivity,
                 viewModel::refreshIntegrity,
                 viewModel::exportDiagnostics,
             )
@@ -936,8 +942,10 @@ private fun LocalOnlyScreen(
     reviewDueVersions: Set<ProtectedVersion>,
     onNavigate: (ZephyrRoute) -> Unit,
     onScan: () -> Unit,
+    onRetryFailed: () -> Unit,
     onClean: (String, List<String>) -> Unit,
 ) {
+    val progress = state.localOnlyScanProgress
     val items = state.candidates.filter { it.hasLocalOnlyVersions }
     val versionCount = items.sumOf { it.localOnlyVersionCount }
     val reviewDueCount = reviewDueVersions.count { target ->
@@ -976,6 +984,66 @@ private fun LocalOnlyScreen(
                 ZephyrToolbarButton("Scan again", onClick = onScan)
             }
         }
+        progress?.let { scan ->
+            val progressDescription = buildString {
+                append("Local-only audit ${scan.completed} of ${scan.total} completed.")
+                if (scan.activeCandidates.isNotEmpty()) {
+                    append(" Active: ${scan.activeCandidates.joinToString()}.")
+                }
+                append(" ${scan.trustedFindings.sumOf { it.localOnlyVersionCount }} trusted partial findings.")
+                append(" ${scan.failures.size} failures.")
+            }
+            ZephyrPanel(
+                Modifier
+                    .fillMaxWidth()
+                    .semantics {
+                        contentDescription = progressDescription
+                        liveRegion = LiveRegionMode.Polite
+                    },
+            ) {
+                Column(
+                    Modifier.fillMaxWidth().padding(LocalZephyrMetrics.current.panelPadding),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        if (scan.running) ZephyrProgressIndicator(compact = true)
+                        Text(
+                            "${scan.completed}/${scan.total} candidate reads completed",
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        if (scan.activeCandidates.isNotEmpty()) {
+                            Text(
+                                "Active: ${scan.activeCandidates.joinToString()}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    Text(
+                        "${scan.trustedFindings.sumOf { it.localOnlyVersionCount }} trusted local-only finding(s) published so far.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    if (scan.failures.isNotEmpty()) {
+                        Text(
+                            scan.failures.joinToString(prefix = "Failed reads: ", separator = "; ") {
+                                "${it.candidate}: ${it.message}"
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                        if (!scan.running) {
+                            OutlinedButton(onClick = onRetryFailed) {
+                                Text("Retry failed reads")
+                            }
+                        }
+                    }
+                }
+            }
+        }
         if (items.isEmpty()) {
             EmptyState("No Local-Only Versions", "Run Scan whenever SDKMAN metadata changes.", "Run scan", onScan)
         } else {
@@ -983,6 +1051,10 @@ private fun LocalOnlyScreen(
                 candidates = items,
                 protectedVersions = state.protectedVersions,
                 reviewDueVersions = reviewDueVersions,
+                cleanupEligibleCandidates = progress
+                    ?.trustedFindings
+                    .orEmpty()
+                    .mapTo(mutableSetOf(), Candidate::name),
                 onOpen = { candidate ->
                     onNavigate(if (candidate.kind == CandidateKind.Jdk) ZephyrRoute.JdkDetail(candidate.name) else ZephyrRoute.SdkDetail(candidate.name))
                 },

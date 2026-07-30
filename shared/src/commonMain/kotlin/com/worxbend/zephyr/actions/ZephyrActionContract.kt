@@ -6,6 +6,7 @@ object ZephyrActionIds {
     const val RefreshInstalled = "zephyr.read.refresh-installed"
     const val ScanLocalOnly = "zephyr.read.scan-local-only"
     const val RefreshConnectivity = "zephyr.read.refresh-connectivity"
+    const val RunDiagnostics = "zephyr.read.run-connection-diagnostics"
     const val RefreshMetadata = "zephyr.review.refresh-metadata"
     const val CheckSdkmanUpdates = "zephyr.review.check-sdkman-updates"
 }
@@ -28,6 +29,7 @@ val ZEPHYR_ACTIONS: List<ZephyrActionDescriptor> = listOf(
     ZephyrActionDescriptor(ZephyrActionIds.RefreshInstalled, "Refresh installed state", "Reload local SDKMAN candidates.", false),
     ZephyrActionDescriptor(ZephyrActionIds.ScanLocalOnly, "Scan local-only versions", "Compare local versions with SDKMAN metadata.", false),
     ZephyrActionDescriptor(ZephyrActionIds.RefreshConnectivity, "Check connectivity", "Refresh SDKMAN service reachability.", false),
+    ZephyrActionDescriptor(ZephyrActionIds.RunDiagnostics, "Run connection diagnostics", "Run a read-only route-aware SDKMAN connection diagnostic.", false),
     ZephyrActionDescriptor(ZephyrActionIds.RefreshMetadata, "Refresh metadata", "Open review for an SDKMAN metadata update.", true),
     ZephyrActionDescriptor(ZephyrActionIds.CheckSdkmanUpdates, "Check SDKMAN updates", "Open review for SDKMAN self-update.", true),
 )

@@ -9,6 +9,7 @@ Stable IDs:
 - `zephyr.read.refresh-installed`
 - `zephyr.read.scan-local-only`
 - `zephyr.read.refresh-connectivity`
+- `zephyr.read.run-connection-diagnostics`
 - `zephyr.review.refresh-metadata`
 - `zephyr.review.check-sdkman-updates`
 

@@ -52,7 +52,12 @@ private fun DiagnosticsSnapshot.toSupportText(): String = buildString {
     appendLine("Version: ${sdkmanStatus.cliVersion ?: "unknown"}")
     appendLine("Home: <redacted-path>")
     appendLine("Connectivity: ${connectivityStatus.state.label}")
-    appendLine("Connectivity detail: ${connectivityStatus.detail ?: "unavailable"}")
+    connectivityStatus.diagnostic?.let { diagnostic ->
+        appendLine("Connectivity route: ${diagnostic.route.label}")
+        appendLine("Connectivity outcome: ${diagnostic.outcome.label}")
+        appendLine("Connectivity latency: ${diagnostic.latencyMillis} ms")
+        appendLine("Connectivity checked: ${formatLocalTimestamp(diagnostic.checkedAtEpochMillis)}")
+    }
     appendLine("Installed candidates: $installedCandidates")
     appendLine("Installed versions: $installedVersions")
     appendLine("Local-only versions: $localOnlyVersions")

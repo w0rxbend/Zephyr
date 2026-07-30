@@ -59,6 +59,15 @@ fun SdkmanTransaction.recoveryGuidance(): RecoveryGuidance =
             ),
             actions = listOf(RecoveryAction.RefreshInstalled, RecoveryAction.OpenDiagnostics),
         )
+        is SdkmanTransaction.UpdateActivation -> RecoveryGuidance(
+            title = "The stable update activation was incomplete",
+            steps = listOf(
+                "Keep successful installs and default changes in place.",
+                "Return to Update Center after local state refreshes.",
+                "Review only the stable targets that still need action.",
+            ),
+            actions = listOf(RecoveryAction.RefreshInstalled, RecoveryAction.OpenDiagnostics),
+        )
         is SdkmanTransaction.Uninstall -> RecoveryGuidance(
             title = "The installed version was not removed",
             steps = listOf(

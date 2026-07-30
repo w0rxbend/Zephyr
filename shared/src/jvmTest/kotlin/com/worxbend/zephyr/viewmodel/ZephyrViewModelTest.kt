@@ -15,6 +15,9 @@ import com.worxbend.zephyr.domain.BatchItemStatus
 import com.worxbend.zephyr.domain.CommandOutcome
 import com.worxbend.zephyr.domain.ConnectivityState
 import com.worxbend.zephyr.domain.ConnectivityStatus
+import com.worxbend.zephyr.domain.ConnectivityDiagnostic
+import com.worxbend.zephyr.domain.ConnectivityOutcome
+import com.worxbend.zephyr.domain.ConnectivityRouteKind
 import com.worxbend.zephyr.domain.DiskImpactEstimate
 import com.worxbend.zephyr.domain.DiskImpactKind
 import com.worxbend.zephyr.domain.DiagnosticsSnapshot
@@ -36,6 +39,7 @@ import com.worxbend.zephyr.domain.SdkmanStatus
 import com.worxbend.zephyr.domain.SdkmanTransaction
 import com.worxbend.zephyr.domain.SupportBundleExportResult
 import com.worxbend.zephyr.domain.UninstallTarget
+import com.worxbend.zephyr.domain.UpdateActivationTarget
 import com.worxbend.zephyr.domain.ActivityAction
 import com.worxbend.zephyr.domain.ActivityEvent
 import com.worxbend.zephyr.domain.ActivitySeverity
@@ -43,6 +47,7 @@ import com.worxbend.zephyr.domain.StorageInventory
 import com.worxbend.zephyr.domain.StorageMeasurement
 import com.worxbend.zephyr.domain.VersionStorage
 import com.worxbend.zephyr.domain.RemoteAvailability
+import com.worxbend.zephyr.domain.RemoteEvidenceState
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.filterIsInstance
@@ -166,7 +171,7 @@ class ZephyrViewModelTest {
         )
         val repository = FakeSdkmanRepository(
             cachedCatalog = CandidateMetadataCache(123_456L, listOf(cachedItem)),
-            connectivity = ConnectivityStatus(ConnectivityState.Offline),
+            connectivity = testConnectivity(ConnectivityOutcome.Service),
         )
         val viewModel = ZephyrViewModel(repository, testScope())
 
@@ -250,7 +255,7 @@ class ZephyrViewModelTest {
     @Test
     fun scheduledMetadataRefreshSkipsOfflineState() {
         val repository = FakeSdkmanRepository(
-            connectivity = ConnectivityStatus(ConnectivityState.Offline, detail = "offline"),
+            connectivity = testConnectivity(ConnectivityOutcome.Service),
         )
         val viewModel = ZephyrViewModel(repository, testScope())
 
@@ -362,6 +367,56 @@ class ZephyrViewModelTest {
         }
 
         assertEquals("java", state.selectedCandidate?.name)
+        viewModel.close()
+    }
+
+    @Test
+    fun activeLocalOnlyAuditRejectsMutationReviewAndPerformsNoMutation() = runBlocking {
+        val scanStarted = CompletableDeferred<Unit>()
+        val scanGate = CompletableDeferred<Unit>()
+        val java = remoteCandidate("java", CandidateKind.Jdk)
+        val repository = FakeSdkmanRepository(
+            installedCandidate = java,
+            remoteDetail = java,
+            refreshStarted = scanStarted,
+            refreshGate = scanGate,
+        )
+        val viewModel = ZephyrViewModel(repository, Dispatchers.Default)
+        withTimeout(1_000) { viewModel.state.filterIsInstance<ZephyrUiState.Ready>().first() }
+
+        viewModel.scanLocalOnly()
+        withTimeout(1_000) { scanStarted.await() }
+        viewModel.requestTransaction(SdkmanTransaction.SetDefault("java", "21-tem"))
+
+        val scanning = assertIs<ZephyrUiState.Ready>(viewModel.state.value)
+        assertEquals(null, scanning.pendingTransaction)
+        assertTrue(repository.mutationCalls.isEmpty())
+
+        scanGate.complete(Unit)
+        withTimeout(1_000) {
+            viewModel.state.filterIsInstance<ZephyrUiState.Ready>().first { !it.localOnlyScanInProgress }
+        }
+        assertTrue(repository.mutationCalls.isEmpty())
+        viewModel.close()
+    }
+
+    @Test
+    fun pendingTransactionReviewPreventsLocalOnlyAuditFromStarting() {
+        val java = remoteCandidate("java", CandidateKind.Jdk)
+        val repository = FakeSdkmanRepository(installedCandidate = java, remoteDetail = java)
+        val viewModel = ZephyrViewModel(repository, testScope())
+        val transaction = SdkmanTransaction.SetDefault("java", "21-tem")
+
+        viewModel.requestTransaction(transaction)
+        viewModel.scanLocalOnly()
+
+        val reviewing = assertIs<ZephyrUiState.Ready>(viewModel.state.value)
+        assertEquals(transaction, reviewing.pendingTransaction)
+        assertEquals(1, repository.installedCandidatesCalls)
+        assertTrue(repository.mutationCalls.isEmpty())
+
+        viewModel.confirmTransaction()
+        assertEquals(listOf("default:java:21-tem"), repository.mutationCalls)
         viewModel.close()
     }
 
@@ -521,6 +576,148 @@ class ZephyrViewModelTest {
     }
 
     @Test
+    fun stableUpdateSkipsOnlyDefaultWhoseInstallFailedAndContinuesUnrelatedTargets() {
+        val repository = FakeSdkmanRepository(
+            installOutcomes = mapOf(
+                ("gradle" to "8.14") to CommandOutcome(false, "Download failed"),
+                ("kotlin" to "2.2.0") to CommandOutcome(true, "Installed"),
+            ),
+        )
+        val viewModel = ZephyrViewModel(repository, testScope())
+        val transaction = SdkmanTransaction.UpdateActivation(
+            listOf(
+                UpdateActivationTarget("gradle", "8.14", true),
+                UpdateActivationTarget("kotlin", "2.2.0", true),
+            ),
+        )
+
+        viewModel.requestTransaction(transaction)
+        viewModel.confirmTransaction()
+
+        assertEquals(
+            listOf(
+                "install:gradle:8.14",
+                "install:kotlin:2.2.0",
+                "default:kotlin:2.2.0",
+            ),
+            repository.mutationCalls,
+        )
+        val ready = assertIs<ZephyrUiState.Ready>(viewModel.state.value)
+        assertEquals(
+            listOf(
+                OperationStepStatus.Failed,
+                OperationStepStatus.Succeeded,
+                OperationStepStatus.Skipped,
+                OperationStepStatus.Succeeded,
+            ),
+            ready.operationJournal.single().steps.map { it.status },
+        )
+        assertEquals(
+            listOf(
+                BatchItemStatus.Failed,
+                BatchItemStatus.Succeeded,
+                BatchItemStatus.Skipped,
+                BatchItemStatus.Succeeded,
+            ),
+            ready.updateActivationProgress.map { it.status },
+        )
+        assertTrue(repository.installedCandidatesCalls >= 2)
+        viewModel.close()
+    }
+
+    @Test
+    fun updateActivationStopsAndClearsBusyStateWhenLedgerCannotRecordAResult() {
+        val repository = FakeSdkmanRepository(
+            installedCandidate = remoteCandidate("java", CandidateKind.Jdk),
+        )
+        val operationStore = FailingOperationStore(failOnSaveCalls = setOf(3))
+        val viewModel = ZephyrViewModel(
+            repository = repository,
+            dispatcher = testScope(),
+            operationStore = operationStore,
+        )
+        viewModel.scanLocalOnly()
+        assertEquals(
+            listOf("java"),
+            assertIs<ZephyrUiState.Ready>(viewModel.state.value)
+                .localOnlyScanProgress
+                ?.failures
+                ?.map { it.candidate },
+        )
+        val transaction = SdkmanTransaction.UpdateActivation(
+            listOf(UpdateActivationTarget("gradle", "8.14", true)),
+        )
+
+        viewModel.requestTransaction(transaction)
+        viewModel.confirmTransaction()
+
+        val ready = assertIs<ZephyrUiState.Ready>(viewModel.state.value)
+        assertEquals(listOf("install:gradle:8.14"), repository.mutationCalls)
+        assertTrue(!ready.isRefreshing)
+        assertEquals(OperationStatus.Interrupted, ready.operationJournal.single().status)
+        assertEquals(OperationStepStatus.Indeterminate, ready.operationJournal.single().steps.first().status)
+        assertTrue(ready.errorMessage.orEmpty().contains("execution stopped"))
+        assertEquals(null, ready.localOnlyScanProgress)
+        val installedCallsAfterAbort = repository.installedCandidatesCalls
+        viewModel.retryFailedLocalOnlyReads()
+        assertEquals(installedCallsAfterAbort, repository.installedCandidatesCalls)
+        viewModel.close()
+    }
+
+    @Test
+    fun batchMutationInvalidatesFailedLocalOnlyRetrySnapshot() {
+        val java = remoteCandidate("java", CandidateKind.Jdk)
+        val repository = FakeSdkmanRepository(installedCandidate = java)
+        val viewModel = ZephyrViewModel(repository, testScope())
+
+        viewModel.scanLocalOnly()
+        val failedAudit = assertIs<ZephyrUiState.Ready>(viewModel.state.value)
+        assertEquals(listOf("java"), failedAudit.localOnlyScanProgress?.failures?.map { it.candidate })
+
+        viewModel.requestTransaction(
+            SdkmanTransaction.UpdateActivation(
+                listOf(UpdateActivationTarget("java", "21-tem", false)),
+            ),
+        )
+        viewModel.confirmTransaction()
+        val callsAfterMutation = repository.installedCandidatesCalls
+
+        val updated = assertIs<ZephyrUiState.Ready>(viewModel.state.value)
+        assertEquals(null, updated.localOnlyScanProgress)
+        viewModel.retryFailedLocalOnlyReads()
+        assertEquals(callsAfterMutation, repository.installedCandidatesCalls)
+        viewModel.close()
+    }
+
+    @Test
+    fun stableSwitchOnlyPlanWorksOfflineButMissingInstallUsesOnlinePreflight() {
+        val repository = FakeSdkmanRepository(
+            connectivity = testConnectivity(ConnectivityOutcome.Service),
+        )
+        val viewModel = ZephyrViewModel(repository, testScope())
+        val connectivityCallsAfterLoad = repository.connectivityCalls
+        val switchOnly = SdkmanTransaction.UpdateActivation(
+            listOf(UpdateActivationTarget("gradle", "8.14", false)),
+        )
+
+        viewModel.requestTransaction(switchOnly)
+        assertEquals(switchOnly, assertIs<ZephyrUiState.Ready>(viewModel.state.value).pendingTransaction)
+        assertEquals(connectivityCallsAfterLoad, repository.connectivityCalls)
+        viewModel.dismissTransaction()
+
+        viewModel.requestTransaction(
+            SdkmanTransaction.UpdateActivation(
+                listOf(UpdateActivationTarget("kotlin", "2.2.0", true)),
+            ),
+        )
+        val ready = assertIs<ZephyrUiState.Ready>(viewModel.state.value)
+        assertEquals(null, ready.pendingTransaction)
+        assertTrue(ready.errorMessage.orEmpty().contains("offline"))
+        assertEquals(connectivityCallsAfterLoad + 1, repository.connectivityCalls)
+        viewModel.close()
+    }
+
+    @Test
     fun batchUninstallRunsTargetsSequentiallyAndRetainsPerItemResults() {
         val repository = FakeSdkmanRepository()
         val viewModel = ZephyrViewModel(repository, testScope())
@@ -552,7 +749,12 @@ class ZephyrViewModelTest {
         val repository = FakeSdkmanRepository()
         val exporter = FakeOperationJournalExporter()
         var now = 1_000L
-        val viewModel = ZephyrViewModel(repository, testScope(), exporter) { now++ }
+        val viewModel = ZephyrViewModel(
+            repository = repository,
+            dispatcher = testScope(),
+            journalExporter = exporter,
+            clock = { now++ },
+        )
 
         viewModel.requestTransaction(SdkmanTransaction.SetDefault("java", "21.0.5-tem"))
         viewModel.confirmTransaction()
@@ -618,11 +820,16 @@ class ZephyrViewModelTest {
             hasLocalOnlyVersions = true,
             localOnlyVersionCount = 1,
             localOnlyVersions = listOf("17.0.1-tem"),
+            remoteEvidence = RemoteEvidenceState.LiveComplete,
         )
         val viewModel = ZephyrViewModel(
-            FakeSdkmanRepository(installedCandidate = installed),
+            FakeSdkmanRepository(
+                installedCandidate = installed,
+                remoteDetail = installed,
+            ),
             testScope(),
         )
+        viewModel.scanLocalOnly()
 
         viewModel.retryTransaction(
             SdkmanTransaction.CleanLocalOnly(
@@ -763,7 +970,7 @@ class ZephyrViewModelTest {
     @Test
     fun offlinePreflightBlocksNetworkTransactionsButAllowsLocalOnes() {
         val repository = FakeSdkmanRepository(
-            connectivity = ConnectivityStatus(ConnectivityState.Offline, detail = "offline"),
+            connectivity = testConnectivity(ConnectivityOutcome.Service),
         )
         val viewModel = ZephyrViewModel(repository, testScope())
 
@@ -779,6 +986,54 @@ class ZephyrViewModelTest {
         assertIs<SdkmanTransaction.Uninstall>(
             assertIs<ZephyrUiState.Ready>(viewModel.state.value).pendingTransaction,
         )
+        viewModel.close()
+    }
+
+    @Test
+    fun previewAdmissionRequiresTheSafeOnlineClassification() {
+        ConnectivityOutcome.entries.forEach { outcome ->
+            val repository = FakeSdkmanRepository(connectivity = testConnectivity(outcome))
+            val viewModel = ZephyrViewModel(repository, testScope())
+
+            viewModel.requestTransaction(SdkmanTransaction.Install("java", "21.0.5-tem"))
+
+            val ready = assertIs<ZephyrUiState.Ready>(viewModel.state.value)
+            assertEquals(
+                outcome == ConnectivityOutcome.Online,
+                ready.pendingTransaction != null,
+                "Unexpected preview admission for $outcome",
+            )
+            assertTrue(repository.mutationCalls.isEmpty(), "Preflight must not mutate for $outcome")
+            viewModel.close()
+        }
+    }
+
+    @Test
+    fun olderConnectivityResultCannotOverwriteNewerDiagnostic() = runBlocking {
+        val firstStarted = CompletableDeferred<Unit>()
+        val firstGate = CompletableDeferred<Unit>()
+        val repository = FakeSdkmanRepository(
+            connectivityResponses = listOf(
+                testConnectivity(ConnectivityOutcome.Service),
+                testConnectivity(ConnectivityOutcome.Online),
+            ),
+            firstConnectivityStarted = firstStarted,
+            firstConnectivityGate = firstGate,
+        )
+        val viewModel = ZephyrViewModel(repository, Dispatchers.Default)
+        withTimeout(1_000) { viewModel.state.filterIsInstance<ZephyrUiState.Ready>().first() }
+        withTimeout(1_000) { firstStarted.await() }
+
+        viewModel.refreshConnectivity()
+        firstGate.complete(Unit)
+
+        val ready = withTimeout(1_000) {
+            viewModel.state.filterIsInstance<ZephyrUiState.Ready>().first {
+                repository.connectivityCalls == 2 &&
+                    it.connectivityStatus.diagnostic?.outcome == ConnectivityOutcome.Online
+            }
+        }
+        assertEquals(ConnectivityOutcome.Online, ready.connectivityStatus.diagnostic?.outcome)
         viewModel.close()
     }
 
@@ -811,8 +1066,12 @@ private class FakeSdkmanRepository(
     private val detailGate: CompletableDeferred<Unit>? = null,
     private val detailCompleted: CompletableDeferred<Unit>? = null,
     private val installOutcome: CommandOutcome = CommandOutcome(true, "Installed"),
+    private val installOutcomes: Map<Pair<String, String>, CommandOutcome> = emptyMap(),
     private val installFailure: Throwable? = null,
-    private var connectivity: ConnectivityStatus = ConnectivityStatus(ConnectivityState.Online),
+    private var connectivity: ConnectivityStatus = testConnectivity(),
+    private val connectivityResponses: List<ConnectivityStatus> = emptyList(),
+    private val firstConnectivityStarted: CompletableDeferred<Unit>? = null,
+    private val firstConnectivityGate: CompletableDeferred<Unit>? = null,
     private val commandSatisfaction: Map<PlannedSdkmanCommand, CommandSatisfaction> = emptyMap(),
     private val storageInventory: StorageInventory = StorageInventory.Empty,
 ) : SdkmanRepository {
@@ -824,6 +1083,8 @@ private class FakeSdkmanRepository(
     var metadataRefreshCalls: Int = 0
         private set
     val mutationCalls = mutableListOf<String>()
+    var connectivityCalls: Int = 0
+        private set
     var storageInventoryCalls: Int = 0
         private set
     private val protected = mutableSetOf<ProtectedVersion>()
@@ -866,7 +1127,14 @@ private class FakeSdkmanRepository(
         return remoteDetail?.takeIf { it.name == candidate }
     }
 
-    override suspend fun checkConnectivity(): ConnectivityStatus = connectivity
+    override suspend fun checkConnectivity(): ConnectivityStatus {
+        connectivityCalls += 1
+        if (connectivityCalls == 1) {
+            firstConnectivityStarted?.complete(Unit)
+            firstConnectivityGate?.await()
+        }
+        return connectivityResponses.getOrNull(connectivityCalls - 1) ?: connectivity
+    }
 
     override suspend fun integrityChecks(): List<IntegrityCheck> =
         listOf(
@@ -916,7 +1184,7 @@ private class FakeSdkmanRepository(
     override suspend fun install(candidate: String, version: String): CommandOutcome {
         mutationCalls += "install:$candidate:$version"
         installFailure?.let { throw it }
-        return installOutcome
+        return installOutcomes[candidate to version] ?: installOutcome
     }
 
     override suspend fun uninstall(candidate: String, version: String): CommandOutcome {
@@ -952,6 +1220,21 @@ private class InMemoryOperationStore(
     }
 }
 
+private class FailingOperationStore(
+    private val failOnSaveCalls: Set<Int>,
+) : OperationStore {
+    private var entries: List<OperationJournalEntry> = emptyList()
+    private var saveCalls = 0
+
+    override suspend fun load(): List<OperationJournalEntry> = entries
+
+    override suspend fun save(entries: List<OperationJournalEntry>) {
+        saveCalls += 1
+        if (saveCalls in failOnSaveCalls) error("ledger unavailable")
+        this.entries = entries
+    }
+}
+
 private class InMemoryActivityStore(
     initial: List<ActivityEvent> = emptyList(),
 ) : ActivityStore {
@@ -982,3 +1265,16 @@ private class FakeDiagnosticsExporter : DiagnosticsExporter {
         return SupportBundleExportResult("/tmp/zephyr-support.txt")
     }
 }
+
+private fun testConnectivity(
+    outcome: ConnectivityOutcome = ConnectivityOutcome.Online,
+    route: ConnectivityRouteKind = ConnectivityRouteKind.Direct,
+): ConnectivityStatus =
+    ConnectivityStatus.from(
+        ConnectivityDiagnostic(
+            route = route,
+            checkedAtEpochMillis = 1_000,
+            latencyMillis = 12,
+            outcome = outcome,
+        ),
+    )

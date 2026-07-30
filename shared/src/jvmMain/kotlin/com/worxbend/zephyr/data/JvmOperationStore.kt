@@ -9,6 +9,7 @@ import com.worxbend.zephyr.domain.PlannedSdkmanCommand
 import com.worxbend.zephyr.domain.SdkmanCommandAction
 import com.worxbend.zephyr.domain.SdkmanTransaction
 import com.worxbend.zephyr.domain.UninstallTarget
+import com.worxbend.zephyr.domain.UpdateActivationTarget
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 import java.nio.charset.StandardCharsets
@@ -171,6 +172,7 @@ private fun SdkmanTransaction.persistenceKind(): String =
         is SdkmanTransaction.SnapshotRestore -> "snapshot-restore"
         is SdkmanTransaction.ToolchainActivation ->
             "profile-activation:${encodeField(profileName.trim().take(MAX_PERSISTED_PROFILE_NAME_LENGTH))}"
+        is SdkmanTransaction.UpdateActivation -> "update-activation"
         is SdkmanTransaction.Uninstall -> "uninstall"
         is SdkmanTransaction.BatchUninstall -> "batch-uninstall"
         is SdkmanTransaction.SetDefault -> "set-default"
@@ -194,6 +196,23 @@ private fun transactionFromStored(
                 },
             )
             "snapshot-restore" -> SdkmanTransaction.SnapshotRestore(commands)
+            "update-activation" -> {
+                val installs = commands
+                    .filter { it.action == SdkmanCommandAction.Install }
+                    .map { requireNotNull(it.candidate) to requireNotNull(it.version) }
+                    .toSet()
+                SdkmanTransaction.UpdateActivation(
+                    commands
+                        .filter { it.action == SdkmanCommandAction.SetDefault }
+                        .map {
+                            UpdateActivationTarget(
+                                requireNotNull(it.candidate),
+                                requireNotNull(it.version),
+                                (it.candidate to it.version) in installs,
+                            )
+                        },
+                )
+            }
             "uninstall" -> commands.single().let {
                 SdkmanTransaction.Uninstall(requireNotNull(it.candidate), requireNotNull(it.version))
             }

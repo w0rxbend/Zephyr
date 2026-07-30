@@ -5,6 +5,7 @@ enum class BatchItemStatus(val label: String) {
     Running("Running"),
     Succeeded("Succeeded"),
     Failed("Failed"),
+    Skipped("Skipped"),
 }
 
 data class BatchInstallProgress(

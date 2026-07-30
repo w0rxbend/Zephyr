@@ -43,7 +43,8 @@ fun OperationJournalEntry.resumableCommands(): List<PlannedSdkmanCommand> =
         .filter {
             it.status == OperationStepStatus.Pending ||
                 it.status == OperationStepStatus.Failed ||
-                it.status == OperationStepStatus.Interrupted
+                it.status == OperationStepStatus.Interrupted ||
+                it.status == OperationStepStatus.Skipped
         }
         .sortedBy(OperationStep::index)
         .map(OperationStep::command)
@@ -69,6 +70,23 @@ fun SdkmanTransaction.withCommands(commands: List<PlannedSdkmanCommand>): Sdkman
         is SdkmanTransaction.SnapshotRestore -> SdkmanTransaction.SnapshotRestore(commands)
         is SdkmanTransaction.ToolchainActivation ->
             SdkmanTransaction.ToolchainActivation(profileName, commands)
+        is SdkmanTransaction.UpdateActivation -> {
+            val installs = commands
+                .filter { it.action == SdkmanCommandAction.Install }
+                .map { requireNotNull(it.candidate) to requireNotNull(it.version) }
+                .toSet()
+            commands
+                .filter { it.action == SdkmanCommandAction.SetDefault }
+                .map {
+                    UpdateActivationTarget(
+                        requireNotNull(it.candidate),
+                        requireNotNull(it.version),
+                        (it.candidate to it.version) in installs,
+                    )
+                }
+                .takeIf(List<UpdateActivationTarget>::isNotEmpty)
+                ?.let(SdkmanTransaction::UpdateActivation)
+        }
         is SdkmanTransaction.Uninstall -> commands.singleOrNull()?.toSingleTransaction()
         is SdkmanTransaction.BatchUninstall -> commands
             .mapNotNull { command ->

@@ -4,6 +4,9 @@ import com.worxbend.zephyr.domain.DiskImpactKind
 import com.worxbend.zephyr.domain.EstimateConfidence
 import com.worxbend.zephyr.domain.ProtectedVersion
 import com.worxbend.zephyr.domain.ConnectivityState
+import com.worxbend.zephyr.domain.ConnectivityDiagnostic
+import com.worxbend.zephyr.domain.ConnectivityOutcome
+import com.worxbend.zephyr.domain.ConnectivityRouteKind
 import com.worxbend.zephyr.domain.CommandOutcomeStatus
 import com.worxbend.zephyr.domain.IntegrityCheckId
 import com.worxbend.zephyr.domain.IntegrityStatus
@@ -23,6 +26,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 
 class JvmSdkmanRepositoryTest {
@@ -313,22 +317,59 @@ class JvmSdkmanRepositoryTest {
     }
 
     @Test
-    fun reportsSdkmanEndpointReachabilityWithoutRunningACommand() = runBlocking {
-        val runner = RecordingRunner()
-        val online = JvmSdkmanRepository(
+    fun connectivityDiagnosticUsesTheReadOnlyRunnerBoundaryWithoutMutations() = runBlocking {
+        val runner = object : SdkmanCommandRunner {
+            val commands = mutableListOf<SdkmanCommand>()
+
+            override suspend fun run(
+                command: SdkmanCommand,
+                timeout: kotlin.time.Duration,
+            ): SdkmanCommandResult {
+                commands += command
+                error("Connectivity diagnostics must not invoke a normal SDKMAN command.")
+            }
+
+            override suspend fun diagnoseConnectivity(timeout: kotlin.time.Duration): ConnectivityDiagnostic =
+                ConnectivityDiagnostic(
+                    route = ConnectivityRouteKind.Proxy,
+                    checkedAtEpochMillis = 321,
+                    latencyMillis = 17,
+                    outcome = ConnectivityOutcome.Online,
+                )
+        }
+        val repository = JvmSdkmanRepository(
             fileSystem = FileSystem.SYSTEM,
-            connectivityProbe = { true },
-            commandRunnerFactory = { runner },
-        )
-        val offline = JvmSdkmanRepository(
-            fileSystem = FileSystem.SYSTEM,
-            connectivityProbe = { false },
             commandRunnerFactory = { runner },
         )
 
-        assertEquals(ConnectivityState.Online, online.checkConnectivity().state)
-        assertEquals(ConnectivityState.Offline, offline.checkConnectivity().state)
+        val status = repository.checkConnectivity()
+
+        assertEquals(ConnectivityState.Online, status.state)
+        assertEquals(ConnectivityRouteKind.Proxy, status.diagnostic?.route)
+        assertEquals(17, status.diagnostic?.latencyMillis)
         assertTrue(runner.commands.isEmpty())
+    }
+
+    @Test
+    fun connectivityCancellationPropagates() = runBlocking {
+        val runner = object : SdkmanCommandRunner {
+            override suspend fun run(
+                command: SdkmanCommand,
+                timeout: kotlin.time.Duration,
+            ) = error("No normal command expected.")
+
+            override suspend fun diagnoseConnectivity(timeout: kotlin.time.Duration): ConnectivityDiagnostic =
+                throw CancellationException("cancel diagnostic")
+        }
+        val repository = JvmSdkmanRepository(
+            fileSystem = FileSystem.SYSTEM,
+            commandRunnerFactory = { runner },
+        )
+
+        assertFailsWith<CancellationException> {
+            repository.checkConnectivity()
+        }
+        Unit
     }
 
     @Test

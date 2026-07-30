@@ -38,6 +38,7 @@ internal fun CandidateGrid(
     candidates: List<Candidate>,
     protectedVersions: Set<ProtectedVersion> = emptySet(),
     reviewDueVersions: Set<ProtectedVersion> = emptySet(),
+    cleanupEligibleCandidates: Set<String>? = null,
     onOpen: (Candidate) -> Unit,
     onClean: (String, List<String>) -> Unit,
 ) {
@@ -58,6 +59,7 @@ internal fun CandidateGrid(
                 candidate = candidate,
                 protectedLocalOnlyCount = protectedLocalOnly.size,
                 reviewDueCount = reviewDueCount,
+                cleanupEvidenceTrusted = cleanupEligibleCandidates == null || candidate.name in cleanupEligibleCandidates,
                 onClick = { onOpen(candidate) },
                 onClean = {
                     onClean(candidate.name, candidate.localOnlyVersions - protectedLocalOnly.toSet())
@@ -176,12 +178,13 @@ internal fun CandidateCard(
     candidate: Candidate,
     protectedLocalOnlyCount: Int,
     reviewDueCount: Int = 0,
+    cleanupEvidenceTrusted: Boolean = true,
     onClick: () -> Unit,
     onClean: () -> Unit,
 ) {
     val metrics = LocalZephyrMetrics.current
     val clipboard = remember { createClipboardService() }
-    val cleanable = candidate.localOnlyVersionCount > protectedLocalOnlyCount
+    val cleanable = cleanupEvidenceTrusted && candidate.localOnlyVersionCount > protectedLocalOnlyCount
     ContextActionArea(
         actions = buildList {
             add(ContextAction("Inspect") { onClick() })
@@ -221,9 +224,15 @@ internal fun CandidateCard(
                             OutlinedButton(onClick = onClean, modifier = Modifier.height(34.dp)) {
                                 Text("Clean unprotected", style = MaterialTheme.typography.labelLarge)
                             }
-                        } else {
+                        } else if (cleanupEvidenceTrusted) {
                             Text(
                                 "All local-only versions are protected",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        } else {
+                            Text(
+                                "Cleanup requires a completed trusted read",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )

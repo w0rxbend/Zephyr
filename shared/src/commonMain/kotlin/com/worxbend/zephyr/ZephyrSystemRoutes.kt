@@ -36,6 +36,7 @@ import com.worxbend.zephyr.domain.ConnectivityState
 import com.worxbend.zephyr.domain.IntegrityCheck
 import com.worxbend.zephyr.domain.IntegrityStatus
 import com.worxbend.zephyr.domain.InstallTarget
+import com.worxbend.zephyr.domain.UpdateActivationTarget
 import com.worxbend.zephyr.domain.OperationJournalEntry
 import com.worxbend.zephyr.domain.OperationStatus
 import com.worxbend.zephyr.domain.RecoveryAction
@@ -334,7 +335,7 @@ internal fun UpdateCenterScreen(
             Column(Modifier.weight(1f)) {
                 PageTitle(
                     "Update Center",
-                    "Stable SDKMAN targets that are not installed in your current toolchain.",
+                    "Stable SDKMAN targets that still need installation or default activation.",
                 )
             }
             ZephyrToolbarButton(
@@ -374,7 +375,7 @@ internal fun UpdateCenterScreen(
             updates.isEmpty() -> {
                 EmptyState(
                     "Toolchain is current",
-                    "Every installed candidate with a stable catalog target already has that version installed.",
+                    "Every installed candidate with a stable catalog target has that version installed and active as the SDKMAN default.",
                     "Browse SDKs",
                 ) {
                     viewModel.navigate(ZephyrRoute.BrowseSdks)
@@ -393,7 +394,9 @@ internal fun UpdateCenterScreen(
                         },
                     )
                     Text(
-                        "${selected.size} selected • ${updates.size} update(s)",
+                        "${selected.size} selected • " +
+                            "${updates.count { it.state == StableTargetState.Missing }} install(s) • " +
+                            "${updates.count { it.state == StableTargetState.InstalledInactive }} activation(s)",
                         modifier = Modifier.weight(1f),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -403,22 +406,28 @@ internal fun UpdateCenterScreen(
                         onClick = {
                             val targets = updates
                                 .filter { "${it.candidate}:${it.targetVersion}" in selected }
-                                .map { InstallTarget(it.candidate, it.targetVersion) }
+                                .map {
+                                    UpdateActivationTarget(
+                                        it.candidate,
+                                        it.targetVersion,
+                                        requiresInstall = it.state == StableTargetState.Missing,
+                                    )
+                                }
                             if (targets.isNotEmpty()) {
-                                viewModel.requestTransaction(SdkmanTransaction.BatchInstall(targets))
+                                viewModel.requestTransaction(SdkmanTransaction.UpdateActivation(targets))
                             }
                         },
                         enabled = selected.isNotEmpty(),
                     )
                 }
-                if (state.batchInstallProgress.isNotEmpty()) {
+                if (state.updateActivationProgress.isNotEmpty()) {
                     ZephyrPanel(Modifier.fillMaxWidth()) {
                         Column(
                             modifier = Modifier.fillMaxWidth().padding(metrics.panelPadding),
                             verticalArrangement = Arrangement.spacedBy(7.dp),
                         ) {
-                            PanelHeading("Batch progress", "Sequential install results")
-                            state.batchInstallProgress.forEach { item ->
+                            PanelHeading("Update progress", "Sequential install and activation results")
+                            state.updateActivationProgress.forEach { item ->
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -427,11 +436,12 @@ internal fun UpdateCenterScreen(
                                     Badge(item.status.label, when (item.status) {
                                         BatchItemStatus.Succeeded -> BadgeTone.Success
                                         BatchItemStatus.Failed -> BadgeTone.Error
+                                        BatchItemStatus.Skipped -> BadgeTone.Warning
                                         BatchItemStatus.Running -> BadgeTone.Primary
                                         BatchItemStatus.Pending -> BadgeTone.Neutral
                                     })
                                     Text(
-                                        "${item.target.candidate} ${item.target.version}",
+                                        "${item.command.action.label}: ${item.command.candidate} ${item.command.version}",
                                         modifier = Modifier.weight(1f),
                                     )
                                     item.outcome?.let {
@@ -485,6 +495,14 @@ internal fun UpdateCenterScreen(
                                         FlowRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                                             Badge("SDKMAN key: ${update.candidate}")
                                             Badge("Stable target", BadgeTone.Success)
+                                            Badge(
+                                                update.state.label,
+                                                if (update.state == StableTargetState.Missing) {
+                                                    BadgeTone.Warning
+                                                } else {
+                                                    BadgeTone.Primary
+                                                },
+                                            )
                                         }
                                     }
                                     ZephyrToolbarButton(
@@ -515,9 +533,15 @@ internal fun UpdateCenterScreen(
                                         label = "Review update",
                                         onClick = {
                                             viewModel.requestTransaction(
-                                                SdkmanTransaction.Install(
-                                                    update.candidate,
-                                                    update.targetVersion,
+                                                SdkmanTransaction.UpdateActivation(
+                                                    listOf(
+                                                        UpdateActivationTarget(
+                                                            update.candidate,
+                                                            update.targetVersion,
+                                                            requiresInstall =
+                                                                update.state == StableTargetState.Missing,
+                                                        ),
+                                                    ),
                                                 ),
                                             )
                                         },
@@ -1756,6 +1780,7 @@ private fun batchStatusTone(status: BatchItemStatus): BadgeTone =
     when (status) {
         BatchItemStatus.Succeeded -> BadgeTone.Success
         BatchItemStatus.Failed -> BadgeTone.Error
+        BatchItemStatus.Skipped -> BadgeTone.Warning
         BatchItemStatus.Running -> BadgeTone.Primary
         BatchItemStatus.Pending -> BadgeTone.Neutral
     }
@@ -1763,6 +1788,7 @@ private fun batchStatusTone(status: BatchItemStatus): BadgeTone =
 @Composable
 internal fun DiagnosticsScreen(
     state: ZephyrUiState.Ready,
+    onRunConnectionDiagnostics: () -> Unit,
     onRefreshIntegrity: () -> Unit,
     onExportDiagnostics: () -> Unit,
 ) {
@@ -1781,6 +1807,11 @@ internal fun DiagnosticsScreen(
                     PageTitle("Diagnostics", "Inspect the SDKMAN integration without changing your environment.")
                 }
                 ZephyrToolbarButton(
+                    label = if (state.connectivityStatus.state == ConnectivityState.Checking) "Checking…" else "Run connection diagnostic",
+                    onClick = onRunConnectionDiagnostics,
+                    enabled = state.connectivityStatus.state != ConnectivityState.Checking,
+                )
+                ZephyrToolbarButton(
                     label = if (state.diagnosticsExportInProgress) "Exporting…" else "Export support bundle",
                     onClick = onExportDiagnostics,
                     enabled = !state.diagnosticsExportInProgress,
@@ -1798,6 +1829,20 @@ internal fun DiagnosticsScreen(
                         state.connectivityStatus.state.label,
                         state.connectivityStatus.state == ConnectivityState.Online,
                     )
+                    state.connectivityStatus.diagnostic?.let { diagnostic ->
+                        DiagnosticRow("Connection route", diagnostic.route.label, true)
+                        DiagnosticRow(
+                            "Last result",
+                            diagnostic.outcome.label,
+                            diagnostic.outcome == com.worxbend.zephyr.domain.ConnectivityOutcome.Online,
+                        )
+                        DiagnosticRow("Latency", "${diagnostic.latencyMillis} ms", true)
+                        DiagnosticRow(
+                            "Checked",
+                            formatLocalTimestamp(diagnostic.checkedAtEpochMillis),
+                            true,
+                        )
+                    }
                     DiagnosticRow("Installed candidates", state.candidates.size.toString(), true)
                     DiagnosticRow(
                         "Persisted default JDK",

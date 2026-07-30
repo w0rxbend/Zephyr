@@ -110,6 +110,36 @@ sealed interface SdkmanTransaction {
         override val destructive = false
     }
 
+    data class UpdateActivation(
+        val targets: List<UpdateActivationTarget>,
+    ) : SdkmanTransaction {
+        init {
+            require(targets.isNotEmpty()) { "An update activation requires at least one target." }
+            targets.forEach { requireValidTarget(it.candidate, it.version) }
+            require(targets.distinctBy(UpdateActivationTarget::candidate).size == targets.size) {
+                "Update activation candidates must be unique."
+            }
+        }
+
+        override val title = "Activate ${targets.size} stable update(s)?"
+        override val description = if (targets.any(UpdateActivationTarget::requiresInstall)) {
+            "Zephyr will install missing stable targets first, then make every selected target the persisted SDKMAN default."
+        } else {
+            "Zephyr will make every selected installed stable target the persisted SDKMAN default. No download is required."
+        }
+        override val confirmationLabel =
+            if (targets.any(UpdateActivationTarget::requiresInstall)) "Install and activate" else "Activate selected"
+        override val destructive = false
+        override val commands =
+            targets
+                .filter(UpdateActivationTarget::requiresInstall)
+                .distinctBy { it.candidate to it.version }
+                .map { PlannedSdkmanCommand(SdkmanCommandAction.Install, it.candidate, it.version) } +
+                targets.map {
+                    PlannedSdkmanCommand(SdkmanCommandAction.SetDefault, it.candidate, it.version)
+                }
+    }
+
     data class Uninstall(
         val candidate: String,
         val version: String,
@@ -201,6 +231,12 @@ sealed interface SdkmanTransaction {
 data class InstallTarget(
     val candidate: String,
     val version: String,
+)
+
+data class UpdateActivationTarget(
+    val candidate: String,
+    val version: String,
+    val requiresInstall: Boolean,
 )
 
 data class UninstallTarget(

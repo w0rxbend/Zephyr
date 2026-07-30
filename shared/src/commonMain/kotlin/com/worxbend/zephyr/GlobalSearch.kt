@@ -183,6 +183,11 @@ private fun MutableList<GlobalSearchItem>.addActionItems() {
             ZephyrActionRequest(ZephyrActionIds.RefreshConnectivity),
         ),
         CommandDefinition(
+            "Run connection diagnostics",
+            "Diagnose the active direct or proxy SDKMAN route",
+            ZephyrActionRequest(ZephyrActionIds.RunDiagnostics),
+        ),
+        CommandDefinition(
             "Refresh SDKMAN metadata",
             "Review a remote metadata refresh",
             ZephyrActionRequest(ZephyrActionIds.RefreshMetadata),

@@ -445,7 +445,10 @@ internal fun BusyOverlay(state: ZephyrUiState.Ready) {
             }
             "Installing toolchain item ${completed + 1} of ${state.batchInstallProgress.size}"
         }
-        state.localOnlyScanInProgress -> "Scanning local-only versions"
+        state.localOnlyScanInProgress -> state.localOnlyScanProgress?.let {
+            "Scanning local-only versions: ${it.completed} of ${it.total} completed" +
+                if (it.activeCandidates.isEmpty()) "" else "; active ${it.activeCandidates.joinToString()}"
+        } ?: "Scanning local-only versions"
         state.storageScanInProgress -> "Measuring installed payloads"
         state.isCatalogLoading -> "Loading SDKMAN catalog"
         state.detailLoadingCandidate != null -> "Loading package details"

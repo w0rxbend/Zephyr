@@ -8,6 +8,7 @@ import com.worxbend.zephyr.domain.OperationStepStatus
 import com.worxbend.zephyr.domain.PlannedSdkmanCommand
 import com.worxbend.zephyr.domain.SdkmanCommandAction
 import com.worxbend.zephyr.domain.SdkmanTransaction
+import com.worxbend.zephyr.domain.UpdateActivationTarget
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -16,6 +17,29 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 
 class JvmOperationStoreTest {
+    @Test
+    fun roundTripsTypedStableUpdateActivation() = runBlocking {
+        val directory = Files.createTempDirectory("zephyr-update-task-store-")
+        try {
+            val destination = directory.resolve("tasks.ledger")
+            val transaction = SdkmanTransaction.UpdateActivation(
+                listOf(
+                    UpdateActivationTarget("gradle", "8.14", true),
+                    UpdateActivationTarget("kotlin", "2.2.0", false),
+                ),
+            )
+            val entry = OperationJournalEntry(52, transaction, 400)
+
+            JvmOperationStore(destination).also { store ->
+                store.save(listOf(entry))
+                assertEquals(entry, store.load().single())
+            }
+            Unit
+        } finally {
+            directory.toFile().deleteRecursively()
+        }
+    }
+
     @Test
     fun roundTripsProfileActivationIdentityAndTypedPlan() = runBlocking {
         val directory = Files.createTempDirectory("zephyr-profile-task-store-")

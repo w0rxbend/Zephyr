@@ -35,10 +35,7 @@ import com.worxbend.zephyr.logging.ZephyrLogger
 import okio.FileSystem
 import okio.Path
 import okio.Path.Companion.toPath
-import java.net.InetSocketAddress
-import java.net.Socket
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.CancellationException
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
@@ -46,7 +43,6 @@ class JvmSdkmanRepository(
     private val fileSystem: FileSystem,
     private val sdkmanHomeResolver: () -> Path = ::defaultSdkmanHome,
     private val protectedVersionStore: ProtectedVersionStore = InMemoryProtectedVersionStore(),
-    private val connectivityProbe: suspend () -> Boolean = ::probeSdkmanService,
     private val candidateCacheStore: CandidateMetadataCacheStore = NoOpCandidateMetadataCacheStore,
     private val commandRunnerFactory: (Path) -> SdkmanCommandRunner,
 ) : SdkmanRepository {
@@ -211,27 +207,19 @@ class JvmSdkmanRepository(
     }
 
     override suspend fun checkConnectivity(): ConnectivityStatus {
-        val checkedAt = System.currentTimeMillis()
         return try {
-            if (connectivityProbe()) {
-                ConnectivityStatus(
-                    state = ConnectivityState.Online,
-                    checkedAtEpochMillis = checkedAt,
-                    detail = "SDKMAN service is reachable.",
-                )
-            } else {
-                ConnectivityStatus(
-                    state = ConnectivityState.Offline,
-                    checkedAtEpochMillis = checkedAt,
-                    detail = "SDKMAN service is not reachable from this session.",
-                )
-            }
+            ConnectivityStatus.from(runner().diagnoseConnectivity(SDKMAN_READ_TIMEOUT))
+        } catch (exception: CancellationException) {
+            throw exception
         } catch (exception: Exception) {
-            ZephyrLogger.warn("SDKMAN connectivity check failed: ${exception.message}")
-            ConnectivityStatus(
-                state = ConnectivityState.Offline,
-                checkedAtEpochMillis = checkedAt,
-                detail = "SDKMAN service is not reachable from this session.",
+            ZephyrLogger.warn("SDKMAN connectivity diagnostic failed.")
+            ConnectivityStatus.from(
+                com.worxbend.zephyr.domain.ConnectivityDiagnostic(
+                    route = com.worxbend.zephyr.domain.ConnectivityRouteKind.Direct,
+                    checkedAtEpochMillis = System.currentTimeMillis(),
+                    latencyMillis = 0,
+                    outcome = com.worxbend.zephyr.domain.ConnectivityOutcome.Indeterminate,
+                ),
             )
         }
     }
@@ -361,6 +349,7 @@ class JvmSdkmanRepository(
             }
             is SdkmanTransaction.SnapshotRestore,
             is SdkmanTransaction.ToolchainActivation,
+            is SdkmanTransaction.UpdateActivation,
             -> {
                 val installCommands = transaction.commands.filter { it.action == SdkmanCommandAction.Install }
                 val estimates = installCommands.map { command ->
@@ -965,19 +954,10 @@ private fun integrityEntryCheck(
         },
     )
 
-private suspend fun probeSdkmanService(): Boolean = withContext(Dispatchers.IO) {
-    Socket().use { socket ->
-        socket.connect(InetSocketAddress(SDKMAN_SERVICE_HOST, HTTPS_PORT), CONNECTIVITY_TIMEOUT_MILLIS)
-    }
-    true
-}
-
 private const val MAX_DISK_ESTIMATE_ENTRIES = 1_000_000
-private const val SDKMAN_SERVICE_HOST = "api.sdkman.io"
-private const val HTTPS_PORT = 443
-private const val CONNECTIVITY_TIMEOUT_MILLIS = 1_500
 private const val COMMAND_OUTPUT_TRUNCATED_MARKER = "Command output was truncated."
 private const val MAX_INTEGRITY_DETAIL_ITEMS = 5
+private val SDKMAN_READ_TIMEOUT = 8.seconds
 private val REQUIRED_SDKMAN_SCRIPTS = listOf(
     "bin/sdkman-init.sh",
     "src/sdkman-main.sh",

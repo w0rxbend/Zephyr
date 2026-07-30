@@ -41,6 +41,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
@@ -94,6 +96,7 @@ private fun zephyrActionHandler(viewModel: ZephyrViewModel): ZephyrActionHandler
                 ZephyrActionIds.RefreshInstalled -> viewModel.refreshInstalled()
                 ZephyrActionIds.ScanLocalOnly -> viewModel.scanLocalOnly()
                 ZephyrActionIds.RefreshConnectivity -> viewModel.refreshConnectivity()
+                ZephyrActionIds.RunDiagnostics -> viewModel.refreshConnectivity()
                 ZephyrActionIds.RefreshMetadata ->
                     viewModel.requestTransaction(SdkmanTransaction.RefreshMetadata)
                 ZephyrActionIds.CheckSdkmanUpdates ->
@@ -289,6 +292,7 @@ internal fun ZephyrScreen(
                 compact = shellLayout != ShellLayout.Wide,
                 showSdkmanHome = settings.showSdkmanHome,
                 metadataRefreshSchedule = settings.metadataRefreshSchedule,
+                onRetryFailedLocalOnlyReads = viewModel::retryFailedLocalOnlyReads,
             )
         }
     }
@@ -944,6 +948,7 @@ private fun WorkbenchStatusBar(
     compact: Boolean,
     showSdkmanHome: Boolean,
     metadataRefreshSchedule: MetadataRefreshSchedule,
+    onRetryFailedLocalOnlyReads: () -> Unit,
 ) {
     val metrics = LocalZephyrMetrics.current
     val busyLabel = state.busyLabel()
@@ -959,6 +964,35 @@ private fun WorkbenchStatusBar(
         ) {
             StatusDot(if (busyLabel == null) StatusTone.Success else StatusTone.Accent)
             Text(busyLabel ?: "Ready", style = MaterialTheme.typography.labelSmall)
+            state.localOnlyScanProgress?.let { progress ->
+                val summary = "${progress.completed}/${progress.total} audited, " +
+                    "${progress.trustedFindings.sumOf { it.localOnlyVersionCount }} findings, " +
+                    "${progress.failures.size} failures"
+                Text("•", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    summary,
+                    modifier = Modifier.semantics {
+                        contentDescription = buildString {
+                            append("Local-only audit $summary.")
+                            if (progress.activeCandidates.isNotEmpty()) {
+                                append(" Active candidates: ${progress.activeCandidates.joinToString()}.")
+                            }
+                        }
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (progress.failures.isEmpty()) {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    } else {
+                        MaterialTheme.colorScheme.error
+                    },
+                    maxLines = 1,
+                )
+                if (progress.failures.isNotEmpty() && !progress.running) {
+                    TextButton(onClick = onRetryFailedLocalOnlyReads) {
+                        Text("Retry failed")
+                    }
+                }
+            }
             Text("•", color = MaterialTheme.colorScheme.onSurfaceVariant)
             StatusDot(
                 when (state.connectivityStatus.state) {
@@ -1072,7 +1106,10 @@ private fun ZephyrUiState.Ready.busyLabel(): String? =
             }
             "Installing ${completed + 1} of ${batchInstallProgress.size}"
         }
-        localOnlyScanInProgress -> "Scanning local-only versions"
+        localOnlyScanInProgress -> localOnlyScanProgress?.let {
+            "Scanning local-only ${it.completed}/${it.total}" +
+                if (it.activeCandidates.isEmpty()) "" else " (${it.activeCandidates.joinToString()})"
+        } ?: "Scanning local-only versions"
         storageScanInProgress -> "Measuring installed payloads"
         isCatalogLoading -> "Loading SDKMAN catalog"
         detailLoadingCandidate != null -> "Loading package details"

@@ -2,9 +2,31 @@ package com.worxbend.zephyr.domain
 
 import kotlin.test.Test
 import kotlin.test.assertFalse
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class ConnectivityTest {
+    @Test
+    fun routeAwareDiagnosticContainsOnlyBoundedSafeValues() {
+        val diagnostic = ConnectivityDiagnostic(
+            route = ConnectivityRouteKind.Proxy,
+            checkedAtEpochMillis = 123,
+            latencyMillis = MAX_CONNECTIVITY_LATENCY_MILLIS,
+            outcome = ConnectivityOutcome.ProxyAuthentication,
+        )
+
+        val status = ConnectivityStatus.from(diagnostic)
+
+        assertEquals(ConnectivityState.Offline, status.state)
+        assertEquals("Proxy authentication required", status.detail)
+        assertFailsWith<IllegalArgumentException> {
+            diagnostic.copy(latencyMillis = MAX_CONNECTIVITY_LATENCY_MILLIS + 1)
+        }
+        assertEquals(0, boundedConnectivityLatencyMillis(-1))
+        assertEquals(MAX_CONNECTIVITY_LATENCY_MILLIS, boundedConnectivityLatencyMillis(Long.MAX_VALUE))
+    }
+
     @Test
     fun classifiesNetworkRequirementsByActualSdkmanBehavior() {
         assertTrue(SdkmanTransaction.Install("java", "21.0.5-tem").requiresNetwork)
@@ -21,6 +43,16 @@ class ConnectivityTest {
             SdkmanTransaction.ToolchainActivation(
                 "Backend",
                 listOf(PlannedSdkmanCommand(SdkmanCommandAction.SetDefault, "java", "21-tem")),
+            ).requiresNetwork,
+        )
+        assertTrue(
+            SdkmanTransaction.UpdateActivation(
+                listOf(UpdateActivationTarget("java", "21-tem", requiresInstall = true)),
+            ).requiresNetwork,
+        )
+        assertFalse(
+            SdkmanTransaction.UpdateActivation(
+                listOf(UpdateActivationTarget("java", "21-tem", requiresInstall = false)),
             ).requiresNetwork,
         )
 
