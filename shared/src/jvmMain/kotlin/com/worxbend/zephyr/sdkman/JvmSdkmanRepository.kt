@@ -359,7 +359,9 @@ class JvmSdkmanRepository(
                     },
                 )
             }
-            is SdkmanTransaction.SnapshotRestore -> {
+            is SdkmanTransaction.SnapshotRestore,
+            is SdkmanTransaction.ToolchainActivation,
+            -> {
                 val installCommands = transaction.commands.filter { it.action == SdkmanCommandAction.Install }
                 val estimates = installCommands.map { command ->
                     estimateDiskImpact(
@@ -388,9 +390,9 @@ class JvmSdkmanRepository(
                         else -> EstimateConfidence.Unknown
                     },
                     explanation = when {
-                        estimates.isEmpty() -> "Restoring persisted defaults does not add or remove versions."
-                        knownBytes.size == estimates.size -> "Combined estimate for ${installCommands.size} snapshot install(s)."
-                        else -> "One or more snapshot installs have no local sibling size evidence."
+                        estimates.isEmpty() -> "Changing persisted defaults does not add or remove versions."
+                        knownBytes.size == estimates.size -> "Combined estimate for ${installCommands.size} planned install(s)."
+                        else -> "One or more planned installs have no local sibling size evidence."
                     },
                 )
             }

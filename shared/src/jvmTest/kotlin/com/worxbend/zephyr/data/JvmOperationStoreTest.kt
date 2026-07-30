@@ -5,6 +5,8 @@ import com.worxbend.zephyr.domain.OperationJournalEntry
 import com.worxbend.zephyr.domain.OperationStatus
 import com.worxbend.zephyr.domain.OperationStep
 import com.worxbend.zephyr.domain.OperationStepStatus
+import com.worxbend.zephyr.domain.PlannedSdkmanCommand
+import com.worxbend.zephyr.domain.SdkmanCommandAction
 import com.worxbend.zephyr.domain.SdkmanTransaction
 import java.nio.file.Files
 import kotlin.test.Test
@@ -14,6 +16,34 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 
 class JvmOperationStoreTest {
+    @Test
+    fun roundTripsProfileActivationIdentityAndTypedPlan() = runBlocking {
+        val directory = Files.createTempDirectory("zephyr-profile-task-store-")
+        try {
+            val destination = directory.resolve("tasks.ledger")
+            val transaction = SdkmanTransaction.ToolchainActivation(
+                profileName = "Backend & APIs",
+                commands = listOf(
+                    PlannedSdkmanCommand(SdkmanCommandAction.Install, "java", "21-tem"),
+                    PlannedSdkmanCommand(SdkmanCommandAction.SetDefault, "java", "21-tem"),
+                ),
+            )
+            val entry = OperationJournalEntry(
+                id = 51,
+                transaction = transaction,
+                startedAtEpochMillis = 300,
+            )
+
+            JvmOperationStore(destination).also { store ->
+                store.save(listOf(entry))
+                assertEquals(entry, store.load().single())
+            }
+            Unit
+        } finally {
+            directory.toFile().deleteRecursively()
+        }
+    }
+
     @Test
     fun roundTripsTypedStepsAndStatuses() = runBlocking {
         val directory = Files.createTempDirectory("zephyr-task-store-")

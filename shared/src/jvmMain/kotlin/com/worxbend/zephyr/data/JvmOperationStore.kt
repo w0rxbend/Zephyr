@@ -169,6 +169,8 @@ private fun SdkmanTransaction.persistenceKind(): String =
         is SdkmanTransaction.Install -> "install"
         is SdkmanTransaction.BatchInstall -> "batch-install"
         is SdkmanTransaction.SnapshotRestore -> "snapshot-restore"
+        is SdkmanTransaction.ToolchainActivation ->
+            "profile-activation:${encodeField(profileName.trim().take(MAX_PERSISTED_PROFILE_NAME_LENGTH))}"
         is SdkmanTransaction.Uninstall -> "uninstall"
         is SdkmanTransaction.BatchUninstall -> "batch-uninstall"
         is SdkmanTransaction.SetDefault -> "set-default"
@@ -209,7 +211,13 @@ private fun transactionFromStored(
             )
             "refresh-metadata" -> SdkmanTransaction.RefreshMetadata
             "self-update" -> SdkmanTransaction.SelfUpdate
-            else -> null
+            else -> if (kind.startsWith(PROFILE_ACTIVATION_KIND_PREFIX)) {
+                val name = decodeField(kind.removePrefix(PROFILE_ACTIVATION_KIND_PREFIX))
+                    .ifBlank { "Recovered profile" }
+                SdkmanTransaction.ToolchainActivation(name, commands)
+            } else {
+                null
+            }
         }
     }.getOrNull()
 
@@ -277,4 +285,6 @@ private val WINDOWS_ABSOLUTE_PATH = Regex("""(?i)\b[A-Z]:\\(?:[^\\\s]+\\)*[^\\\s
 private const val OPERATION_LEDGER_MAGIC = "ZEPHYR_TASK_CENTER"
 private const val OPERATION_LEDGER_VERSION = 1
 private const val DEFAULT_OPERATION_RETENTION = 250
+private const val PROFILE_ACTIVATION_KIND_PREFIX = "profile-activation:"
+private const val MAX_PERSISTED_PROFILE_NAME_LENGTH = 120
 private const val MAX_PERSISTED_OUTCOME_LENGTH = 1_000

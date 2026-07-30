@@ -79,6 +79,37 @@ sealed interface SdkmanTransaction {
         override val destructive = false
     }
 
+    data class ToolchainActivation(
+        val profileName: String,
+        override val commands: List<PlannedSdkmanCommand>,
+    ) : SdkmanTransaction {
+        init {
+            require(profileName.isNotBlank()) { "A toolchain activation requires a profile name." }
+            require(commands.isNotEmpty()) { "A toolchain activation requires at least one step." }
+            require(commands.all {
+                it.action == SdkmanCommandAction.Install || it.action == SdkmanCommandAction.SetDefault
+            }) { "Toolchain activation supports only install and default steps." }
+            commands.forEach {
+                requireValidTarget(
+                    requireNotNull(it.candidate) { "Toolchain activation candidate is required." },
+                    requireNotNull(it.version) { "Toolchain activation version is required." },
+                )
+            }
+            require(commands.distinct().size == commands.size) { "Toolchain activation steps must be unique." }
+            val firstDefault = commands.indexOfFirst { it.action == SdkmanCommandAction.SetDefault }
+            require(
+                firstDefault < 0 ||
+                    commands.drop(firstDefault).all { it.action == SdkmanCommandAction.SetDefault },
+            ) { "Toolchain activation must run every install before changing defaults." }
+        }
+
+        override val title = "Activate “${profileName.trim()}”?"
+        override val description =
+            "Zephyr will install missing targets first, then align persisted defaults. No installed version will be removed."
+        override val confirmationLabel = "Activate profile"
+        override val destructive = false
+    }
+
     data class Uninstall(
         val candidate: String,
         val version: String,

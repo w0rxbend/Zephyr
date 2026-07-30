@@ -458,6 +458,35 @@ class ZephyrViewModelTest {
     }
 
     @Test
+    fun profileActivationRunsMissingInstallsThenDefaultsWithoutUninstalls() {
+        val repository = FakeSdkmanRepository()
+        val viewModel = ZephyrViewModel(repository, testScope())
+        val transaction = SdkmanTransaction.ToolchainActivation(
+            profileName = "Backend",
+            commands = listOf(
+                PlannedSdkmanCommand(SdkmanCommandAction.Install, "java", "21-tem"),
+                PlannedSdkmanCommand(SdkmanCommandAction.SetDefault, "java", "21-tem"),
+            ),
+        )
+
+        viewModel.requestTransaction(transaction)
+        viewModel.confirmTransaction()
+
+        assertEquals(
+            listOf("install:java:21-tem", "default:java:21-tem"),
+            repository.mutationCalls,
+        )
+        assertTrue(repository.mutationCalls.none { it.startsWith("uninstall:") })
+        val ready = assertIs<ZephyrUiState.Ready>(viewModel.state.value)
+        assertEquals(OperationStatus.Succeeded, ready.operationJournal.single().status)
+        assertEquals(
+            listOf(BatchItemStatus.Succeeded, BatchItemStatus.Succeeded),
+            ready.snapshotRestoreProgress.map { it.status },
+        )
+        viewModel.close()
+    }
+
+    @Test
     fun batchUninstallRunsTargetsSequentiallyAndRetainsPerItemResults() {
         val repository = FakeSdkmanRepository()
         val viewModel = ZephyrViewModel(repository, testScope())

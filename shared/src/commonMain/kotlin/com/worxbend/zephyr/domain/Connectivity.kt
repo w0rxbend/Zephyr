@@ -17,11 +17,14 @@ val SdkmanTransaction.requiresNetwork: Boolean
     get() = when (this) {
         is SdkmanTransaction.Install,
         is SdkmanTransaction.BatchInstall,
-        is SdkmanTransaction.SnapshotRestore,
         is SdkmanTransaction.CleanLocalOnly,
         SdkmanTransaction.RefreshMetadata,
         SdkmanTransaction.SelfUpdate,
         -> true
+        is SdkmanTransaction.SnapshotRestore ->
+            commands.any { it.action == SdkmanCommandAction.Install }
+        is SdkmanTransaction.ToolchainActivation ->
+            commands.any { it.action == SdkmanCommandAction.Install }
         is SdkmanTransaction.Uninstall,
         is SdkmanTransaction.BatchUninstall,
         is SdkmanTransaction.SetDefault,

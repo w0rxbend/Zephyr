@@ -67,6 +67,8 @@ fun SdkmanTransaction.withCommands(commands: List<PlannedSdkmanCommand>): Sdkman
             .takeIf(List<InstallTarget>::isNotEmpty)
             ?.let(SdkmanTransaction::BatchInstall)
         is SdkmanTransaction.SnapshotRestore -> SdkmanTransaction.SnapshotRestore(commands)
+        is SdkmanTransaction.ToolchainActivation ->
+            SdkmanTransaction.ToolchainActivation(profileName, commands)
         is SdkmanTransaction.Uninstall -> commands.singleOrNull()?.toSingleTransaction()
         is SdkmanTransaction.BatchUninstall -> commands
             .mapNotNull { command ->

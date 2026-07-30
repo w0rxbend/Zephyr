@@ -632,7 +632,7 @@ internal fun ToolchainProfilesScreen(
     ) {
         PageTitle(
             "Toolchain Profiles",
-            "Save named default-version sets, compare them with this machine, and install missing targets.",
+            "Save named default-version sets, compare them with this machine, and activate the complete environment.",
         )
         ZephyrPanel(Modifier.fillMaxWidth()) {
             Row(
@@ -689,13 +689,9 @@ internal fun ToolchainProfilesScreen(
             verticalArrangement = Arrangement.spacedBy(metrics.spacing),
         ) {
             items(settings.toolchainProfiles, key = ToolchainProfile::name) { profile ->
-                val missing = profile.targets.filter { target ->
-                    state.candidates
-                        .firstOrNull { it.name == target.candidate }
-                        ?.installedVersions
-                        ?.none { it.isInstalled && it.version == target.version }
-                        ?: true
-                }
+                val activationPlan = planToolchainActivation(profile.targets, state.candidates)
+                val missingCount = activationPlan.count { it.action == SdkmanCommandAction.Install }
+                val defaultChangeCount = activationPlan.count { it.action == SdkmanCommandAction.SetDefault }
                 ZephyrPanel(Modifier.fillMaxWidth()) {
                     Column(
                         modifier = Modifier.fillMaxWidth().padding(metrics.panelPadding),
@@ -709,20 +705,25 @@ internal fun ToolchainProfilesScreen(
                             Column(Modifier.weight(1f)) {
                                 Text(profile.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                                 Text(
-                                    "${profile.targets.size - missing.size} installed • ${missing.size} missing",
+                                    when {
+                                        activationPlan.isEmpty() -> "${profile.targets.size} target(s) active"
+                                        else -> "$missingCount missing • $defaultChangeCount default change(s)"
+                                    },
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
-                            if (missing.isNotEmpty()) {
+                            if (activationPlan.isNotEmpty()) {
                                 ZephyrToolbarButton(
-                                    label = "Review missing (${missing.size})",
+                                    label = "Review activation (${activationPlan.size})",
                                     onClick = {
-                                        viewModel.requestTransaction(SdkmanTransaction.BatchInstall(missing))
+                                        viewModel.requestTransaction(
+                                            SdkmanTransaction.ToolchainActivation(profile.name, activationPlan),
+                                        )
                                     },
                                 )
                             } else {
-                                Badge("Matches this machine", BadgeTone.Success)
+                                Badge("Active", BadgeTone.Success)
                             }
                             ZephyrToolbarButton(
                                 label = "Delete profile",
@@ -738,10 +739,19 @@ internal fun ToolchainProfilesScreen(
                             verticalArrangement = Arrangement.spacedBy(7.dp),
                         ) {
                             profile.targets.forEach { target ->
-                                val isMissing = target in missing
+                                val current = state.candidates.firstOrNull { it.name == target.candidate }
+                                val installed = current
+                                    ?.installedVersions
+                                    .orEmpty()
+                                    .any { it.isInstalled && it.version == target.version }
+                                val isDefault = current?.defaultVersion == target.version
                                 Badge(
                                     "${target.candidate} ${target.version}",
-                                    if (isMissing) BadgeTone.Warning else BadgeTone.Success,
+                                    when {
+                                        isDefault -> BadgeTone.Success
+                                        !installed -> BadgeTone.Warning
+                                        else -> BadgeTone.Primary
+                                    },
                                 )
                             }
                         }

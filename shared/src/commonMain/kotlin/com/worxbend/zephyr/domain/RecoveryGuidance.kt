@@ -50,6 +50,15 @@ fun SdkmanTransaction.recoveryGuidance(): RecoveryGuidance =
             ),
             actions = listOf(RecoveryAction.RefreshInstalled, RecoveryAction.OpenDiagnostics),
         )
+        is SdkmanTransaction.ToolchainActivation -> RecoveryGuidance(
+            title = "The profile activation was incomplete",
+            steps = listOf(
+                "Keep successful installs and default changes in place.",
+                "Return to Toolchain Profiles to recalculate the remaining steps.",
+                "Review the reduced activation before resuming.",
+            ),
+            actions = listOf(RecoveryAction.RefreshInstalled, RecoveryAction.OpenDiagnostics),
+        )
         is SdkmanTransaction.Uninstall -> RecoveryGuidance(
             title = "The installed version was not removed",
             steps = listOf(

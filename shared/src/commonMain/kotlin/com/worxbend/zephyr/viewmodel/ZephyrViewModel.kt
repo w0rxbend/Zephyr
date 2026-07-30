@@ -447,6 +447,7 @@ class ZephyrViewModel(
             is SdkmanTransaction.Install -> install(transaction.candidate, transaction.version, journalId)
             is SdkmanTransaction.BatchInstall -> executeBatchTransaction(transaction, journalId)
             is SdkmanTransaction.SnapshotRestore -> executeBatchTransaction(transaction, journalId)
+            is SdkmanTransaction.ToolchainActivation -> executeBatchTransaction(transaction, journalId)
             is SdkmanTransaction.Uninstall -> uninstall(transaction.candidate, transaction.version, journalId)
             is SdkmanTransaction.BatchUninstall -> executeBatchTransaction(transaction, journalId)
             is SdkmanTransaction.SetDefault -> setDefault(transaction.candidate, transaction.version, journalId)
@@ -826,6 +827,11 @@ class ZephyrViewModel(
                     },
                 )
                 is SdkmanTransaction.SnapshotRestore -> ready.copy(
+                    snapshotRestoreProgress = commands.mapIndexed { index, command ->
+                        SnapshotRestoreProgress(command, batchStatuses[index], outcomes[index])
+                    },
+                )
+                is SdkmanTransaction.ToolchainActivation -> ready.copy(
                     snapshotRestoreProgress = commands.mapIndexed { index, command ->
                         SnapshotRestoreProgress(command, batchStatuses[index], outcomes[index])
                     },
@@ -1375,6 +1381,7 @@ private fun SdkmanTransaction.batchSummaryLabel(): String =
         is SdkmanTransaction.BatchInstall -> "selected installs"
         is SdkmanTransaction.BatchUninstall -> "selected uninstalls"
         is SdkmanTransaction.SnapshotRestore -> "snapshot restore steps"
+        is SdkmanTransaction.ToolchainActivation -> "profile activation steps"
         else -> "task steps"
     }
 

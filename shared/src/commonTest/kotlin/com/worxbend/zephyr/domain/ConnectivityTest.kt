@@ -11,6 +11,18 @@ class ConnectivityTest {
         assertTrue(SdkmanTransaction.RefreshMetadata.requiresNetwork)
         assertTrue(SdkmanTransaction.SelfUpdate.requiresNetwork)
         assertTrue(SdkmanTransaction.CleanLocalOnly("java", listOf("17.0.1-tem")).requiresNetwork)
+        assertTrue(
+            SdkmanTransaction.ToolchainActivation(
+                "Backend",
+                listOf(PlannedSdkmanCommand(SdkmanCommandAction.Install, "java", "21-tem")),
+            ).requiresNetwork,
+        )
+        assertFalse(
+            SdkmanTransaction.ToolchainActivation(
+                "Backend",
+                listOf(PlannedSdkmanCommand(SdkmanCommandAction.SetDefault, "java", "21-tem")),
+            ).requiresNetwork,
+        )
 
         assertFalse(SdkmanTransaction.Uninstall("java", "17.0.1-tem").requiresNetwork)
         assertFalse(SdkmanTransaction.SetDefault("java", "21.0.5-tem").requiresNetwork)
