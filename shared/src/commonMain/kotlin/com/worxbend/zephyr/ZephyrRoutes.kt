@@ -51,6 +51,10 @@ import com.worxbend.zephyr.domain.JavaVersion
 import com.worxbend.zephyr.domain.JDK_VENDOR_KNOWLEDGE_VERSION
 import com.worxbend.zephyr.domain.ProtectedVersion
 import com.worxbend.zephyr.domain.SdkmanTransaction
+import com.worxbend.zephyr.domain.StorageCleanupDisposition
+import com.worxbend.zephyr.domain.StorageMeasurement
+import com.worxbend.zephyr.domain.VersionStorage
+import com.worxbend.zephyr.domain.formatByteSize
 import com.worxbend.zephyr.domain.displayNameFor
 import com.worxbend.zephyr.domain.jdkVendorKnowledge
 import com.worxbend.zephyr.domain.toJavaVersion
@@ -125,6 +129,7 @@ internal fun Content(
                 onScan = viewModel::scanLocalOnly,
                 onClean = onClean,
             )
+            ZephyrRoute.Storage -> StorageCenterScreen(state, viewModel)
             ZephyrRoute.UpdateCenter -> UpdateCenterScreen(state, viewModel)
             ZephyrRoute.BatchUninstall -> BatchUninstallScreen(state, viewModel)
             ZephyrRoute.Profiles -> ToolchainProfilesScreen(state, viewModel, settings, onSettingsChange)
@@ -759,6 +764,169 @@ private fun BrowseScreen(
 
 private fun Set<String>.updated(value: String, included: Boolean): Set<String> =
     if (included) this + value else this - value
+
+@Composable
+private fun StorageCenterScreen(
+    state: ZephyrUiState.Ready,
+    viewModel: ZephyrViewModel,
+) {
+    val inventory = state.storageInventory
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxSize()) {
+        PageTitle(
+            "Storage Center",
+            "Measure installed SDKMAN payloads and route every cleanup through a reviewed transaction.",
+        )
+        ZephyrPanel(Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(LocalZephyrMetrics.current.panelPadding),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            inventory?.total?.let(::storageTotalLabel) ?: "Storage has not been measured",
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            "Symbolic links, unreadable entries, scan limits, and concurrent changes are reported as unknown—never guessed.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    ZephyrToolbarButton(
+                        if (state.storageScanInProgress) "Measuring…" else "Measure again",
+                        onClick = viewModel::refreshStorage,
+                        enabled = !state.storageScanInProgress,
+                    )
+                }
+                inventory?.let { measured ->
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Badge("${measured.versions.size} installed versions")
+                        measured.availableBytes?.let { Badge("${formatByteSize(it)} available", BadgeTone.Success) }
+                        measured.candidates.forEach { candidate ->
+                            Badge(
+                                "${candidate.displayName}: ${storageTotalLabel(candidate.total)}",
+                                if (candidate.total.isExact) BadgeTone.Neutral else BadgeTone.Warning,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        when {
+            state.storageScanInProgress && inventory == null -> ZephyrProgressIndicator()
+            inventory == null -> EmptyState(
+                "Storage not measured",
+                "Run a safe filesystem scan to calculate logical payload sizes.",
+                "Measure storage",
+                viewModel::refreshStorage,
+            )
+            inventory.versions.isEmpty() -> EmptyState(
+                "No installed payloads",
+                "SDKMAN has no installed candidate versions to measure.",
+            )
+            else -> {
+                val listState = rememberLazyListState()
+                Box(Modifier.fillMaxSize()) {
+                    LazyColumn(
+                        state = listState,
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        items(
+                            items = inventory.versions,
+                            key = { "${it.candidate}:${it.version}" },
+                        ) { entry ->
+                            StorageVersionRow(
+                                entry = entry,
+                                onReviewCleanup = {
+                                    viewModel.requestTransaction(
+                                        if (entry.cleanupDisposition == StorageCleanupDisposition.VerifiedLocalOnly) {
+                                            SdkmanTransaction.CleanLocalOnly(entry.candidate, listOf(entry.version))
+                                        } else {
+                                            SdkmanTransaction.Uninstall(entry.candidate, entry.version)
+                                        },
+                                    )
+                                },
+                            )
+                        }
+                    }
+                    VerticalScrollbar(
+                        adapter = rememberScrollbarAdapter(listState),
+                        modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun storageTotalLabel(total: com.worxbend.zephyr.domain.StorageTotal): String =
+    buildString {
+        append(formatByteSize(total.knownBytes))
+        if (!total.isExact) append(" known + ${total.unknownEntries} unknown")
+    }
+
+@Composable
+private fun StorageVersionRow(
+    entry: VersionStorage,
+    onReviewCleanup: () -> Unit,
+) {
+    ZephyrPanel(Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(LocalZephyrMetrics.current.panelPadding),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(
+                        "${entry.candidateDisplayName} ${entry.version}",
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        when (val measurement = entry.measurement) {
+                            is StorageMeasurement.Exact -> "${formatByteSize(measurement.bytes)} logical payload"
+                            is StorageMeasurement.Unknown -> "Unknown · ${measurement.reason.label}"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                entry.bytes?.let { Badge(formatByteSize(it), BadgeTone.Primary) }
+            }
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Badge(
+                    entry.cleanupDisposition.label,
+                    when (entry.cleanupDisposition) {
+                        StorageCleanupDisposition.VerifiedLocalOnly -> BadgeTone.Warning
+                        StorageCleanupDisposition.OptionalNonDefault -> BadgeTone.Neutral
+                        StorageCleanupDisposition.BlockedDefault -> BadgeTone.Primary
+                        StorageCleanupDisposition.BlockedProtected -> BadgeTone.Success
+                    },
+                )
+                Badge(entry.remoteAvailability.label)
+                if (entry.cleanupDisposition.eligible) {
+                    OutlinedButton(onClick = onReviewCleanup) {
+                        Text("Review cleanup")
+                    }
+                }
+            }
+        }
+    }
+}
 
 @Composable
 private fun LocalOnlyScreen(

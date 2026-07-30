@@ -12,6 +12,7 @@ import com.worxbend.zephyr.domain.SdkmanSelfUpdateStatus
 import com.worxbend.zephyr.domain.SdkmanStatus
 import com.worxbend.zephyr.domain.SdkmanTransaction
 import com.worxbend.zephyr.domain.PlannedSdkmanCommand
+import com.worxbend.zephyr.domain.StorageInventory
 
 enum class CommandSatisfaction {
     Satisfied,
@@ -30,6 +31,7 @@ interface SdkmanRepository {
     suspend fun checkConnectivity(): ConnectivityStatus
     suspend fun integrityChecks(): List<IntegrityCheck>
     suspend fun estimateDiskImpact(transaction: SdkmanTransaction): DiskImpactEstimate
+    suspend fun storageInventory(candidates: List<Candidate>): StorageInventory = StorageInventory.Empty
     suspend fun protectedVersions(): Set<ProtectedVersion>
     suspend fun setVersionProtected(candidate: String, version: String, protected: Boolean): CommandOutcome
     suspend fun refreshCandidateMetadata(): CommandOutcome

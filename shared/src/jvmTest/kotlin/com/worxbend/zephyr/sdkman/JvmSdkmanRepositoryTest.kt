@@ -8,6 +8,9 @@ import com.worxbend.zephyr.domain.CommandOutcomeStatus
 import com.worxbend.zephyr.domain.IntegrityCheckId
 import com.worxbend.zephyr.domain.IntegrityStatus
 import com.worxbend.zephyr.domain.SdkmanTransaction
+import com.worxbend.zephyr.domain.StorageMeasurement
+import com.worxbend.zephyr.domain.StorageUnknownReason
+import com.worxbend.zephyr.domain.StorageCleanupDisposition
 import okio.FileSystem
 import okio.Path
 import okio.Path.Companion.toPath
@@ -23,6 +26,70 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 
 class JvmSdkmanRepositoryTest {
+    @Test
+    fun measuresLogicalPayloadAndRejectsSymlinksInsteadOfFollowingOrSkippingThem() {
+        val root = Files.createTempDirectory("zephyr-storage-test-").toString().toPath()
+        try {
+            val fileSystem = FileSystem.SYSTEM
+            fileSystem.createDirectories(root / "nested")
+            fileSystem.write(root / "runtime.bin") { write(ByteArray(1_024)) }
+            fileSystem.write(root / "nested" / "metadata.bin") { write(ByteArray(512)) }
+
+            assertEquals(StorageMeasurement.Exact(1_536), measureStorageDirectory(fileSystem, root))
+
+            fileSystem.createSymlink(root / "nested" / "escape", root / "runtime.bin")
+            assertEquals(
+                StorageMeasurement.Unknown(StorageUnknownReason.SymbolicLink),
+                measureStorageDirectory(fileSystem, root),
+            )
+        } finally {
+            FileSystem.SYSTEM.deleteRecursively(root, mustExist = false)
+        }
+    }
+
+    @Test
+    fun marksPayloadUnknownWhenSafeTraversalCapIsExceeded() {
+        val root = Files.createTempDirectory("zephyr-storage-cap-test-").toString().toPath()
+        try {
+            FileSystem.SYSTEM.write(root / "one.bin") { writeByte(1) }
+            FileSystem.SYSTEM.write(root / "two.bin") { writeByte(2) }
+
+            assertEquals(
+                StorageMeasurement.Unknown(StorageUnknownReason.EntryLimit),
+                measureStorageDirectory(FileSystem.SYSTEM, root, maxEntries = 1),
+            )
+        } finally {
+            FileSystem.SYSTEM.deleteRecursively(root, mustExist = false)
+        }
+    }
+
+    @Test
+    fun storageInventoryPreservesDefaultProtectionAndRemoteEvidence() = runBlocking {
+        val home = Files.createTempDirectory("zephyr-storage-inventory-test-").toString().toPath()
+        try {
+            createSdkmanHome(home)
+            val protected = ProtectedVersion("java", "17.0.1-tem")
+            val repository = JvmSdkmanRepository(
+                fileSystem = FileSystem.SYSTEM,
+                sdkmanHomeResolver = { home },
+                protectedVersionStore = InMemoryProtectedVersionStore(setOf(protected)),
+            ) { RecordingRunner(home) }
+            repository.detect()
+            val candidate = requireNotNull(repository.mergedCandidate("java"))
+
+            val inventory = repository.storageInventory(listOf(candidate))
+            val byVersion = inventory.versions.associateBy { it.version }
+
+            assertTrue(requireNotNull(byVersion["17.0.1-tem"]).isProtected)
+            assertEquals(StorageCleanupDisposition.BlockedProtected, byVersion["17.0.1-tem"]?.cleanupDisposition)
+            assertTrue(requireNotNull(byVersion["21.0.5-tem"]).isDefault)
+            assertEquals(StorageCleanupDisposition.BlockedDefault, byVersion["21.0.5-tem"]?.cleanupDisposition)
+            assertTrue(inventory.total.isExact)
+        } finally {
+            FileSystem.SYSTEM.deleteRecursively(home, mustExist = false)
+        }
+    }
+
     @Test
     fun rejectsUnsafeCommandIdentifiersBeforeInvokingSdkman() = runBlocking {
         val runner = RecordingRunner()

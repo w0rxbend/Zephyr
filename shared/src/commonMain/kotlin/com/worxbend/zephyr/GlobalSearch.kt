@@ -117,6 +117,7 @@ private fun MutableList<GlobalSearchItem>.addPageItems() {
         Triple("Browse JDKs", ZephyrRoute.BrowseJdks, null),
         Triple("Browse SDKs", ZephyrRoute.BrowseSdks, null),
         Triple("Local-only versions", ZephyrRoute.LocalOnly, null),
+        Triple("Storage Center", ZephyrRoute.Storage, null),
         Triple("Update Center", ZephyrRoute.UpdateCenter, "Ctrl/⌘ Shift U"),
         Triple("Batch Uninstall", ZephyrRoute.BatchUninstall, null),
         Triple("Toolchain Profiles", ZephyrRoute.Profiles, null),
@@ -125,7 +126,7 @@ private fun MutableList<GlobalSearchItem>.addPageItems() {
         Triple("Environment Snapshot", ZephyrRoute.EnvironmentSnapshot, null),
         Triple("Candidate Comparison", ZephyrRoute.Comparison, null),
         Triple("Diagnostics", ZephyrRoute.Diagnostics, "Ctrl/⌘ Shift D"),
-        Triple("Operation history", ZephyrRoute.History, "Ctrl/⌘ Shift H"),
+        Triple("Task Center", ZephyrRoute.History, "Ctrl/⌘ Shift H"),
         Triple("Settings", ZephyrRoute.Settings, null),
         Triple("About Zephyr", ZephyrRoute.About, null),
     ).forEach { (title, route, shortcut) ->

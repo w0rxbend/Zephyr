@@ -23,6 +23,10 @@ import com.worxbend.zephyr.domain.SdkmanSelfUpdateStatus
 import com.worxbend.zephyr.domain.SdkmanCommandAction
 import com.worxbend.zephyr.domain.SdkmanStatus
 import com.worxbend.zephyr.domain.SdkmanTransaction
+import com.worxbend.zephyr.domain.StorageInventory
+import com.worxbend.zephyr.domain.StorageMeasurement
+import com.worxbend.zephyr.domain.StorageUnknownReason
+import com.worxbend.zephyr.domain.VersionStorage
 import com.worxbend.zephyr.domain.candidateKindFor
 import com.worxbend.zephyr.domain.displayNameFor
 import com.worxbend.zephyr.domain.isValidSdkmanCandidateName
@@ -434,6 +438,39 @@ class JvmSdkmanRepository(
         }
     }
 
+    override suspend fun storageInventory(candidates: List<Candidate>): StorageInventory {
+        val protected = protectedVersionStore.load()
+        val entries = candidates
+            .flatMap { candidate ->
+                validateCandidate(candidate.name)
+                candidate.installedVersions
+                    .asSequence()
+                    .filter(CandidateVersion::isInstalled)
+                    .map { version ->
+                        require(isValidVersion(version.version)) { "Invalid SDKMAN version identifier." }
+                        VersionStorage(
+                            candidate = candidate.name,
+                            candidateDisplayName = candidate.displayName,
+                            version = version.version,
+                            measurement = measureStorageDirectory(
+                                fileSystem = fileSystem,
+                                root = versionPath(candidate.name, version.version),
+                            ),
+                            isDefault = candidate.defaultVersion == version.version,
+                            isProtected = ProtectedVersion(candidate.name, version.version) in protected,
+                            remoteAvailability = version.remoteAvailability,
+                        )
+                    }
+                    .toList()
+            }
+            .sortedWith(com.worxbend.zephyr.domain.storageSizeComparator)
+        return StorageInventory(
+            versions = entries,
+            scannedAtEpochMillis = System.currentTimeMillis(),
+            availableBytes = availableDiskBytes(),
+        )
+    }
+
     override suspend fun protectedVersions(): Set<ProtectedVersion> = protectedVersionStore.load()
 
     override suspend fun setVersionProtected(
@@ -708,28 +745,7 @@ class JvmSdkmanRepository(
     }
 
     private fun directorySize(root: Path): Long? {
-        val rootMetadata = fileSystem.metadataOrNull(root) ?: return null
-        if (!rootMetadata.isDirectory || rootMetadata.symlinkTarget != null) return null
-        val pending = ArrayDeque<Path>()
-        pending.add(root)
-        var total = 0L
-        var visited = 0
-        while (pending.isNotEmpty()) {
-            val directory = pending.removeLast()
-            val children = fileSystem.listOrNull(directory) ?: return null
-            children.forEach { child ->
-                visited += 1
-                if (visited > MAX_DISK_ESTIMATE_ENTRIES) return null
-                val metadata = fileSystem.metadataOrNull(child) ?: return null
-                if (metadata.symlinkTarget != null) return@forEach
-                if (metadata.isDirectory) {
-                    pending.add(child)
-                } else {
-                    total = safeAdd(total, metadata.size ?: 0L)
-                }
-            }
-        }
-        return total
+        return (measureStorageDirectory(fileSystem, root) as? StorageMeasurement.Exact)?.bytes
     }
 
     private fun availableDiskBytes(): Long? =
@@ -824,6 +840,83 @@ class JvmSdkmanRepository(
     private fun indeterminate(message: String): CommandOutcome =
         CommandOutcome(false, message, CommandOutcomeStatus.Indeterminate)
 }
+
+internal fun measureStorageDirectory(
+    fileSystem: FileSystem,
+    root: Path,
+    maxEntries: Int = MAX_DISK_ESTIMATE_ENTRIES,
+): StorageMeasurement {
+    require(maxEntries > 0) { "Storage scan entry limit must be positive." }
+    val rootMetadata = runCatching { fileSystem.metadataOrNull(root) }.getOrNull()
+        ?: return StorageMeasurement.Unknown(StorageUnknownReason.Missing)
+    if (rootMetadata.symlinkTarget != null) {
+        return StorageMeasurement.Unknown(StorageUnknownReason.SymbolicLink)
+    }
+    if (!rootMetadata.isDirectory) {
+        return StorageMeasurement.Unknown(StorageUnknownReason.NotDirectory)
+    }
+
+    val pending = ArrayDeque<Path>()
+    val observed = mutableListOf(root to rootMetadata.storageFingerprint())
+    pending.add(root)
+    var total = 0L
+    var visited = 0
+    while (pending.isNotEmpty()) {
+        val directory = pending.removeLast()
+        val children = runCatching { fileSystem.list(directory) }
+            .getOrElse { return StorageMeasurement.Unknown(StorageUnknownReason.Unreadable) }
+        for (child in children) {
+            visited += 1
+            if (visited > maxEntries) {
+                return StorageMeasurement.Unknown(StorageUnknownReason.EntryLimit)
+            }
+            val metadata = runCatching { fileSystem.metadataOrNull(child) }.getOrNull()
+                ?: return StorageMeasurement.Unknown(StorageUnknownReason.ChangedDuringScan)
+            observed += child to metadata.storageFingerprint()
+            when {
+                metadata.symlinkTarget != null ->
+                    return StorageMeasurement.Unknown(StorageUnknownReason.SymbolicLink)
+                metadata.isDirectory -> pending.add(child)
+                metadata.isRegularFile -> {
+                    val size = metadata.size
+                        ?: return StorageMeasurement.Unknown(StorageUnknownReason.Unreadable)
+                    if (Long.MAX_VALUE - total < size) {
+                        return StorageMeasurement.Unknown(StorageUnknownReason.Overflow)
+                    }
+                    total += size
+                }
+                else -> return StorageMeasurement.Unknown(StorageUnknownReason.UnsupportedEntry)
+            }
+        }
+    }
+    val changed = observed.any { (path, fingerprint) ->
+        runCatching { fileSystem.metadataOrNull(path) }.getOrNull()?.storageFingerprint() != fingerprint
+    }
+    return if (changed) {
+        StorageMeasurement.Unknown(StorageUnknownReason.ChangedDuringScan)
+    } else {
+        StorageMeasurement.Exact(total)
+    }
+}
+
+private data class StorageFingerprint(
+    val isRegularFile: Boolean,
+    val isDirectory: Boolean,
+    val symlinkTarget: Path?,
+    val size: Long?,
+    val createdAtMillis: Long?,
+    val lastModifiedAtMillis: Long?,
+)
+
+private fun okio.FileMetadata.storageFingerprint(): StorageFingerprint =
+    StorageFingerprint(
+        isRegularFile = isRegularFile,
+        isDirectory = isDirectory,
+        symlinkTarget = symlinkTarget,
+        size = size,
+        createdAtMillis = createdAtMillis,
+        lastModifiedAtMillis = lastModifiedAtMillis,
+    )
 
 private enum class PathPostcondition {
     Satisfied,

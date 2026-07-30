@@ -33,6 +33,7 @@ internal fun navigationTaskFor(route: ZephyrRoute): NavigationTask? =
         -> NavigationTask.Projects
         ZephyrRoute.UpdateCenter -> NavigationTask.Updates
         ZephyrRoute.LocalOnly,
+        ZephyrRoute.Storage,
         ZephyrRoute.BatchUninstall,
         -> NavigationTask.Storage
         ZephyrRoute.Diagnostics,

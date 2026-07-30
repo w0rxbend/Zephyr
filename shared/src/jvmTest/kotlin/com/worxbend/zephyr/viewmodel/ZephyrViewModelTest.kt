@@ -35,6 +35,10 @@ import com.worxbend.zephyr.domain.SdkmanStatus
 import com.worxbend.zephyr.domain.SdkmanTransaction
 import com.worxbend.zephyr.domain.SupportBundleExportResult
 import com.worxbend.zephyr.domain.UninstallTarget
+import com.worxbend.zephyr.domain.StorageInventory
+import com.worxbend.zephyr.domain.StorageMeasurement
+import com.worxbend.zephyr.domain.VersionStorage
+import com.worxbend.zephyr.domain.RemoteAvailability
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.filterIsInstance
@@ -48,6 +52,48 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class ZephyrViewModelTest {
+    @Test
+    fun openingStorageCenterLoadsSafeInventoryForCurrentCandidates() {
+        val candidate = Candidate(
+            name = "gradle",
+            displayName = "Gradle",
+            kind = CandidateKind.Sdk,
+            installedVersions = listOf(CandidateVersion("9.0", true, true, true)),
+            defaultVersion = "9.0",
+            hasLocalOnlyVersions = false,
+            localOnlyVersionCount = 0,
+            localOnlyVersions = emptyList(),
+        )
+        val inventory = StorageInventory(
+            versions = listOf(
+                VersionStorage(
+                    candidate = "gradle",
+                    candidateDisplayName = "Gradle",
+                    version = "9.0",
+                    measurement = StorageMeasurement.Exact(42),
+                    isDefault = true,
+                    isProtected = false,
+                    remoteAvailability = RemoteAvailability.Available,
+                ),
+            ),
+            scannedAtEpochMillis = 10,
+        )
+        val repository = FakeSdkmanRepository(
+            installedCandidate = candidate,
+            storageInventory = inventory,
+        )
+        val viewModel = ZephyrViewModel(repository, testScope())
+
+        viewModel.navigate(ZephyrRoute.Storage)
+
+        val state = assertIs<ZephyrUiState.Ready>(viewModel.state.value)
+        assertEquals(ZephyrRoute.Storage, state.route)
+        assertEquals(inventory, state.storageInventory)
+        assertEquals(1, repository.storageInventoryCalls)
+        assertFalse(state.storageScanInProgress)
+        viewModel.close()
+    }
+
     @Test
     fun initialLoadDoesNotRefreshRemoteMetadata() {
         val repository = FakeSdkmanRepository()
@@ -705,6 +751,7 @@ private class FakeSdkmanRepository(
     private val installFailure: Throwable? = null,
     private var connectivity: ConnectivityStatus = ConnectivityStatus(ConnectivityState.Online),
     private val commandSatisfaction: Map<PlannedSdkmanCommand, CommandSatisfaction> = emptyMap(),
+    private val storageInventory: StorageInventory = StorageInventory.Empty,
 ) : SdkmanRepository {
     var installedCandidatesCalls: Int = 0
         private set
@@ -714,6 +761,8 @@ private class FakeSdkmanRepository(
     var metadataRefreshCalls: Int = 0
         private set
     val mutationCalls = mutableListOf<String>()
+    var storageInventoryCalls: Int = 0
+        private set
     private val protected = mutableSetOf<ProtectedVersion>()
 
     override suspend fun detect(): SdkmanStatus = SdkmanStatus(isInstalled = true, home = "/tmp/sdkman")
@@ -773,6 +822,11 @@ private class FakeSdkmanRepository(
             confidence = EstimateConfidence.Exact,
             explanation = "No test disk impact.",
         )
+
+    override suspend fun storageInventory(candidates: List<Candidate>): StorageInventory {
+        storageInventoryCalls += 1
+        return storageInventory
+    }
 
     override suspend fun protectedVersions(): Set<ProtectedVersion> = protected
 

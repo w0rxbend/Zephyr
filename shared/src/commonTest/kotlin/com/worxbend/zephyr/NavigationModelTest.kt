@@ -21,6 +21,7 @@ class NavigationModelTest {
             ZephyrRoute.BrowseJdks,
             ZephyrRoute.BrowseSdks,
             ZephyrRoute.LocalOnly,
+            ZephyrRoute.Storage,
             ZephyrRoute.UpdateCenter,
             ZephyrRoute.BatchUninstall,
             ZephyrRoute.Profiles,

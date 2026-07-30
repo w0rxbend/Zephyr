@@ -847,6 +847,7 @@ private fun WorkbenchSidebar(
             badge = localOnly.takeIf { it > 0 }?.toString(),
             onToggle = { expandedTasks = expandedTasks.toggled(NavigationTask.Storage) },
         ) {
+            NavigationChild("▣", "Storage overview", state.route is ZephyrRoute.Storage, ZephyrRoute.Storage, onNavigate)
             NavigationChild("!", "Local-only", state.route is ZephyrRoute.LocalOnly, ZephyrRoute.LocalOnly, onNavigate)
             NavigationChild("−", "Batch uninstall", state.route is ZephyrRoute.BatchUninstall, ZephyrRoute.BatchUninstall, onNavigate)
         }
@@ -1071,6 +1072,7 @@ private fun ZephyrUiState.Ready.busyLabel(): String? =
             "Installing ${completed + 1} of ${batchInstallProgress.size}"
         }
         localOnlyScanInProgress -> "Scanning local-only versions"
+        storageScanInProgress -> "Measuring installed payloads"
         isCatalogLoading -> "Loading SDKMAN catalog"
         detailLoadingCandidate != null -> "Loading package details"
         journalExportInProgress -> "Exporting operation journal"

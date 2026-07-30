@@ -225,6 +225,7 @@ internal fun headerTitle(state: ZephyrUiState.Ready): String =
         ZephyrRoute.BrowseJdks -> "Browse JDKs"
         ZephyrRoute.BrowseSdks -> "Browse SDKs"
         ZephyrRoute.LocalOnly -> "Local-only Versions"
+        ZephyrRoute.Storage -> "Storage Center"
         ZephyrRoute.UpdateCenter -> "Update Center"
         ZephyrRoute.BatchUninstall -> "Batch Uninstall"
         ZephyrRoute.Profiles -> "Toolchain Profiles"

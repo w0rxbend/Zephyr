@@ -39,6 +39,7 @@ import com.worxbend.zephyr.domain.SdkmanCommandAction
 import com.worxbend.zephyr.domain.SdkmanStatus
 import com.worxbend.zephyr.domain.SdkmanTransaction
 import com.worxbend.zephyr.domain.SnapshotRestoreProgress
+import com.worxbend.zephyr.domain.StorageInventory
 import com.worxbend.zephyr.domain.CommandOutcomeStatus
 import com.worxbend.zephyr.domain.resumeTransaction
 import com.worxbend.zephyr.domain.requiresNetwork
@@ -65,6 +66,7 @@ sealed interface ZephyrRoute {
     data object BrowseJdks : ZephyrRoute
     data object BrowseSdks : ZephyrRoute
     data object LocalOnly : ZephyrRoute
+    data object Storage : ZephyrRoute
     data object UpdateCenter : ZephyrRoute
     data object BatchUninstall : ZephyrRoute
     data object Profiles : ZephyrRoute
@@ -95,6 +97,8 @@ sealed interface ZephyrUiState {
         val isRefreshing: Boolean,
         val isCatalogLoading: Boolean,
         val localOnlyScanInProgress: Boolean,
+        val storageInventory: StorageInventory? = null,
+        val storageScanInProgress: Boolean = false,
         val detailLoadingCandidate: String? = null,
         val errorMessage: String?,
         val lastOutcome: String?,
@@ -233,6 +237,7 @@ class ZephyrViewModel(
             }
             ZephyrRoute.BrowseSdks -> ensureCatalog()
             ZephyrRoute.UpdateCenter -> ensureCatalog()
+            ZephyrRoute.Storage -> refreshStorage()
             else -> Unit
         }
     }
@@ -528,6 +533,15 @@ class ZephyrViewModel(
                 _state.updateReady {
                     it.copy(
                         protectedVersions = protectedVersions,
+                        storageInventory = it.storageInventory?.copy(
+                            versions = it.storageInventory.versions.map { entry ->
+                                if (entry.candidate == candidate && entry.version == version) {
+                                    entry.copy(isProtected = ProtectedVersion(candidate, version) in protectedVersions)
+                                } else {
+                                    entry
+                                }
+                            },
+                        ),
                         isRefreshing = false,
                         lastOutcome = outcome.message,
                         errorMessage = if (outcome.success) null else outcome.message,
@@ -551,6 +565,7 @@ class ZephyrViewModel(
                     it.copy(
                         candidates = candidates,
                         catalog = it.catalog.withInstalledCandidates(candidates),
+                        storageInventory = null,
                         isRefreshing = false,
                         errorMessage = null,
                     )
@@ -559,6 +574,41 @@ class ZephyrViewModel(
             }.onFailure {
                 ZephyrLogger.warn("Refresh failed.", it)
                 fail("Refresh failed: ${it.message}")
+            }
+        }
+    }
+
+    fun refreshStorage() {
+        launchOperation {
+            val ready = _state.value as? ZephyrUiState.Ready ?: return@launchOperation
+            if (
+                ready.storageScanInProgress ||
+                ready.isRefreshing ||
+                ready.isCatalogLoading ||
+                ready.localOnlyScanInProgress ||
+                ready.transactionPreviewLoading
+            ) {
+                return@launchOperation
+            }
+            _state.updateReady {
+                it.copy(
+                    storageScanInProgress = true,
+                    errorMessage = null,
+                )
+            }
+            runCatchingCancellable {
+                repository.storageInventory(ready.candidates)
+            }.onSuccess { inventory ->
+                _state.updateReady {
+                    it.copy(
+                        storageInventory = inventory,
+                        storageScanInProgress = false,
+                        lastOutcome = "Measured ${inventory.versions.size} installed version payload(s).",
+                    )
+                }
+            }.onFailure { failure ->
+                ZephyrLogger.warn("Storage inventory failed.", failure)
+                fail("Storage inventory failed: ${failure.message}")
             }
         }
     }
@@ -665,6 +715,7 @@ class ZephyrViewModel(
                 _state.updateReady {
                     it.copy(
                         candidates = audited,
+                        storageInventory = null,
                         localOnlyScanInProgress = false,
                         selectedCandidate = it.selectedCandidate?.let { selected ->
                             audited.firstOrNull { candidate -> candidate.name == selected.name } ?: selected
@@ -731,6 +782,7 @@ class ZephyrViewModel(
                 it.copy(
                     candidates = candidates,
                     catalog = it.catalog.withInstalledCandidates(candidates),
+                    storageInventory = null,
                     isRefreshing = false,
                     lastOutcome = summary,
                     errorMessage = if (allSucceeded) null else "$summary Review the remaining task steps.",
@@ -862,6 +914,7 @@ class ZephyrViewModel(
                             selectedCandidate = merged,
                             detailLoadingCandidate = null,
                             candidates = it.candidates.replaceCandidate(merged),
+                            storageInventory = null,
                         )
                     } else {
                         it
@@ -893,6 +946,7 @@ class ZephyrViewModel(
                         candidates = result.candidates.replaceCandidate(result.selectedCandidate),
                         catalog = it.catalog.withInstalledCandidates(result.candidates),
                         selectedCandidate = result.selectedCandidate,
+                        storageInventory = null,
                         isRefreshing = false,
                         lastOutcome = result.outcome.message,
                         errorMessage = if (result.outcome.success) null else result.outcome.message,
@@ -945,6 +999,7 @@ class ZephyrViewModel(
                 isRefreshing = false,
                 isCatalogLoading = false,
                 localOnlyScanInProgress = false,
+                storageScanInProgress = false,
                 detailLoadingCandidate = null,
                 errorMessage = message,
             )
@@ -1335,6 +1390,7 @@ private fun ZephyrUiState.Ready.hasActiveOperation(): Boolean =
     isRefreshing ||
         isCatalogLoading ||
         localOnlyScanInProgress ||
+        storageScanInProgress ||
         detailLoadingCandidate != null ||
         journalExportInProgress ||
         diagnosticsExportInProgress ||
