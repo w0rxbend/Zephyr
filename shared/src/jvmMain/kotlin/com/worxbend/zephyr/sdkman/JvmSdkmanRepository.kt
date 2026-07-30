@@ -1,6 +1,7 @@
 package com.worxbend.zephyr.sdkman
 
 import com.worxbend.zephyr.data.SdkmanRepository
+import com.worxbend.zephyr.data.CommandSatisfaction
 import com.worxbend.zephyr.domain.Candidate
 import com.worxbend.zephyr.domain.CandidateCatalogItem
 import com.worxbend.zephyr.domain.CandidateVersion
@@ -15,6 +16,7 @@ import com.worxbend.zephyr.domain.IntegrityCheck
 import com.worxbend.zephyr.domain.IntegrityCheckId
 import com.worxbend.zephyr.domain.IntegrityStatus
 import com.worxbend.zephyr.domain.ProtectedVersion
+import com.worxbend.zephyr.domain.PlannedSdkmanCommand
 import com.worxbend.zephyr.domain.RemoteAvailability
 import com.worxbend.zephyr.domain.RemoteEvidenceState
 import com.worxbend.zephyr.domain.SdkmanSelfUpdateStatus
@@ -598,6 +600,34 @@ class JvmSdkmanRepository(
                 status = CommandOutcomeStatus.AppliedWithWarning,
             )
             else -> CommandOutcome(true, "Cleaned ${eligible.size} local-only version(s).")
+        }
+    }
+
+    override suspend fun commandSatisfaction(command: PlannedSdkmanCommand): CommandSatisfaction {
+        val candidate = command.candidate
+        val version = command.version
+        if (candidate != null && version != null) {
+            invalidCommandInput(candidate, version)?.let { return CommandSatisfaction.Indeterminate }
+        }
+        val condition = when (command.action) {
+            SdkmanCommandAction.Install -> versionPathState(
+                versionPath(requireNotNull(candidate), requireNotNull(version)),
+            )
+            SdkmanCommandAction.Uninstall -> versionPathState(
+                versionPath(requireNotNull(candidate), requireNotNull(version)),
+            ).inverted()
+            SdkmanCommandAction.SetDefault -> defaultPostcondition(
+                requireNotNull(candidate),
+                requireNotNull(version),
+            )
+            SdkmanCommandAction.UpdateMetadata,
+            SdkmanCommandAction.SelfUpdate,
+            -> PathPostcondition.Indeterminate
+        }
+        return when (condition) {
+            PathPostcondition.Satisfied -> CommandSatisfaction.Satisfied
+            PathPostcondition.Unsatisfied -> CommandSatisfaction.Unsatisfied
+            PathPostcondition.Indeterminate -> CommandSatisfaction.Indeterminate
         }
     }
 

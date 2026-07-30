@@ -45,6 +45,7 @@ import com.worxbend.zephyr.domain.SdkmanTransaction
 import com.worxbend.zephyr.domain.displayNameFor
 import com.worxbend.zephyr.domain.javaProviderName
 import com.worxbend.zephyr.domain.recoveryGuidance
+import com.worxbend.zephyr.domain.resumableCommands
 import com.worxbend.zephyr.domain.searchOperationJournal
 import com.worxbend.zephyr.data.formatLocalTimestamp
 import com.worxbend.zephyr.data.captureEnvironmentSnapshot
@@ -1506,8 +1507,8 @@ internal fun OperationHistoryScreen(
         verticalArrangement = Arrangement.spacedBy(metrics.spacing * 2),
     ) {
         PageTitle(
-            "Operation History",
-            "Review confirmed SDKMAN mutations from this Zephyr session.",
+            "Task Center",
+            "Review durable SDKMAN tasks, verified step outcomes, interruptions, and safe resume plans.",
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -1548,6 +1549,7 @@ internal fun OperationHistoryScreen(
                     OperationJournalCard(
                         entry = entry,
                         onRecoveryAction = { action -> viewModel.handleRecoveryAction(entry, action) },
+                        onResume = { viewModel.requestResumeOperation(entry.id) },
                     )
                 }
             }
@@ -1559,12 +1561,15 @@ internal fun OperationHistoryScreen(
 private fun OperationJournalCard(
     entry: OperationJournalEntry,
     onRecoveryAction: (RecoveryAction) -> Unit,
+    onResume: () -> Unit,
 ) {
     val metrics = LocalZephyrMetrics.current
     val tone = when (entry.status) {
         OperationStatus.Running -> StatusTone.Accent
         OperationStatus.Succeeded -> StatusTone.Success
         OperationStatus.Failed -> StatusTone.Error
+        OperationStatus.Interrupted -> StatusTone.Warning
+        OperationStatus.Indeterminate -> StatusTone.Warning
     }
     ZephyrPanel(Modifier.fillMaxWidth()) {
         Column(
@@ -1589,14 +1594,38 @@ private fun OperationJournalCard(
                 )
                 Badge(entry.status.label)
             }
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                entry.transaction.commands.forEach { command ->
-                    Badge(command.action.label, BadgeTone.Primary)
-                    command.candidate?.let { Badge(it) }
-                    command.version?.let { Badge(it) }
+            entry.steps.sortedBy { it.index }.forEach { step ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "${step.index + 1}.",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Badge(step.command.action.label, BadgeTone.Primary)
+                    step.command.candidate?.let { Badge(it) }
+                    step.command.version?.let { Badge(it) }
+                    Badge(
+                        step.status.label,
+                        when (step.status) {
+                            com.worxbend.zephyr.domain.OperationStepStatus.Succeeded -> BadgeTone.Success
+                            com.worxbend.zephyr.domain.OperationStepStatus.Failed,
+                            com.worxbend.zephyr.domain.OperationStepStatus.Indeterminate,
+                            -> BadgeTone.Warning
+                            else -> BadgeTone.Neutral
+                        },
+                    )
+                    step.outcome?.let {
+                        Text(
+                            it,
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
             entry.outcome?.let {
@@ -1630,6 +1659,12 @@ private fun OperationJournalCard(
                         }
                     }
                 }
+            }
+            if (entry.resumableCommands().isNotEmpty()) {
+                ZephyrToolbarButton(
+                    label = "Review remaining ${entry.resumableCommands().size}",
+                    onClick = onResume,
+                )
             }
         }
     }

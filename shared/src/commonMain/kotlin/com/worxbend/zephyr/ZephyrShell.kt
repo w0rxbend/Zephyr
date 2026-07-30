@@ -50,6 +50,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
 import com.worxbend.zephyr.domain.CandidateKind
+import com.worxbend.zephyr.domain.ActivityAction
+import com.worxbend.zephyr.domain.ActivitySeverity
 import com.worxbend.zephyr.domain.BatchItemStatus
 import com.worxbend.zephyr.domain.ConnectivityState
 import com.worxbend.zephyr.domain.DiskImpactEstimate
@@ -63,6 +65,7 @@ import com.worxbend.zephyr.actions.ZephyrActionHandler
 import com.worxbend.zephyr.actions.ZephyrActionIds
 import com.worxbend.zephyr.actions.validationError
 import com.worxbend.zephyr.data.currentEpochMillis
+import com.worxbend.zephyr.data.formatLocalTimestamp
 import com.worxbend.zephyr.settings.AppSettings
 import com.worxbend.zephyr.settings.MetadataRefreshSchedule
 import com.worxbend.zephyr.settings.recordRecentCandidate
@@ -213,6 +216,7 @@ internal fun ZephyrScreen(
             showSdkmanHome = settings.showSdkmanHome,
             onBack = viewModel::goBack,
             onOpenSearch = { globalSearchOpen = true },
+            onToggleActivity = viewModel::toggleActivityCenter,
             onToggleTheme = onToggleTheme,
             onRefresh = viewModel::refreshInstalled,
             onRefreshConnectivity = viewModel::refreshConnectivity,
@@ -255,11 +259,21 @@ internal fun ZephyrScreen(
         )
     }
 
+    if (state.activityCenterOpen) {
+        ActivityCenterPanel(
+            state = state,
+            onDismissEvent = viewModel::dismissActivity,
+            onAction = viewModel::handleActivityAction,
+            onClose = viewModel::toggleActivityCenter,
+        )
+    }
     BusyOverlay(state)
     MessageOverlay(
         state = state,
-        onDismiss = viewModel::clearMessages,
-        onOpenRecovery = { viewModel.navigate(ZephyrRoute.History) },
+        onDismiss = { eventId ->
+            if (eventId == LEGACY_MESSAGE_EVENT_ID) viewModel.clearMessages() else viewModel.dismissActivity(eventId)
+        },
+        onAction = viewModel::handleActivityAction,
     )
 }
 
@@ -408,6 +422,7 @@ private fun WorkbenchToolbar(
     showSdkmanHome: Boolean,
     onBack: () -> Unit,
     onOpenSearch: () -> Unit,
+    onToggleActivity: () -> Unit,
     onToggleTheme: () -> Unit,
     onRefresh: () -> Unit,
     onRefreshConnectivity: () -> Unit,
@@ -463,6 +478,12 @@ private fun WorkbenchToolbar(
             }
             Spacer(Modifier.weight(1f))
             GlobalSearchButton(onClick = onOpenSearch)
+            val unreadActivity = state.activityEvents.count { !it.acknowledged }
+            ZephyrToolbarButton(
+                label = "Activity",
+                detail = unreadActivity.takeIf { it > 0 }?.toString(),
+                onClick = onToggleActivity,
+            )
             HeaderThemeButton(darkTheme = darkTheme, onClick = onToggleTheme)
             ZephyrToolbarButton(
                 label = "Network",
@@ -487,6 +508,96 @@ private fun WorkbenchToolbar(
         }
     }
     Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
+}
+
+@Composable
+private fun ActivityCenterPanel(
+    state: ZephyrUiState.Ready,
+    onDismissEvent: (Long) -> Unit,
+    onAction: (ActivityAction) -> Unit,
+    onClose: () -> Unit,
+) {
+    val metrics = LocalZephyrMetrics.current
+    Surface(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(top = metrics.toolbarHeight + 8.dp, end = 16.dp),
+        color = androidx.compose.ui.graphics.Color.Transparent,
+    ) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopEnd) {
+            Surface(
+                modifier = Modifier.width(460.dp).heightIn(max = 520.dp),
+                color = MaterialTheme.colorScheme.surface,
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(metrics.cornerRadius),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                shadowElevation = 10.dp,
+            ) {
+                Column(
+                    modifier = Modifier
+                        .verticalScroll(rememberScrollState())
+                        .padding(metrics.panelPadding),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            "Activity",
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        TextButton(onClick = onClose) { Text("Close") }
+                    }
+                    if (state.activityEvents.isEmpty()) {
+                        Text(
+                            "No recent activity.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    } else {
+                        state.activityEvents.forEach { event ->
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                verticalArrangement = Arrangement.spacedBy(5.dp),
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                                ) {
+                                    Badge(
+                                        event.severity.label,
+                                        when (event.severity) {
+                                            ActivitySeverity.Success -> BadgeTone.Success
+                                            ActivitySeverity.Warning -> BadgeTone.Warning
+                                            ActivitySeverity.Error -> BadgeTone.Error
+                                            ActivitySeverity.Info -> BadgeTone.Neutral
+                                        },
+                                    )
+                                    Text(
+                                        formatLocalTimestamp(event.timestampEpochMillis),
+                                        modifier = Modifier.weight(1f),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    if (!event.acknowledged) {
+                                        TextButton(onClick = { onDismissEvent(event.id) }) { Text("Dismiss") }
+                                    }
+                                }
+                                Text(event.message, style = MaterialTheme.typography.bodySmall)
+                                event.action?.let { action ->
+                                    TextButton(onClick = { onAction(action) }) { Text(action.label) }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable

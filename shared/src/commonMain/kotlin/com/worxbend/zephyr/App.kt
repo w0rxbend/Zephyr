@@ -27,6 +27,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.worxbend.zephyr.data.createDesktopNotificationService
 import com.worxbend.zephyr.data.createSdkmanRepository
+import com.worxbend.zephyr.data.createOperationStore
 import com.worxbend.zephyr.data.currentEpochMillis
 import com.worxbend.zephyr.domain.CandidateMetadataStatus
 import com.worxbend.zephyr.domain.ProtectedVersion
@@ -46,7 +47,12 @@ import kotlinx.coroutines.delay
 
 @Composable
 fun App() {
-    val viewModel = remember { ZephyrViewModel(createSdkmanRepository()) }
+    val viewModel = remember {
+        ZephyrViewModel(
+            repository = createSdkmanRepository(),
+            operationStore = createOperationStore(),
+        )
+    }
     val settingsStore = remember { AppSettingsStore(createAppSettingsRepository()) }
     val notificationService = remember { createDesktopNotificationService() }
     DisposableEffect(viewModel, settingsStore) {

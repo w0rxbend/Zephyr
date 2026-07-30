@@ -3,6 +3,8 @@ package com.worxbend.zephyr.viewmodel
 import com.worxbend.zephyr.data.DiagnosticsExporter
 import com.worxbend.zephyr.data.CandidateMetadataCache
 import com.worxbend.zephyr.data.OperationJournalExporter
+import com.worxbend.zephyr.data.OperationStore
+import com.worxbend.zephyr.data.CommandSatisfaction
 import com.worxbend.zephyr.data.SdkmanRepository
 import com.worxbend.zephyr.domain.Candidate
 import com.worxbend.zephyr.domain.CandidateCatalogItem
@@ -23,6 +25,8 @@ import com.worxbend.zephyr.domain.InstallTarget
 import com.worxbend.zephyr.domain.JournalExportResult
 import com.worxbend.zephyr.domain.OperationJournalEntry
 import com.worxbend.zephyr.domain.OperationStatus
+import com.worxbend.zephyr.domain.OperationStep
+import com.worxbend.zephyr.domain.OperationStepStatus
 import com.worxbend.zephyr.domain.ProtectedVersion
 import com.worxbend.zephyr.domain.PlannedSdkmanCommand
 import com.worxbend.zephyr.domain.SdkmanCommandAction
@@ -526,6 +530,113 @@ class ZephyrViewModelTest {
     }
 
     @Test
+    fun reconcilesInterruptedTasksAndReviewsOnlyRemainingSteps() {
+        val transaction = SdkmanTransaction.BatchInstall(
+            listOf(
+                InstallTarget("java", "21.0.5-tem"),
+                InstallTarget("gradle", "9.1.0"),
+            ),
+        )
+        val stored = OperationJournalEntry(
+            id = 72,
+            transaction = transaction,
+            startedAtEpochMillis = 100,
+            status = OperationStatus.Running,
+            steps = transaction.commands.mapIndexed { index, command ->
+                OperationStep(
+                    index = index,
+                    command = command,
+                    status = if (index == 0) OperationStepStatus.Succeeded else OperationStepStatus.Running,
+                )
+            },
+        )
+        val store = InMemoryOperationStore(listOf(stored))
+        val remaining = transaction.commands[1]
+        val repository = FakeSdkmanRepository(
+            commandSatisfaction = mapOf(remaining to CommandSatisfaction.Unsatisfied),
+        )
+        val viewModel = ZephyrViewModel(
+            repository = repository,
+            dispatcher = testScope(),
+            operationStore = store,
+        )
+
+        val interrupted = assertIs<ZephyrUiState.Ready>(viewModel.state.value).operationJournal.single()
+        assertEquals(OperationStatus.Interrupted, interrupted.status)
+        assertEquals(
+            listOf(OperationStepStatus.Succeeded, OperationStepStatus.Interrupted),
+            interrupted.steps.map { it.status },
+        )
+
+        viewModel.requestResumeOperation(interrupted.id)
+
+        val pending = assertIs<SdkmanTransaction.BatchInstall>(
+            assertIs<ZephyrUiState.Ready>(viewModel.state.value).pendingTransaction,
+        )
+        assertEquals(listOf(InstallTarget("gradle", "9.1.0")), pending.targets)
+        assertTrue(store.saved.any { entries -> entries.single().status == OperationStatus.Interrupted })
+        viewModel.close()
+    }
+
+    @Test
+    fun indeterminateInterruptedStepsAreNeverAddedToResumePlan() {
+        val transaction = SdkmanTransaction.Install("java", "21.0.5-tem")
+        val stored = OperationJournalEntry(
+            id = 73,
+            transaction = transaction,
+            startedAtEpochMillis = 100,
+            status = OperationStatus.Running,
+            steps = listOf(
+                OperationStep(0, transaction.commands.single(), OperationStepStatus.Running),
+            ),
+        )
+        val store = InMemoryOperationStore(listOf(stored))
+        val repository = FakeSdkmanRepository(
+            commandSatisfaction = mapOf(
+                transaction.commands.single() to CommandSatisfaction.Indeterminate,
+            ),
+        )
+        val viewModel = ZephyrViewModel(
+            repository = repository,
+            dispatcher = testScope(),
+            operationStore = store,
+        )
+
+        val interrupted = assertIs<ZephyrUiState.Ready>(viewModel.state.value).operationJournal.single()
+        assertEquals(OperationStepStatus.Indeterminate, interrupted.steps.single().status)
+
+        viewModel.requestResumeOperation(interrupted.id)
+
+        val ready = assertIs<ZephyrUiState.Ready>(viewModel.state.value)
+        assertEquals(null, ready.pendingTransaction)
+        assertTrue(ready.lastOutcome.orEmpty().contains("Could not verify"))
+        assertTrue(repository.mutationCalls.isEmpty())
+        viewModel.close()
+    }
+
+    @Test
+    fun retainsConsecutiveOperationActivityInOrder() {
+        val repository = FakeSdkmanRepository()
+        var now = 10L
+        val viewModel = ZephyrViewModel(
+            repository = repository,
+            dispatcher = testScope(),
+            clock = { now++ },
+        )
+
+        viewModel.requestTransaction(SdkmanTransaction.Install("java", "21.0.5-tem"))
+        viewModel.confirmTransaction()
+        viewModel.requestTransaction(SdkmanTransaction.Uninstall("java", "17.0.1-tem"))
+        viewModel.confirmTransaction()
+
+        val events = assertIs<ZephyrUiState.Ready>(viewModel.state.value).activityEvents
+        assertEquals(listOf("Uninstalled", "Installed"), events.map { it.message })
+        assertTrue(events.zipWithNext().all { (newer, older) -> newer.id > older.id })
+        assertTrue(events.none { it.acknowledged })
+        viewModel.close()
+    }
+
+    @Test
     fun protectionChangesAreReflectedInReadyState() {
         val viewModel = ZephyrViewModel(FakeSdkmanRepository(), testScope())
         val protected = ProtectedVersion("java", "21.0.5-tem")
@@ -593,6 +704,7 @@ private class FakeSdkmanRepository(
     private val installOutcome: CommandOutcome = CommandOutcome(true, "Installed"),
     private val installFailure: Throwable? = null,
     private var connectivity: ConnectivityStatus = ConnectivityStatus(ConnectivityState.Online),
+    private val commandSatisfaction: Map<PlannedSdkmanCommand, CommandSatisfaction> = emptyMap(),
 ) : SdkmanRepository {
     var installedCandidatesCalls: Int = 0
         private set
@@ -703,6 +815,23 @@ private class FakeSdkmanRepository(
     override suspend fun cleanLocalOnly(candidate: String, versions: List<String>): CommandOutcome {
         mutationCalls += "clean:$candidate:${versions.joinToString(",")}"
         return CommandOutcome(true, "Cleaned")
+    }
+
+    override suspend fun commandSatisfaction(command: PlannedSdkmanCommand): CommandSatisfaction =
+        commandSatisfaction[command] ?: CommandSatisfaction.Indeterminate
+}
+
+private class InMemoryOperationStore(
+    initial: List<OperationJournalEntry> = emptyList(),
+) : OperationStore {
+    private var entries = initial
+    val saved = mutableListOf<List<OperationJournalEntry>>()
+
+    override suspend fun load(): List<OperationJournalEntry> = entries
+
+    override suspend fun save(entries: List<OperationJournalEntry>) {
+        this.entries = entries
+        saved += entries
     }
 }
 

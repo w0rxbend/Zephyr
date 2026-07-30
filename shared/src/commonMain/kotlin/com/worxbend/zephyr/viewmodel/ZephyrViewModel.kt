@@ -2,11 +2,17 @@ package com.worxbend.zephyr.viewmodel
 
 import com.worxbend.zephyr.data.DiagnosticsExporter
 import com.worxbend.zephyr.data.OperationJournalExporter
+import com.worxbend.zephyr.data.OperationStore
+import com.worxbend.zephyr.data.NoOpOperationStore
+import com.worxbend.zephyr.data.CommandSatisfaction
 import com.worxbend.zephyr.data.SdkmanRepository
 import com.worxbend.zephyr.data.createDiagnosticsExporter
 import com.worxbend.zephyr.data.createOperationJournalExporter
 import com.worxbend.zephyr.data.currentEpochMillis
 import com.worxbend.zephyr.domain.Candidate
+import com.worxbend.zephyr.domain.ActivityAction
+import com.worxbend.zephyr.domain.ActivityEvent
+import com.worxbend.zephyr.domain.ActivitySeverity
 import com.worxbend.zephyr.domain.CandidateCatalogItem
 import com.worxbend.zephyr.domain.CandidateMetadataStatus
 import com.worxbend.zephyr.domain.BatchInstallProgress
@@ -22,6 +28,9 @@ import com.worxbend.zephyr.domain.EstimateConfidence
 import com.worxbend.zephyr.domain.IntegrityCheck
 import com.worxbend.zephyr.domain.OperationJournalEntry
 import com.worxbend.zephyr.domain.OperationStatus
+import com.worxbend.zephyr.domain.OperationStep
+import com.worxbend.zephyr.domain.OperationStepStatus
+import com.worxbend.zephyr.domain.PlannedSdkmanCommand
 import com.worxbend.zephyr.domain.ProtectedVersion
 import com.worxbend.zephyr.domain.ReadRetryStatus
 import com.worxbend.zephyr.domain.RetryableReadOperation
@@ -30,6 +39,8 @@ import com.worxbend.zephyr.domain.SdkmanCommandAction
 import com.worxbend.zephyr.domain.SdkmanStatus
 import com.worxbend.zephyr.domain.SdkmanTransaction
 import com.worxbend.zephyr.domain.SnapshotRestoreProgress
+import com.worxbend.zephyr.domain.CommandOutcomeStatus
+import com.worxbend.zephyr.domain.resumeTransaction
 import com.worxbend.zephyr.domain.requiresNetwork
 import com.worxbend.zephyr.domain.withInstalledCandidates
 import com.worxbend.zephyr.logging.ZephyrLogger
@@ -91,6 +102,8 @@ sealed interface ZephyrUiState {
         val pendingTransactionDiskImpact: DiskImpactEstimate? = null,
         val transactionPreviewLoading: Boolean = false,
         val operationJournal: List<OperationJournalEntry> = emptyList(),
+        val activityEvents: List<ActivityEvent> = emptyList(),
+        val activityCenterOpen: Boolean = false,
         val journalExportInProgress: Boolean = false,
         val diagnosticsExportInProgress: Boolean = false,
         val batchInstallProgress: List<BatchInstallProgress> = emptyList(),
@@ -109,6 +122,7 @@ class ZephyrViewModel(
     private val journalExporter: OperationJournalExporter = createOperationJournalExporter(),
     private val diagnosticsExporter: DiagnosticsExporter = createDiagnosticsExporter(),
     private val readRetryDelaysMillis: List<Long> = listOf(500L, 1_500L),
+    private val operationStore: OperationStore = NoOpOperationStore,
     private val clock: () -> Long = ::currentEpochMillis,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
@@ -116,6 +130,7 @@ class ZephyrViewModel(
     val state: StateFlow<ZephyrUiState> = _state
     private val operationMutex = Mutex()
     private var nextJournalId = 1L
+    private var nextActivityId = 1L
 
     init {
         refreshAll()
@@ -139,6 +154,7 @@ class ZephyrViewModel(
                     val cachedCatalog = repository.cachedCatalog()
                     val protectedVersions = loadProtectedVersions()
                     val integrityChecks = loadIntegrityChecks()
+                    val operationJournal = loadAndReconcileOperations()
                     _state.value = ZephyrUiState.Ready(
                         sdkmanStatus = status,
                         route = ZephyrRoute.Overview,
@@ -153,6 +169,7 @@ class ZephyrViewModel(
                         localOnlyScanInProgress = false,
                         errorMessage = null,
                         lastOutcome = "Loaded ${candidates.size} installed SDKMAN package(s).",
+                        operationJournal = operationJournal,
                         protectedVersions = protectedVersions,
                         integrityChecks = integrityChecks,
                     )
@@ -165,6 +182,7 @@ class ZephyrViewModel(
                     if (detected.isInstalled) {
                         val candidates = repository.installedCandidates()
                         val cachedCatalog = repository.cachedCatalog()
+                        val operationJournal = loadAndReconcileOperations()
                         _state.value = ZephyrUiState.Ready(
                             sdkmanStatus = detected.copy(cliVersion = repository.cliVersion()),
                             route = ZephyrRoute.BrowseSdks,
@@ -179,6 +197,7 @@ class ZephyrViewModel(
                             localOnlyScanInProgress = false,
                             errorMessage = "SDKMAN catalog failed: ${failure.message}",
                             lastOutcome = null,
+                            operationJournal = operationJournal,
                             protectedVersions = loadProtectedVersions(),
                             integrityChecks = loadIntegrityChecks(),
                         )
@@ -232,7 +251,40 @@ class ZephyrViewModel(
     }
 
     fun clearMessages() {
-        _state.updateReady { it.copy(errorMessage = null, lastOutcome = null) }
+        val currentId = (_state.value as? ZephyrUiState.Ready)
+            ?.activityEvents
+            ?.firstOrNull { !it.acknowledged }
+            ?.id
+        _state.updateReady {
+            it.copy(
+                errorMessage = null,
+                lastOutcome = null,
+                activityEvents = it.activityEvents.map { event ->
+                    if (event.id == currentId) event.copy(acknowledged = true) else event
+                },
+            )
+        }
+    }
+
+    fun toggleActivityCenter() {
+        _state.updateReady { it.copy(activityCenterOpen = !it.activityCenterOpen) }
+    }
+
+    fun dismissActivity(eventId: Long) {
+        _state.updateReady {
+            it.copy(
+                activityEvents = it.activityEvents.map { event ->
+                    if (event.id == eventId) event.copy(acknowledged = true) else event
+                },
+            )
+        }
+    }
+
+    fun handleActivityAction(action: ActivityAction) {
+        when (action) {
+            ActivityAction.OpenTaskCenter -> navigate(ZephyrRoute.History)
+        }
+        _state.updateReady { it.copy(activityCenterOpen = false) }
     }
 
     fun requestTransaction(transaction: SdkmanTransaction) {
@@ -329,6 +381,36 @@ class ZephyrViewModel(
         requestTransaction(retry)
     }
 
+    fun requestResumeOperation(entryId: Long) {
+        scope.launch {
+            val ready = _state.value as? ZephyrUiState.Ready ?: return@launch
+            val entry = ready.operationJournal.firstOrNull { it.id == entryId } ?: return@launch
+            val reconciled = reconcileOperation(entry, includeFailed = true)
+            _state.updateReady { state ->
+                state.copy(
+                    operationJournal = state.operationJournal.map {
+                        if (it.id == entryId) reconciled else it
+                    },
+                )
+            }
+            persistOperationJournal()
+            val transaction = reconciled.resumeTransaction()
+            if (transaction == null) {
+                _state.updateReady {
+                    it.copy(
+                        lastOutcome = if (reconciled.steps.all { step -> step.status == OperationStepStatus.Succeeded }) {
+                            "Every task step is already satisfied."
+                        } else {
+                            "No task steps can be resumed safely. Review steps marked Could not verify."
+                        },
+                    )
+                }
+                return@launch
+            }
+            requestTransaction(transaction)
+        }
+    }
+
     fun dismissTransaction() {
         _state.updateReady {
             it.copy(
@@ -345,15 +427,23 @@ class ZephyrViewModel(
             it.copy(
                 pendingTransaction = null,
                 pendingTransactionDiskImpact = null,
+                transactionPreviewLoading = true,
             )
         }
-        val journalId = startJournalEntry(transaction)
+        scope.launch {
+            val journalId = startJournalEntry(transaction) ?: return@launch
+            _state.updateReady { it.copy(transactionPreviewLoading = false) }
+            dispatchTransaction(transaction, journalId)
+        }
+    }
+
+    private fun dispatchTransaction(transaction: SdkmanTransaction, journalId: Long) {
         when (transaction) {
             is SdkmanTransaction.Install -> install(transaction.candidate, transaction.version, journalId)
-            is SdkmanTransaction.BatchInstall -> batchInstall(transaction, journalId)
-            is SdkmanTransaction.SnapshotRestore -> restoreSnapshot(transaction, journalId)
+            is SdkmanTransaction.BatchInstall -> executeBatchTransaction(transaction, journalId)
+            is SdkmanTransaction.SnapshotRestore -> executeBatchTransaction(transaction, journalId)
             is SdkmanTransaction.Uninstall -> uninstall(transaction.candidate, transaction.version, journalId)
-            is SdkmanTransaction.BatchUninstall -> batchUninstall(transaction, journalId)
+            is SdkmanTransaction.BatchUninstall -> executeBatchTransaction(transaction, journalId)
             is SdkmanTransaction.SetDefault -> setDefault(transaction.candidate, transaction.version, journalId)
             is SdkmanTransaction.CleanLocalOnly -> cleanLocalOnly(transaction.candidate, transaction.versions, journalId)
             SdkmanTransaction.RefreshMetadata -> refreshMetadata(journalId)
@@ -592,125 +682,103 @@ class ZephyrViewModel(
         repository.install(candidate, version)
     }
 
-    private fun batchInstall(transaction: SdkmanTransaction.BatchInstall, journalId: Long) {
+    private fun executeBatchTransaction(transaction: SdkmanTransaction, journalId: Long) {
         launchOperation {
             if (!beginRefresh()) return@launchOperation
-            var progress = transaction.targets.map { BatchInstallProgress(it) }
-            _state.updateReady { it.copy(batchInstallProgress = progress) }
-            transaction.targets.forEachIndexed { index, target ->
-                progress = progress.updateBatchItem(index, BatchItemStatus.Running)
-                _state.updateReady { it.copy(batchInstallProgress = progress) }
-                val outcome = runCatchingCancellable {
-                    repository.install(target.candidate, target.version)
-                }.getOrElse { failure ->
-                    CommandOutcome(false, failure.message ?: "Install failed.")
-                }
-                progress = progress.updateBatchItem(
-                    index = index,
-                    status = if (outcome.success) BatchItemStatus.Succeeded else BatchItemStatus.Failed,
-                    outcome = outcome.message,
-                )
-                _state.updateReady { it.copy(batchInstallProgress = progress) }
-            }
-            val candidates = runCatchingCancellable { repository.installedCandidates() }
-                .getOrElse { (_state.value as? ZephyrUiState.Ready)?.candidates.orEmpty() }
-            val succeeded = progress.count { it.status == BatchItemStatus.Succeeded }
-            val summary = "$succeeded of ${progress.size} selected installs succeeded."
-            val allSucceeded = succeeded == progress.size
-            completeJournalEntry(journalId, allSucceeded, summary)
-            _state.updateReady {
-                it.copy(
-                    candidates = candidates,
-                    catalog = it.catalog.withInstalledCandidates(candidates),
-                    batchInstallProgress = progress,
-                    isRefreshing = false,
-                    lastOutcome = summary,
-                    errorMessage = if (allSucceeded) null else summary,
-                )
-            }
-        }
-    }
-
-    private fun batchUninstall(transaction: SdkmanTransaction.BatchUninstall, journalId: Long) {
-        launchOperation {
-            if (!beginRefresh()) return@launchOperation
-            var progress = transaction.targets.map { BatchUninstallProgress(it) }
-            _state.updateReady { it.copy(batchUninstallProgress = progress) }
-            transaction.targets.forEachIndexed { index, target ->
-                progress = progress.updateBatchUninstallItem(index, BatchItemStatus.Running)
-                _state.updateReady { it.copy(batchUninstallProgress = progress) }
-                val outcome = runCatchingCancellable {
-                    repository.uninstall(target.candidate, target.version)
-                }.getOrElse { failure ->
-                    CommandOutcome(false, failure.message ?: "Uninstall failed.")
-                }
-                progress = progress.updateBatchUninstallItem(
-                    index = index,
-                    status = if (outcome.success) BatchItemStatus.Succeeded else BatchItemStatus.Failed,
-                    outcome = outcome.message,
-                )
-                _state.updateReady { it.copy(batchUninstallProgress = progress) }
-            }
-            val candidates = runCatchingCancellable { repository.installedCandidates() }
-                .getOrElse { (_state.value as? ZephyrUiState.Ready)?.candidates.orEmpty() }
-            val succeeded = progress.count { it.status == BatchItemStatus.Succeeded }
-            val summary = "$succeeded of ${progress.size} selected uninstalls succeeded."
-            val allSucceeded = succeeded == progress.size
-            completeJournalEntry(journalId, allSucceeded, summary)
-            _state.updateReady {
-                it.copy(
-                    candidates = candidates,
-                    catalog = it.catalog.withInstalledCandidates(candidates),
-                    batchUninstallProgress = progress,
-                    isRefreshing = false,
-                    lastOutcome = summary,
-                    errorMessage = if (allSucceeded) null else summary,
-                )
-            }
-        }
-    }
-
-    private fun restoreSnapshot(transaction: SdkmanTransaction.SnapshotRestore, journalId: Long) {
-        launchOperation {
-            if (!beginRefresh()) return@launchOperation
-            var progress = transaction.commands.map { SnapshotRestoreProgress(it) }
-            _state.updateReady { it.copy(snapshotRestoreProgress = progress) }
+            val commands = transaction.commands
+            val statuses = MutableList(commands.size) { OperationStepStatus.Pending }
+            val outcomes = MutableList<String?>(commands.size) { null }
+            val failedInstalls = mutableSetOf<Pair<String, String>>()
+            publishBatchProgress(transaction, commands, statuses, outcomes)
             transaction.commands.forEachIndexed { index, command ->
-                progress = progress.updateSnapshotRestoreItem(index, BatchItemStatus.Running)
-                _state.updateReady { it.copy(snapshotRestoreProgress = progress) }
-                val outcome = runCatchingCancellable {
-                    when (command.action) {
-                        SdkmanCommandAction.Install ->
-                            repository.install(requireNotNull(command.candidate), requireNotNull(command.version))
-                        SdkmanCommandAction.SetDefault ->
-                            repository.setDefault(requireNotNull(command.candidate), requireNotNull(command.version))
-                        else -> error("Unsupported snapshot restore action.")
-                    }
-                }.getOrElse { failure ->
-                    CommandOutcome(false, failure.message ?: "Snapshot restore step failed.")
+                val target = command.candidate to command.version
+                if (command.action == SdkmanCommandAction.SetDefault && target in failedInstalls) {
+                    statuses[index] = OperationStepStatus.Skipped
+                    outcomes[index] = "Skipped because the required install did not succeed."
+                    updateJournalStep(
+                        journalId,
+                        index,
+                        OperationStepStatus.Skipped,
+                        outcomes[index],
+                    )
+                    publishBatchProgress(transaction, commands, statuses, outcomes)
+                    return@forEachIndexed
                 }
-                progress = progress.updateSnapshotRestoreItem(
-                    index = index,
-                    status = if (outcome.success) BatchItemStatus.Succeeded else BatchItemStatus.Failed,
-                    outcome = outcome.message,
-                )
-                _state.updateReady { it.copy(snapshotRestoreProgress = progress) }
+                statuses[index] = OperationStepStatus.Running
+                if (!updateJournalStep(journalId, index, OperationStepStatus.Running, null)) {
+                    statuses[index] = OperationStepStatus.Interrupted
+                    outcomes[index] = "Task ledger could not be updated; execution was stopped."
+                    publishBatchProgress(transaction, commands, statuses, outcomes)
+                    return@launchOperation
+                }
+                publishBatchProgress(transaction, commands, statuses, outcomes)
+                val outcome = executeCommand(command)
+                statuses[index] = outcome.operationStepStatus()
+                outcomes[index] = outcome.message
+                if (command.action == SdkmanCommandAction.Install && !outcome.success) {
+                    failedInstalls += requireNotNull(command.candidate) to requireNotNull(command.version)
+                }
+                updateJournalStep(journalId, index, statuses[index], outcome.message)
+                publishBatchProgress(transaction, commands, statuses, outcomes)
             }
             val candidates = runCatchingCancellable { repository.installedCandidates() }
                 .getOrElse { (_state.value as? ZephyrUiState.Ready)?.candidates.orEmpty() }
-            val succeeded = progress.count { it.status == BatchItemStatus.Succeeded }
-            val summary = "$succeeded of ${progress.size} snapshot restore steps succeeded."
-            val allSucceeded = succeeded == progress.size
+            val succeeded = statuses.count { it == OperationStepStatus.Succeeded }
+            val summary = "$succeeded of ${commands.size} ${transaction.batchSummaryLabel()} succeeded."
+            val allSucceeded = succeeded == commands.size
             completeJournalEntry(journalId, allSucceeded, summary)
             _state.updateReady {
                 it.copy(
                     candidates = candidates,
                     catalog = it.catalog.withInstalledCandidates(candidates),
-                    snapshotRestoreProgress = progress,
                     isRefreshing = false,
                     lastOutcome = summary,
-                    errorMessage = if (allSucceeded) null else "$summary Review and resume the remaining plan.",
+                    errorMessage = if (allSucceeded) null else "$summary Review the remaining task steps.",
                 )
+            }
+        }
+    }
+
+    private suspend fun executeCommand(command: PlannedSdkmanCommand): CommandOutcome =
+        runCatchingCancellable {
+            when (command.action) {
+                SdkmanCommandAction.Install ->
+                    repository.install(requireNotNull(command.candidate), requireNotNull(command.version))
+                SdkmanCommandAction.Uninstall ->
+                    repository.uninstall(requireNotNull(command.candidate), requireNotNull(command.version))
+                SdkmanCommandAction.SetDefault ->
+                    repository.setDefault(requireNotNull(command.candidate), requireNotNull(command.version))
+                else -> error("Unsupported task step.")
+            }
+        }.getOrElse { failure ->
+            CommandOutcome(false, failure.message ?: "Task step failed.")
+        }
+
+    private fun publishBatchProgress(
+        transaction: SdkmanTransaction,
+        commands: List<PlannedSdkmanCommand>,
+        statuses: List<OperationStepStatus>,
+        outcomes: List<String?>,
+    ) {
+        val batchStatuses = statuses.map(OperationStepStatus::toBatchItemStatus)
+        _state.updateReady { ready ->
+            when (transaction) {
+                is SdkmanTransaction.BatchInstall -> ready.copy(
+                    batchInstallProgress = transaction.targets.mapIndexed { index, target ->
+                        BatchInstallProgress(target, batchStatuses[index], outcomes[index])
+                    },
+                )
+                is SdkmanTransaction.BatchUninstall -> ready.copy(
+                    batchUninstallProgress = transaction.targets.mapIndexed { index, target ->
+                        BatchUninstallProgress(target, batchStatuses[index], outcomes[index])
+                    },
+                )
+                is SdkmanTransaction.SnapshotRestore -> ready.copy(
+                    snapshotRestoreProgress = commands.mapIndexed { index, command ->
+                        SnapshotRestoreProgress(command, batchStatuses[index], outcomes[index])
+                    },
+                )
+                else -> ready
             }
         }
     }
@@ -881,9 +949,10 @@ class ZephyrViewModel(
                 errorMessage = message,
             )
         }
+        recordActivity(message, ActivitySeverity.Error)
     }
 
-    private fun startJournalEntry(transaction: SdkmanTransaction): Long {
+    private suspend fun startJournalEntry(transaction: SdkmanTransaction): Long? {
         val id = nextJournalId++
         val entry = OperationJournalEntry(
             id = id,
@@ -891,19 +960,89 @@ class ZephyrViewModel(
             startedAtEpochMillis = clock(),
         )
         _state.updateReady { it.copy(operationJournal = listOf(entry) + it.operationJournal) }
+        if (!persistOperationJournal()) {
+            _state.updateReady {
+                it.copy(
+                    operationJournal = it.operationJournal.filterNot { stored -> stored.id == id },
+                    transactionPreviewLoading = false,
+                    errorMessage = "The task ledger could not be saved, so the operation was not started.",
+                )
+            }
+            return null
+        }
         return id
     }
 
-    private fun completeJournalEntry(journalId: Long?, success: Boolean, outcome: String) {
+    private suspend fun updateJournalStep(
+        journalId: Long,
+        stepIndex: Int,
+        status: OperationStepStatus,
+        outcome: String?,
+    ): Boolean {
+        _state.updateReady { ready ->
+            ready.copy(
+                operationJournal = ready.operationJournal.map { entry ->
+                    if (entry.id != journalId) {
+                        entry
+                    } else {
+                        entry.copy(
+                            steps = entry.steps.map { step ->
+                                if (step.index == stepIndex) {
+                                    step.copy(
+                                        status = status,
+                                        outcome = outcome,
+                                        completedAtEpochMillis = clock().takeIf {
+                                            status != OperationStepStatus.Pending && status != OperationStepStatus.Running
+                                        },
+                                    )
+                                } else {
+                                    step
+                                }
+                            },
+                        )
+                    }
+                },
+            )
+        }
+        return persistOperationJournal()
+    }
+
+    private suspend fun completeJournalEntry(journalId: Long?, success: Boolean, outcome: String) {
         if (journalId == null) return
+        val completedAt = clock()
+        val current = (_state.value as? ZephyrUiState.Ready)
+            ?.operationJournal
+            ?.firstOrNull { it.id == journalId }
+            ?: return
+        val resolvedSteps = current.steps.map { step ->
+            when {
+                step.status != OperationStepStatus.Pending && step.status != OperationStepStatus.Running -> step
+                success -> step.copy(
+                    status = OperationStepStatus.Succeeded,
+                    outcome = step.outcome ?: outcome,
+                    completedAtEpochMillis = completedAt,
+                )
+                else -> step.copy(
+                    status = OperationStepStatus.Failed,
+                    outcome = step.outcome ?: outcome,
+                    completedAtEpochMillis = completedAt,
+                )
+            }
+        }
+        val resolvedStatus = when {
+            resolvedSteps.all { it.status == OperationStepStatus.Succeeded } -> OperationStatus.Succeeded
+            resolvedSteps.any { it.status == OperationStepStatus.Indeterminate } -> OperationStatus.Indeterminate
+            else -> OperationStatus.Failed
+        }
         _state.updateReady { ready ->
             ready.copy(
                 operationJournal = ready.operationJournal.map { entry ->
                     if (entry.id == journalId) {
                         entry.copy(
-                            completedAtEpochMillis = clock(),
-                            status = if (success) OperationStatus.Succeeded else OperationStatus.Failed,
+                            completedAtEpochMillis = completedAt,
+                            status = resolvedStatus,
                             outcome = outcome,
+                            steps = resolvedSteps,
                         )
                     } else {
                         entry
@@ -911,6 +1050,126 @@ class ZephyrViewModel(
                 },
             )
         }
+        persistOperationJournal()
+        recordActivity(
+            message = outcome,
+            severity = when (resolvedStatus) {
+                OperationStatus.Succeeded -> ActivitySeverity.Success
+                OperationStatus.Failed -> ActivitySeverity.Error
+                OperationStatus.Interrupted -> ActivitySeverity.Warning
+                OperationStatus.Indeterminate -> ActivitySeverity.Warning
+                OperationStatus.Running -> ActivitySeverity.Info
+            },
+            timestampEpochMillis = completedAt,
+            action = ActivityAction.OpenTaskCenter,
+        )
+    }
+
+    private fun recordActivity(
+        message: String,
+        severity: ActivitySeverity,
+        timestampEpochMillis: Long = clock(),
+        action: ActivityAction? = null,
+    ) {
+        val normalized = message.trim().take(MAX_ACTIVITY_MESSAGE_LENGTH)
+        if (normalized.isEmpty()) return
+        val event = ActivityEvent(
+            id = nextActivityId++,
+            timestampEpochMillis = timestampEpochMillis,
+            severity = severity,
+            message = normalized,
+            action = action,
+        )
+        _state.updateReady {
+            it.copy(activityEvents = (listOf(event) + it.activityEvents).take(MAX_ACTIVITY_EVENTS))
+        }
+    }
+
+    private suspend fun loadAndReconcileOperations(): List<OperationJournalEntry> {
+        val loaded = runCatchingCancellable { operationStore.load() }
+            .getOrElse { failure ->
+                ZephyrLogger.warn("Unable to load the task ledger.", failure)
+                emptyList()
+            }
+        nextJournalId = (loaded.maxOfOrNull(OperationJournalEntry::id) ?: 0L) + 1L
+        val reconciled = loaded.map { entry ->
+            if (entry.status == OperationStatus.Running) {
+                reconcileOperation(entry, includeFailed = false)
+            } else {
+                entry
+            }
+        }
+        if (reconciled != loaded) {
+            runCatchingCancellable { operationStore.save(reconciled) }
+                .onFailure { ZephyrLogger.warn("Unable to save reconciled task history.", it) }
+        }
+        return reconciled
+    }
+
+    private suspend fun reconcileOperation(
+        entry: OperationJournalEntry,
+        includeFailed: Boolean,
+    ): OperationJournalEntry {
+        val reconciledSteps = entry.steps.map { step ->
+            if (
+                step.status == OperationStepStatus.Succeeded ||
+                step.status == OperationStepStatus.Skipped ||
+                (!includeFailed && step.status == OperationStepStatus.Failed)
+            ) {
+                step
+            } else {
+                reconcileStep(step, includeFailed)
+            }
+        }
+        val allSucceeded = reconciledSteps.all { it.status == OperationStepStatus.Succeeded }
+        return entry.copy(
+            completedAtEpochMillis = if (allSucceeded) entry.completedAtEpochMillis ?: clock() else entry.completedAtEpochMillis,
+            status = if (allSucceeded) OperationStatus.Succeeded else OperationStatus.Interrupted,
+            outcome = if (allSucceeded) {
+                "Every task step was verified after restart."
+            } else {
+                "Task execution was interrupted. Review the remaining steps before resuming."
+            },
+            steps = reconciledSteps,
+        )
+    }
+
+    private suspend fun reconcileStep(
+        step: OperationStep,
+        includeFailed: Boolean,
+    ): OperationStep =
+        when (repository.commandSatisfaction(step.command)) {
+            CommandSatisfaction.Satisfied -> step.copy(
+                status = OperationStepStatus.Succeeded,
+                outcome = "Verified from current SDKMAN state.",
+                completedAtEpochMillis = step.completedAtEpochMillis ?: clock(),
+            )
+            CommandSatisfaction.Unsatisfied -> step.copy(
+                status = when {
+                    step.status == OperationStepStatus.Pending -> OperationStepStatus.Pending
+                    includeFailed && step.status == OperationStepStatus.Failed -> OperationStepStatus.Failed
+                    else -> OperationStepStatus.Interrupted
+                },
+                outcome = "Current SDKMAN state does not satisfy this step.",
+                completedAtEpochMillis = null,
+            )
+            CommandSatisfaction.Indeterminate -> step.copy(
+                status = OperationStepStatus.Indeterminate,
+                outcome = "Current SDKMAN state could not verify this step.",
+                completedAtEpochMillis = null,
+            )
+        }
+
+    private suspend fun persistOperationJournal(): Boolean {
+        val entries = (_state.value as? ZephyrUiState.Ready)?.operationJournal.orEmpty()
+        return runCatchingCancellable { operationStore.save(entries) }
+            .onFailure { failure ->
+                ZephyrLogger.warn("Unable to persist the task ledger.", failure)
+                _state.updateReady {
+                    it.copy(errorMessage = "Task history could not be saved: ${failure.message ?: "storage unavailable"}.")
+                }
+            }
+            .isSuccess
     }
 
     private suspend fun loadProtectedVersions(): Set<ProtectedVersion> =
@@ -1037,6 +1296,33 @@ private fun List<SnapshotRestoreProgress>.updateSnapshotRestoreItem(
         if (itemIndex == index) item.copy(status = status, outcome = outcome) else item
     }
 
+private fun CommandOutcome.operationStepStatus(): OperationStepStatus =
+    when {
+        status == CommandOutcomeStatus.Indeterminate -> OperationStepStatus.Indeterminate
+        success -> OperationStepStatus.Succeeded
+        else -> OperationStepStatus.Failed
+    }
+
+private fun OperationStepStatus.toBatchItemStatus(): BatchItemStatus =
+    when (this) {
+        OperationStepStatus.Pending -> BatchItemStatus.Pending
+        OperationStepStatus.Running -> BatchItemStatus.Running
+        OperationStepStatus.Succeeded -> BatchItemStatus.Succeeded
+        OperationStepStatus.Failed,
+        OperationStepStatus.Interrupted,
+        OperationStepStatus.Indeterminate,
+        OperationStepStatus.Skipped,
+        -> BatchItemStatus.Failed
+    }
+
+private fun SdkmanTransaction.batchSummaryLabel(): String =
+    when (this) {
+        is SdkmanTransaction.BatchInstall -> "selected installs"
+        is SdkmanTransaction.BatchUninstall -> "selected uninstalls"
+        is SdkmanTransaction.SnapshotRestore -> "snapshot restore steps"
+        else -> "task steps"
+    }
+
 private fun ZephyrUiState.Ready.displaysCandidate(candidate: String): Boolean =
     when (val currentRoute = route) {
         is ZephyrRoute.JdkDetail -> currentRoute.candidate == candidate
@@ -1053,3 +1339,6 @@ private fun ZephyrUiState.Ready.hasActiveOperation(): Boolean =
         journalExportInProgress ||
         diagnosticsExportInProgress ||
         transactionPreviewLoading
+
+private const val MAX_ACTIVITY_EVENTS = 100
+private const val MAX_ACTIVITY_MESSAGE_LENGTH = 1_000

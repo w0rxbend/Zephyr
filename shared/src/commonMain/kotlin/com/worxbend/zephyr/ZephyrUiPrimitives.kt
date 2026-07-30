@@ -42,6 +42,8 @@ import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
@@ -57,6 +59,8 @@ import androidx.compose.ui.unit.DpOffset
 import com.worxbend.zephyr.domain.CandidateKind
 import com.worxbend.zephyr.domain.BatchItemStatus
 import com.worxbend.zephyr.domain.OperationStatus
+import com.worxbend.zephyr.domain.ActivityAction
+import com.worxbend.zephyr.domain.ActivitySeverity
 import com.worxbend.zephyr.data.createClipboardService
 import com.worxbend.zephyr.viewmodel.ZephyrUiState
 import org.jetbrains.compose.resources.painterResource
@@ -391,30 +395,40 @@ internal fun CodeBlock(text: String) {
 @Composable
 internal fun MessageOverlay(
     state: ZephyrUiState.Ready,
-    onDismiss: () -> Unit,
-    onOpenRecovery: (() -> Unit)? = null,
+    onDismiss: (Long) -> Unit,
+    onAction: (ActivityAction) -> Unit,
 ) {
-    val message = state.errorMessage ?: state.lastOutcome ?: return
-    val hasFailedOperation = state.errorMessage != null &&
-        state.operationJournal.firstOrNull()?.status == OperationStatus.Failed
-    LaunchedEffect(message) {
-        kotlinx.coroutines.delay(10_000)
-        onDismiss()
+    val event = state.activityEvents.firstOrNull { !it.acknowledged }
+    val legacyMessage = state.errorMessage ?: state.lastOutcome
+    val message = event?.message ?: legacyMessage ?: return
+    val eventId = event?.id ?: LEGACY_MESSAGE_EVENT_ID
+    val severity = event?.severity ?: if (state.errorMessage != null) ActivitySeverity.Error else ActivitySeverity.Info
+    LaunchedEffect(eventId, severity) {
+        if (severity != ActivitySeverity.Error) {
+            kotlinx.coroutines.delay(10_000)
+            onDismiss(eventId)
+        }
     }
     Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.BottomEnd) {
         Row(
-            Modifier.clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.inverseSurface).padding(horizontal = 16.dp, vertical = 10.dp),
+            Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.inverseSurface)
+                .semantics { liveRegion = LiveRegionMode.Polite }
+                .padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(message, color = MaterialTheme.colorScheme.inverseOnSurface, maxLines = 3, overflow = TextOverflow.Ellipsis)
-            if (hasFailedOperation && onOpenRecovery != null) {
-                TextButton(onClick = onOpenRecovery) { Text("Recovery steps") }
+            event?.action?.let { action ->
+                TextButton(onClick = { onAction(action) }) { Text(action.label) }
             }
-            TextButton(onClick = onDismiss) { Text("Dismiss") }
+            TextButton(onClick = { onDismiss(eventId) }) { Text("Dismiss") }
         }
     }
 }
+
+internal const val LEGACY_MESSAGE_EVENT_ID = Long.MIN_VALUE
 
 @Composable
 internal fun BusyOverlay(state: ZephyrUiState.Ready) {

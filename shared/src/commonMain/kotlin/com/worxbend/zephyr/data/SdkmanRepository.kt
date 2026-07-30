@@ -11,6 +11,13 @@ import com.worxbend.zephyr.domain.IntegrityCheck
 import com.worxbend.zephyr.domain.SdkmanSelfUpdateStatus
 import com.worxbend.zephyr.domain.SdkmanStatus
 import com.worxbend.zephyr.domain.SdkmanTransaction
+import com.worxbend.zephyr.domain.PlannedSdkmanCommand
+
+enum class CommandSatisfaction {
+    Satisfied,
+    Unsatisfied,
+    Indeterminate,
+}
 
 interface SdkmanRepository {
     suspend fun detect(): SdkmanStatus
@@ -31,6 +38,8 @@ interface SdkmanRepository {
     suspend fun uninstall(candidate: String, version: String): CommandOutcome
     suspend fun setDefault(candidate: String, version: String): CommandOutcome
     suspend fun cleanLocalOnly(candidate: String, versions: List<String>): CommandOutcome
+    suspend fun commandSatisfaction(command: PlannedSdkmanCommand): CommandSatisfaction =
+        CommandSatisfaction.Indeterminate
 }
 
 data class CandidateMetadataCache(
