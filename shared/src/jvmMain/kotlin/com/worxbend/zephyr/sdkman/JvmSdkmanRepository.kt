@@ -5,6 +5,7 @@ import com.worxbend.zephyr.domain.Candidate
 import com.worxbend.zephyr.domain.CandidateCatalogItem
 import com.worxbend.zephyr.domain.CandidateVersion
 import com.worxbend.zephyr.domain.CommandOutcome
+import com.worxbend.zephyr.domain.CommandOutcomeStatus
 import com.worxbend.zephyr.domain.ConnectivityState
 import com.worxbend.zephyr.domain.ConnectivityStatus
 import com.worxbend.zephyr.domain.DiskImpactEstimate
@@ -14,6 +15,8 @@ import com.worxbend.zephyr.domain.IntegrityCheck
 import com.worxbend.zephyr.domain.IntegrityCheckId
 import com.worxbend.zephyr.domain.IntegrityStatus
 import com.worxbend.zephyr.domain.ProtectedVersion
+import com.worxbend.zephyr.domain.RemoteAvailability
+import com.worxbend.zephyr.domain.RemoteEvidenceState
 import com.worxbend.zephyr.domain.SdkmanSelfUpdateStatus
 import com.worxbend.zephyr.domain.SdkmanCommandAction
 import com.worxbend.zephyr.domain.SdkmanStatus
@@ -99,7 +102,7 @@ class JvmSdkmanRepository(
                             version = it,
                             isInstalled = true,
                             isDefault = it == default,
-                            isRemoteAvailable = true,
+                            remoteAvailability = RemoteAvailability.Unknown,
                         )
                     },
                     defaultVersion = default,
@@ -142,46 +145,49 @@ class JvmSdkmanRepository(
         candidateCacheStore.load()
 
     override suspend fun versions(candidate: String): List<CandidateVersion> {
-        validateCandidate(candidate)
-        val result = runner().run(SdkmanCommand.ListVersions(candidate), 20.seconds)
-        if (!result.success) {
-            val message = "Unable to list versions for $candidate: ${result.output.ifBlank { "exit ${result.exitCode}" }}"
-            ZephyrLogger.warn(message)
-            throw IllegalStateException(message)
-        }
-        val parsed = SdkmanListParser.parseVersions(result.stdout)
-        if (parsed.isEmpty()) {
-            val message = "No versions parsed for $candidate. Output started with: ${result.stdout.take(300)}"
-            ZephyrLogger.warn(message)
-            throw IllegalStateException(message)
-        }
-        return parsed
+        val report = versionReport(candidate)
+        if (report.versions.isEmpty()) throw IllegalStateException("No versions could be read for $candidate.")
+        return report.versions
     }
 
     override suspend fun mergedCandidate(candidate: String): Candidate? {
         validateCandidate(candidate)
         val localVersions = installedVersionsFor(candidate)
         val default = defaultVersionFor(candidate)
-        val remote = versions(candidate)
+        val report = versionReport(candidate)
+        val remote = report.versions.map { version ->
+            if (report.isTrusted) {
+                version
+            } else {
+                version.copy(
+                    remoteAvailability = if (version.remoteAvailability == RemoteAvailability.Available) {
+                        RemoteAvailability.Available
+                    } else {
+                        RemoteAvailability.Unknown
+                    },
+                )
+            }
+        }
         val remoteByVersion = remote.associateBy { it.version }
         val merged = (remote.map { version ->
             version.copy(
                 isInstalled = version.isInstalled || version.version in localVersions,
                 isDefault = version.version == default,
-                isRemoteAvailable = version.isRemoteAvailable,
             )
         } + localVersions.filterNot { it in remoteByVersion }.map { version ->
             CandidateVersion(
                 version = version,
                 isInstalled = true,
                 isDefault = version == default,
-                isRemoteAvailable = false,
+                remoteAvailability = RemoteAvailability.Unknown,
             )
         }).distinctBy { it.version }.sortedWith(versionComparator())
 
         val kind = candidateKindFor(candidate)
         val metadata = catalogCache?.firstOrNull { it.name == candidate }
-        val localOnly = merged.filter { it.isInstalled && !it.isRemoteAvailable }.map { it.version }
+        val localOnly = merged
+            .filter { report.isTrusted && it.isInstalled && it.isConfirmedLocalOnly }
+            .map { it.version }
         if (merged.isEmpty() && metadata == null) return null
         return Candidate(
             name = candidate,
@@ -194,6 +200,7 @@ class JvmSdkmanRepository(
             hasLocalOnlyVersions = localOnly.isNotEmpty(),
             localOnlyVersionCount = localOnly.size,
             localOnlyVersions = localOnly,
+            remoteEvidence = if (report.isTrusted) RemoteEvidenceState.LiveComplete else RemoteEvidenceState.LivePartial,
         )
     }
 
@@ -470,7 +477,18 @@ class JvmSdkmanRepository(
     override suspend fun install(candidate: String, version: String): CommandOutcome {
         invalidCommandInput(candidate, version)?.let { return it }
         catalogCache = null
-        return runner().run(SdkmanCommand.Install(candidate, version), 10.minutes).toOutcome("Installed $version.")
+        val target = versionPath(candidate, version)
+        when (versionPathState(target)) {
+            PathPostcondition.Satisfied -> return alreadySatisfied("$version is already installed.")
+            PathPostcondition.Indeterminate -> return indeterminate("The existing $version installation could not be verified safely.")
+            PathPostcondition.Unsatisfied -> Unit
+        }
+        val result = runner().run(SdkmanCommand.Install(candidate, version), 10.minutes)
+        return result.verifiedOutcome(
+            postcondition = versionPathState(target),
+            successMessage = "Installed $version.",
+            missingMessage = "SDKMAN finished, but $version is not installed.",
+        )
     }
 
     override suspend fun uninstall(candidate: String, version: String): CommandOutcome {
@@ -482,12 +500,36 @@ class JvmSdkmanRepository(
             return CommandOutcome(false, "Unpin $version before uninstalling it.")
         }
         catalogCache = null
-        return runner().run(SdkmanCommand.Uninstall(candidate, version), 2.minutes).toOutcome("Uninstalled $version.")
+        val target = versionPath(candidate, version)
+        when (versionPathState(target)) {
+            PathPostcondition.Unsatisfied -> return alreadySatisfied("$version is already absent.")
+            PathPostcondition.Indeterminate -> return indeterminate("The $version installation could not be verified safely.")
+            PathPostcondition.Satisfied -> Unit
+        }
+        val result = runner().run(SdkmanCommand.Uninstall(candidate, version), 2.minutes)
+        return result.verifiedOutcome(
+            postcondition = versionPathState(target).inverted(),
+            successMessage = "Uninstalled $version.",
+            missingMessage = "SDKMAN finished, but $version is still installed.",
+        )
     }
 
     override suspend fun setDefault(candidate: String, version: String): CommandOutcome {
         invalidCommandInput(candidate, version)?.let { return it }
-        return runner().run(SdkmanCommand.SetDefault(candidate, version), 30.seconds).toOutcome("Default set to $version.")
+        when (versionPathState(versionPath(candidate, version))) {
+            PathPostcondition.Unsatisfied -> return CommandOutcome(false, "Install $version before making it the default.")
+            PathPostcondition.Indeterminate -> return indeterminate("The $version installation could not be verified safely.")
+            PathPostcondition.Satisfied -> Unit
+        }
+        if (defaultVersionFor(candidate) == version) {
+            return alreadySatisfied("$version is already the default.")
+        }
+        val result = runner().run(SdkmanCommand.SetDefault(candidate, version), 30.seconds)
+        return result.verifiedOutcome(
+            postcondition = defaultPostcondition(candidate, version),
+            successMessage = "Default set to $version.",
+            missingMessage = "SDKMAN finished, but the default is not $version.",
+        )
     }
 
     override suspend fun cleanLocalOnly(candidate: String, versions: List<String>): CommandOutcome {
@@ -504,29 +546,96 @@ class JvmSdkmanRepository(
         if (eligible.any { ProtectedVersion(candidate, it) in protected }) {
             return CommandOutcome(false, "Unpin protected versions before cleaning them.")
         }
-        val localOnlyVersions = try {
-            mergedCandidate(candidate)?.localOnlyVersions.orEmpty().toSet()
+        val evidence = try {
+            versionReport(candidate)
         } catch (exception: IllegalStateException) {
             ZephyrLogger.warn("Unable to verify local-only versions before cleanup for $candidate.", exception)
             return CommandOutcome(false, "Unable to verify local-only versions. Try scanning again.")
         }
+        if (!evidence.isTrusted) {
+            ZephyrLogger.warn("Cleanup blocked because SDKMAN version evidence was incomplete for $candidate: ${evidence.issues.joinToString()}")
+            return CommandOutcome(false, "Cleanup is blocked because live SDKMAN version evidence is incomplete.")
+        }
+        val installed = installedVersionsFor(candidate).toSet()
+        val localOnlyVersions = evidence.versions
+            .filter { it.isConfirmedLocalOnly && it.version in installed }
+            .map { it.version }
+            .toSet()
         if (eligible.any { it !in localOnlyVersions }) {
             return CommandOutcome(false, "Only versions confirmed as local-only can be cleaned.")
         }
-        val failures = mutableListOf<String>()
+        val outcomes = mutableListOf<CommandOutcome>()
         eligible.forEach { version ->
-            val result = runner().run(SdkmanCommand.Uninstall(candidate, version), 2.minutes)
-            if (!result.success) {
-                val message = "$version: ${result.output.ifBlank { "failed" }}"
-                ZephyrLogger.warn("Failed to clean local-only version for $candidate: $message")
-                failures += message
+            val target = versionPath(candidate, version)
+            if (versionPathState(target) == PathPostcondition.Unsatisfied) {
+                outcomes += alreadySatisfied("$version is already absent.")
+                return@forEach
             }
+            val result = runner().run(SdkmanCommand.Uninstall(candidate, version), 2.minutes)
+            outcomes += result.verifiedOutcome(
+                postcondition = versionPathState(target).inverted(),
+                successMessage = "Cleaned $version.",
+                missingMessage = "$version is still installed after cleanup.",
+            )
         }
         catalogCache = null
-        return if (failures.isEmpty()) {
-            CommandOutcome(true, "Cleaned ${eligible.size} local-only version(s).")
+        val unsuccessful = outcomes.filterNot { it.success }
+        return when {
+            unsuccessful.isNotEmpty() -> CommandOutcome(
+                success = false,
+                message = "Cleanup could not verify ${unsuccessful.size} of ${eligible.size} version(s).",
+                status = if (unsuccessful.any { it.status == CommandOutcomeStatus.Indeterminate }) {
+                    CommandOutcomeStatus.Indeterminate
+                } else {
+                    CommandOutcomeStatus.Failed
+                },
+            )
+            outcomes.all { it.status == CommandOutcomeStatus.AlreadySatisfied } ->
+                alreadySatisfied("Selected local-only versions are already absent.")
+            outcomes.any { it.status == CommandOutcomeStatus.AppliedWithWarning } -> CommandOutcome(
+                success = true,
+                message = "Cleaned ${eligible.size} local-only version(s), with SDKMAN warnings.",
+                status = CommandOutcomeStatus.AppliedWithWarning,
+            )
+            else -> CommandOutcome(true, "Cleaned ${eligible.size} local-only version(s).")
+        }
+    }
+
+    private suspend fun versionReport(candidate: String): VersionParseReport {
+        validateCandidate(candidate)
+        val result = runner().run(SdkmanCommand.ListVersions(candidate), 20.seconds)
+        if (!result.success) {
+            val message = "Unable to list versions for $candidate (SDKMAN exit ${result.exitCode})."
+            ZephyrLogger.warn(message)
+            throw IllegalStateException(message)
+        }
+        return SdkmanListParser.parseVersionsReport(
+            output = result.stdout,
+            outputTruncated = COMMAND_OUTPUT_TRUNCATED_MARKER in result.stderr,
+        )
+    }
+
+    private fun versionPath(candidate: String, version: String): Path =
+        home() / "candidates" / candidate / version
+
+    private fun versionPathState(path: Path): PathPostcondition {
+        val metadata = fileSystem.metadataOrNull(path) ?: return PathPostcondition.Unsatisfied
+        return if (metadata.isDirectory && metadata.symlinkTarget == null) {
+            PathPostcondition.Satisfied
         } else {
-            CommandOutcome(false, "Cleaned with ${failures.size} failure(s): ${failures.joinToString("; ")}")
+            PathPostcondition.Indeterminate
+        }
+    }
+
+    private fun defaultPostcondition(candidate: String, version: String): PathPostcondition {
+        val candidatePath = home() / "candidates" / candidate
+        val current = candidatePath / "current"
+        val metadata = fileSystem.metadataOrNull(current) ?: return PathPostcondition.Unsatisfied
+        if (metadata.symlinkTarget == null) return PathPostcondition.Indeterminate
+        return if (currentLinkTargetVersion(candidatePath, current) == version) {
+            PathPostcondition.Satisfied
+        } else {
+            PathPostcondition.Unsatisfied
         }
     }
 
@@ -653,7 +762,51 @@ class JvmSdkmanRepository(
         } else {
             CommandOutcome(false, output.ifBlank { "SDKMAN command failed." })
         }
+
+    private fun SdkmanCommandResult.verifiedOutcome(
+        postcondition: PathPostcondition,
+        successMessage: String,
+        missingMessage: String,
+    ): CommandOutcome =
+        when (postcondition) {
+            PathPostcondition.Satisfied -> if (success) {
+                CommandOutcome(true, successMessage, CommandOutcomeStatus.Applied)
+            } else {
+                CommandOutcome(
+                    success = true,
+                    message = "$successMessage SDKMAN exited with code $exitCode.",
+                    status = CommandOutcomeStatus.AppliedWithWarning,
+                )
+            }
+            PathPostcondition.Unsatisfied -> CommandOutcome(
+                success = false,
+                message = if (success) missingMessage else "SDKMAN exited with code $exitCode and the requested change was not applied.",
+                status = CommandOutcomeStatus.Failed,
+            )
+            PathPostcondition.Indeterminate -> indeterminate(
+                "SDKMAN finished, but the resulting filesystem state could not be verified safely.",
+            )
+        }
+
+    private fun alreadySatisfied(message: String): CommandOutcome =
+        CommandOutcome(true, message, CommandOutcomeStatus.AlreadySatisfied)
+
+    private fun indeterminate(message: String): CommandOutcome =
+        CommandOutcome(false, message, CommandOutcomeStatus.Indeterminate)
 }
+
+private enum class PathPostcondition {
+    Satisfied,
+    Unsatisfied,
+    Indeterminate,
+}
+
+private fun PathPostcondition.inverted(): PathPostcondition =
+    when (this) {
+        PathPostcondition.Satisfied -> PathPostcondition.Unsatisfied
+        PathPostcondition.Unsatisfied -> PathPostcondition.Satisfied
+        PathPostcondition.Indeterminate -> PathPostcondition.Indeterminate
+    }
 
 private fun safeAdd(left: Long, right: Long): Long =
     if (Long.MAX_VALUE - left < right) Long.MAX_VALUE else left + right
@@ -698,6 +851,7 @@ private const val MAX_DISK_ESTIMATE_ENTRIES = 1_000_000
 private const val SDKMAN_SERVICE_HOST = "api.sdkman.io"
 private const val HTTPS_PORT = 443
 private const val CONNECTIVITY_TIMEOUT_MILLIS = 1_500
+private const val COMMAND_OUTPUT_TRUNCATED_MARKER = "Command output was truncated."
 private const val MAX_INTEGRITY_DETAIL_ITEMS = 5
 private val REQUIRED_SDKMAN_SCRIPTS = listOf(
     "bin/sdkman-init.sh",

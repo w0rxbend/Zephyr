@@ -732,7 +732,12 @@ private fun BrowseScreen(
                         items(groupVersions, key = { it.identifier }) { java ->
                             VersionRow(
                                 candidateName = "java",
-                                version = CandidateVersion(java.identifier, java.isInstalled, java.isDefault, java.isRemoteAvailable),
+                                version = CandidateVersion(
+                                    java.identifier,
+                                    java.isInstalled,
+                                    java.isDefault,
+                                    java.remoteAvailability,
+                                ),
                                 updateTargets = updateTargets,
                                 viewModel = viewModel,
                                 sdkmanHome = state.sdkmanStatus.home,
@@ -842,6 +847,16 @@ private fun CandidateDetailScreen(
                     CopyTextButton(candidateName, "Copy key")
                     candidate?.defaultVersion?.let { Badge("Default: $it", BadgeTone.Primary) }
                     candidate?.installedVersions?.count { it.isInstalled }?.let { Badge("$it installed", BadgeTone.Success) }
+                    candidate?.let {
+                        Badge(
+                            it.remoteEvidence.label,
+                            if (it.remoteEvidence == com.worxbend.zephyr.domain.RemoteEvidenceState.LiveComplete) {
+                                BadgeTone.Success
+                            } else {
+                                BadgeTone.Warning
+                            },
+                        )
+                    }
                     if (candidate?.hasLocalOnlyVersions == true) {
                         Badge("${candidate.localOnlyVersionCount} local-only", BadgeTone.Warning)
                     }
@@ -923,7 +938,12 @@ private fun JdkDetailVersions(
                 items(group) { java ->
                     VersionRow(
                         candidateName = candidate.name,
-                        version = CandidateVersion(java.identifier, java.isInstalled, java.isDefault, java.isRemoteAvailable),
+                        version = CandidateVersion(
+                            java.identifier,
+                            java.isInstalled,
+                            java.isDefault,
+                            java.remoteAvailability,
+                        ),
                         updateTargets = updateTargets,
                         viewModel = viewModel,
                         sdkmanHome = sdkmanHome,
@@ -1037,7 +1057,7 @@ private fun VersionRow(
                 add(ContextAction("Make default") {
                     viewModel.requestTransaction(SdkmanTransaction.SetDefault(candidateName, version.version))
                 })
-                if (version.isRemoteAvailable && !isProtected) {
+                if (!version.isConfirmedLocalOnly && !isProtected) {
                     add(ContextAction("Uninstall") { onUninstall(candidateName, version.version) })
                 }
             }
@@ -1053,14 +1073,14 @@ private fun VersionRow(
                     viewModel.setVersionProtected(candidateName, version.version, !isProtected)
                 })
             }
-            if (version.isInstalled && !version.isRemoteAvailable) {
+            if (version.isInstalled && version.isConfirmedLocalOnly) {
                 updateTargets.forEach { target ->
                     add(ContextAction("Install update ${target.version}") {
                         viewModel.requestTransaction(SdkmanTransaction.Install(candidateName, target.version))
                     })
                 }
             }
-            if (version.isInstalled && !version.isRemoteAvailable && !version.isDefault && !isProtected) {
+            if (version.isInstalled && version.isConfirmedLocalOnly && !version.isDefault && !isProtected) {
                 add(ContextAction("Clean") { onClean(candidateName, listOf(version.version)) })
             }
         },
@@ -1081,7 +1101,11 @@ private fun VersionRow(
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     if (version.isDefault) Badge("Default", BadgeTone.Primary)
                     if (version.isInstalled) Badge("Installed", BadgeTone.Neutral)
-                    if (version.isRemoteAvailable) Badge("Available", BadgeTone.Success) else Badge("Local only", BadgeTone.Warning)
+                    when {
+                        version.isRemoteAvailable -> Badge("Available", BadgeTone.Success)
+                        version.isConfirmedLocalOnly -> Badge("Local only", BadgeTone.Warning)
+                        else -> Badge("Availability unknown", BadgeTone.Neutral)
+                    }
                     if (isProtected) Badge("Protected", BadgeTone.Primary)
                 }
                 terminalMessage?.let {
@@ -1117,7 +1141,7 @@ private fun VersionRow(
                 ) {
                     Text("Make default")
                 }
-                if (version.isRemoteAvailable && !isProtected) {
+                if (!version.isConfirmedLocalOnly && !isProtected) {
                     OutlinedButton(onClick = { onUninstall(candidateName, version.version) }, modifier = Modifier.height(36.dp)) {
                         Text("Uninstall")
                     }
@@ -1131,7 +1155,7 @@ private fun VersionRow(
                     Text(if (isProtected) "Unpin" else "Protect")
                 }
             }
-            if (version.isInstalled && !version.isRemoteAvailable) {
+            if (version.isInstalled && version.isConfirmedLocalOnly) {
                 if (updateTargets.isNotEmpty()) Box {
                     OutlinedButton(onClick = { updateMenuOpen = true }, modifier = Modifier.height(36.dp)) { Text("Update") }
                     DropdownMenu(expanded = updateMenuOpen, onDismissRequest = { updateMenuOpen = false }) {
@@ -1147,7 +1171,7 @@ private fun VersionRow(
                     }
                 }
             }
-            if (version.isInstalled && !version.isRemoteAvailable && !version.isDefault && !isProtected) {
+            if (version.isInstalled && version.isConfirmedLocalOnly && !version.isDefault && !isProtected) {
                 ZephyrDestructiveButton(
                     label = "Clean",
                     onClick = { onClean(candidateName, listOf(version.version)) },

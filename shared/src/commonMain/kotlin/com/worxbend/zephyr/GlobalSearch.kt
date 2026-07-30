@@ -71,7 +71,8 @@ internal fun buildGlobalSearchIndex(
                 if (version.isDefault) add("Default")
                 if (version.isInstalled) add("Installed")
                 if (version.isRemoteAvailable) add("Available")
-                if (!version.isRemoteAvailable) add("Local-only")
+                if (version.isConfirmedLocalOnly) add("Local-only")
+                if (!version.isRemoteAvailable && !version.isConfirmedLocalOnly) add("Availability unknown")
             }
             add(
                 GlobalSearchItem(

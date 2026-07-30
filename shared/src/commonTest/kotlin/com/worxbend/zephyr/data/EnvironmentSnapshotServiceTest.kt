@@ -3,6 +3,7 @@ package com.worxbend.zephyr.data
 import com.worxbend.zephyr.domain.Candidate
 import com.worxbend.zephyr.domain.CandidateKind
 import com.worxbend.zephyr.domain.CandidateVersion
+import com.worxbend.zephyr.domain.RemoteAvailability
 import com.worxbend.zephyr.domain.PlannedSdkmanCommand
 import com.worxbend.zephyr.domain.SdkmanCommandAction
 import kotlin.test.Test
@@ -87,7 +88,12 @@ class EnvironmentSnapshotServiceTest {
             displayName = name,
             kind = if (name == "java") CandidateKind.Jdk else CandidateKind.Sdk,
             installedVersions = versions.map {
-                CandidateVersion(it, isInstalled = true, isDefault = it == default, isRemoteAvailable = true)
+                CandidateVersion(
+                    it,
+                    isInstalled = true,
+                    isDefault = it == default,
+                    remoteAvailability = RemoteAvailability.Available,
+                )
             },
             defaultVersion = default,
             hasLocalOnlyVersions = false,

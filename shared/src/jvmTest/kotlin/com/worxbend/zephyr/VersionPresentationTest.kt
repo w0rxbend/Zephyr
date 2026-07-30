@@ -1,6 +1,7 @@
 package com.worxbend.zephyr
 
 import com.worxbend.zephyr.domain.CandidateVersion
+import com.worxbend.zephyr.domain.RemoteAvailability
 import com.worxbend.zephyr.domain.Candidate
 import com.worxbend.zephyr.domain.CandidateCatalogItem
 import com.worxbend.zephyr.domain.CandidateKind
@@ -26,7 +27,7 @@ class VersionPresentationTest {
             version = "21.0.5-tem",
             isInstalled = true,
             isDefault = true,
-            isRemoteAvailable = false,
+            remoteAvailability = RemoteAvailability.LocalOnly,
         )
 
         assertEquals("Default - Installed - Local only", statusText(version))
@@ -35,9 +36,9 @@ class VersionPresentationTest {
     @Test
     fun offersOnlyRemoteVersionsThatAreNotInstalledAsUpdateTargets() {
         val versions = listOf(
-            CandidateVersion("21.0.5-tem", isInstalled = true, isDefault = true, isRemoteAvailable = true),
-            CandidateVersion("22.0.1-tem", isInstalled = false, isDefault = false, isRemoteAvailable = true),
-            CandidateVersion("17.0.1-tem", isInstalled = true, isDefault = false, isRemoteAvailable = false),
+            CandidateVersion("21.0.5-tem", isInstalled = true, isDefault = true, remoteAvailability = RemoteAvailability.Available),
+            CandidateVersion("22.0.1-tem", isInstalled = false, isDefault = false, remoteAvailability = RemoteAvailability.Available),
+            CandidateVersion("17.0.1-tem", isInstalled = true, isDefault = false, remoteAvailability = RemoteAvailability.LocalOnly),
         )
 
         assertEquals(listOf("22.0.1-tem"), versions.updateTargets().map { it.version })

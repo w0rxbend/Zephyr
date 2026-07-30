@@ -304,7 +304,7 @@ internal fun JdkVersionCard(
                 add(ContextAction("Open activated terminal") { it() })
             }
             add(ContextAction(if (isProtected) "Unpin" else "Protect") { onToggleProtected() })
-            if (!version.isRemoteAvailable && version.identifier != default && !isProtected) {
+            if (version.isConfirmedLocalOnly && version.identifier != default && !isProtected) {
                 add(ContextAction("Clean") { onClean() })
             }
         },
@@ -324,7 +324,10 @@ internal fun JdkVersionCard(
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Badge("SDKMAN key: java")
                         if (version.identifier == default) Badge("Default", BadgeTone.Primary)
-                        if (!version.isRemoteAvailable) Badge("Local only", BadgeTone.Warning)
+                        when {
+                            version.isConfirmedLocalOnly -> Badge("Local only", BadgeTone.Warning)
+                            !version.isRemoteAvailable -> Badge("Availability unknown", BadgeTone.Neutral)
+                        }
                         if (isProtected) Badge("Protected", BadgeTone.Primary)
                     }
                 }
@@ -333,10 +336,10 @@ internal fun JdkVersionCard(
                     OutlinedButton(onClick = onOpenTerminal) { Text("Terminal") }
                 }
                 OutlinedButton(onClick = onToggleProtected) { Text(if (isProtected) "Unpin" else "Protect") }
-                if (!version.isRemoteAvailable && version.identifier != default && !isProtected) {
+                if (version.isConfirmedLocalOnly && version.identifier != default && !isProtected) {
                     OutlinedButton(onClick = onClean) { Text("Clean") }
                 }
-                if (!version.isRemoteAvailable && version.identifier == default) {
+                if (version.isConfirmedLocalOnly && version.identifier == default) {
                     Text("Choose another default first", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 }
             }

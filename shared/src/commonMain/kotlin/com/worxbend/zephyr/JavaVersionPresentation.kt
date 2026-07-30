@@ -44,7 +44,7 @@ internal fun List<JavaVersion>.filterAndSort(
                 JavaVersionStatusFilter.All -> true
                 JavaVersionStatusFilter.Installed -> version.isInstalled
                 JavaVersionStatusFilter.Available -> version.isRemoteAvailable
-                JavaVersionStatusFilter.LocalOnly -> !version.isRemoteAvailable
+                JavaVersionStatusFilter.LocalOnly -> version.isConfirmedLocalOnly
             }
         }
         .filter { providerCode == null || it.providerCode == providerCode }

@@ -4,6 +4,7 @@ import com.worxbend.zephyr.domain.DiskImpactKind
 import com.worxbend.zephyr.domain.EstimateConfidence
 import com.worxbend.zephyr.domain.ProtectedVersion
 import com.worxbend.zephyr.domain.ConnectivityState
+import com.worxbend.zephyr.domain.CommandOutcomeStatus
 import com.worxbend.zephyr.domain.IntegrityCheckId
 import com.worxbend.zephyr.domain.IntegrityStatus
 import com.worxbend.zephyr.domain.SdkmanTransaction
@@ -61,13 +62,20 @@ class JvmSdkmanRepositoryTest {
 
     @Test
     fun acceptsStandardSdkmanIdentifiers() = runBlocking {
-        val runner = RecordingRunner()
-        val repository = JvmSdkmanRepository(FileSystem.SYSTEM) { runner }
+        val home = Files.createTempDirectory("zephyr-sdkman-test-").toString().toPath()
+        try {
+            createSdkmanHome(home)
+            val runner = RecordingRunner(home)
+            val repository = JvmSdkmanRepository(FileSystem.SYSTEM, { home }) { runner }
 
-        val outcome = repository.install("java", "21.0.5-tem")
+            val outcome = repository.install("java", "25.0.1-tem")
 
-        assertTrue(outcome.success)
-        assertEquals(SdkmanCommand.Install("java", "21.0.5-tem"), runner.commands.single())
+            assertTrue(outcome.success)
+            assertEquals(CommandOutcomeStatus.Applied, outcome.status)
+            assertEquals(SdkmanCommand.Install("java", "25.0.1-tem"), runner.commands.single())
+        } finally {
+            FileSystem.SYSTEM.deleteRecursively(home, mustExist = false)
+        }
     }
 
     @Test
@@ -75,7 +83,7 @@ class JvmSdkmanRepositoryTest {
         val home = Files.createTempDirectory("zephyr-sdkman-test-").toString().toPath()
         try {
             createSdkmanHome(home)
-            val runner = RecordingRunner()
+            val runner = RecordingRunner(home)
             val repository = JvmSdkmanRepository(FileSystem.SYSTEM, { home }) { runner }
 
             assertTrue(repository.detect().isInstalled)
@@ -123,7 +131,7 @@ class JvmSdkmanRepositoryTest {
         val home = Files.createTempDirectory("zephyr-sdkman-test-").toString().toPath()
         try {
             createSdkmanHome(home)
-            val runner = RecordingRunner()
+            val runner = RecordingRunner(home)
             val repository = JvmSdkmanRepository(FileSystem.SYSTEM, { home }) { runner }
 
             val unverified = repository.cleanLocalOnly("java", listOf("19.0.0-tem"))
@@ -178,7 +186,7 @@ class JvmSdkmanRepositoryTest {
             createSdkmanHome(home)
             val protected = ProtectedVersion("java", "17.0.1-tem")
             val store = InMemoryProtectedVersionStore(setOf(protected))
-            val runner = RecordingRunner()
+            val runner = RecordingRunner(home)
             val repository = JvmSdkmanRepository(FileSystem.SYSTEM, { home }, store) { runner }
 
             val uninstall = repository.uninstall("java", "17.0.1-tem")
@@ -310,6 +318,92 @@ class JvmSdkmanRepositoryTest {
         }
     }
 
+    @Test
+    fun blocksCleanupWhenVersionOutputIsOnlyPartiallyParsed() = runBlocking {
+        val home = Files.createTempDirectory("zephyr-sdkman-test-").toString().toPath()
+        try {
+            createSdkmanHome(home)
+            val runner = object : SdkmanCommandRunner {
+                val commands = mutableListOf<SdkmanCommand>()
+
+                override suspend fun run(command: SdkmanCommand, timeout: kotlin.time.Duration): SdkmanCommandResult {
+                    commands += command
+                    return SdkmanCommandResult(
+                        exitCode = 0,
+                        stdout = if (command is SdkmanCommand.ListVersions) PARTIAL_JAVA_VERSIONS_OUTPUT else "completed",
+                        stderr = "",
+                    )
+                }
+            }
+            val repository = JvmSdkmanRepository(FileSystem.SYSTEM, { home }) { runner }
+
+            val merged = repository.mergedCandidate("java")
+            val outcome = repository.cleanLocalOnly("java", listOf("17.0.1-tem"))
+
+            assertTrue(merged?.localOnlyVersions.isNullOrEmpty())
+            assertFalse(outcome.success)
+            assertEquals("Cleanup is blocked because live SDKMAN version evidence is incomplete.", outcome.message)
+            assertFalse(runner.commands.any { it is SdkmanCommand.Uninstall })
+        } finally {
+            FileSystem.SYSTEM.deleteRecursively(home, mustExist = false)
+        }
+    }
+
+    @Test
+    fun doesNotTrustSuccessfulExitWithoutInstallPostcondition() = runBlocking {
+        val home = Files.createTempDirectory("zephyr-sdkman-test-").toString().toPath()
+        try {
+            createSdkmanHome(home)
+            val runner = RecordingRunner(home, applyMutations = false)
+            val repository = JvmSdkmanRepository(FileSystem.SYSTEM, { home }) { runner }
+
+            val outcome = repository.install("java", "25.0.1-tem")
+
+            assertFalse(outcome.success)
+            assertEquals(CommandOutcomeStatus.Failed, outcome.status)
+            assertTrue(outcome.message.contains("not installed"))
+        } finally {
+            FileSystem.SYSTEM.deleteRecursively(home, mustExist = false)
+        }
+    }
+
+    @Test
+    fun reportsAppliedWithWarningWhenFilesystemChangedDespiteNonzeroExit() = runBlocking {
+        val home = Files.createTempDirectory("zephyr-sdkman-test-").toString().toPath()
+        try {
+            createSdkmanHome(home)
+            val runner = RecordingRunner(home, mutationExitCode = 7)
+            val repository = JvmSdkmanRepository(FileSystem.SYSTEM, { home }) { runner }
+
+            val outcome = repository.install("java", "25.0.1-tem")
+
+            assertTrue(outcome.success)
+            assertEquals(CommandOutcomeStatus.AppliedWithWarning, outcome.status)
+            assertTrue(outcome.message.contains("code 7"))
+        } finally {
+            FileSystem.SYSTEM.deleteRecursively(home, mustExist = false)
+        }
+    }
+
+    @Test
+    fun verifiesDefaultAndUninstallPostconditions() = runBlocking {
+        val home = Files.createTempDirectory("zephyr-sdkman-test-").toString().toPath()
+        try {
+            createSdkmanHome(home)
+            val runner = RecordingRunner(home)
+            val repository = JvmSdkmanRepository(FileSystem.SYSTEM, { home }) { runner }
+
+            val changedDefault = repository.setDefault("java", "17.0.1-tem")
+            val removedPrevious = repository.uninstall("java", "21.0.5-tem")
+
+            assertEquals(CommandOutcomeStatus.Applied, changedDefault.status)
+            assertEquals(CommandOutcomeStatus.Applied, removedPrevious.status)
+            assertFalse(FileSystem.SYSTEM.exists(home / "candidates" / "java" / "21.0.5-tem"))
+        } finally {
+            FileSystem.SYSTEM.deleteRecursively(home, mustExist = false)
+        }
+    }
+
     private fun createSdkmanHome(home: Path) {
         val fileSystem = FileSystem.SYSTEM
         fileSystem.createDirectories(home / "bin")
@@ -319,13 +413,40 @@ class JvmSdkmanRepositoryTest {
         fileSystem.createSymlink(home / "candidates" / "java" / "current", home / "candidates" / "java" / "21.0.5-tem")
     }
 
-    private class RecordingRunner : SdkmanCommandRunner {
+    private class RecordingRunner(
+        private val home: Path? = null,
+        private val mutationExitCode: Int = 0,
+        private val applyMutations: Boolean = true,
+    ) : SdkmanCommandRunner {
         val commands = mutableListOf<SdkmanCommand>()
 
         override suspend fun run(command: SdkmanCommand, timeout: kotlin.time.Duration): SdkmanCommandResult {
             commands += command
+            if (applyMutations && home != null) {
+                when (command) {
+                    is SdkmanCommand.Install ->
+                        FileSystem.SYSTEM.createDirectories(home / "candidates" / command.candidate / command.version)
+                    is SdkmanCommand.Uninstall ->
+                        FileSystem.SYSTEM.deleteRecursively(
+                            home / "candidates" / command.candidate / command.version,
+                            mustExist = false,
+                        )
+                    is SdkmanCommand.SetDefault -> {
+                        val current = home / "candidates" / command.candidate / "current"
+                        FileSystem.SYSTEM.delete(current, mustExist = false)
+                        FileSystem.SYSTEM.createSymlink(
+                            current,
+                            home / "candidates" / command.candidate / command.version,
+                        )
+                    }
+                    else -> Unit
+                }
+            }
+            val isMutation = command is SdkmanCommand.Install ||
+                command is SdkmanCommand.Uninstall ||
+                command is SdkmanCommand.SetDefault
             return SdkmanCommandResult(
-                exitCode = 0,
+                exitCode = if (isMutation) mutationExitCode else 0,
                 stdout = when (command) {
                     SdkmanCommand.ListCandidates -> CATALOG_OUTPUT
                     is SdkmanCommand.ListVersions -> JAVA_VERSIONS_OUTPUT
@@ -377,6 +498,18 @@ class JvmSdkmanRepositoryTest {
              Vendor        | Use | Version      | Dist    | Status     | Identifier
             --------------------------------------------------------------------------------
              Temurin       | >>> | 21.0.5       | tem     |            | 21.0.5-tem
+             Temurin       |     | 17.0.1       | tem     | local only | 17.0.1-tem
+            ================================================================================
+        """
+
+        const val PARTIAL_JAVA_VERSIONS_OUTPUT = """
+            Available Java Versions for Linux 64bit
+            ================================================================================
+             Vendor        | Use | Version      | Dist    | Status     | Identifier
+            --------------------------------------------------------------------------------
+             Temurin       |     | 17.0.1       | tem     | local only | 17.0.1-tem
+             changed upstream row | unknown-2027!
+            ================================================================================
         """
     }
 }

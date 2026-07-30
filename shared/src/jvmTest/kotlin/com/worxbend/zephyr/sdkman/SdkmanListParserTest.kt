@@ -106,4 +106,44 @@ class SdkmanListParserTest {
 
         assertEquals(listOf("25.0.3-tem", "24.0.2-oracle"), versions.map { it.version })
     }
+
+    @Test
+    fun marksPartialTablesAsDegradedEvenWhenSomeRowsParse() {
+        val output = """
+            ================================================================================
+            Available Java Versions for Linux 64bit
+            ================================================================================
+             Vendor        | Use | Version      | Dist    | Status     | Identifier
+            --------------------------------------------------------------------------------
+             Temurin       |     | 25.0.3       | tem     |            | 25.0.3-tem
+             Unknown row   | data that changed upstream 2027
+            ================================================================================
+        """.trimIndent()
+
+        val report = SdkmanListParser.parseVersionsReport(output)
+
+        assertEquals(listOf("25.0.3-tem"), report.versions.map { it.version })
+        assertEquals(VersionParseConfidence.Degraded, report.confidence)
+        assertEquals(1, report.rejectedRows.size)
+        assertTrue(report.issues.any { "not recognized" in it })
+    }
+
+    @Test
+    fun requiresCompleteNonTruncatedEvidenceForTrustedReports() {
+        val complete = """
+            ================================================================================
+            Available Java Versions for Linux 64bit
+            ================================================================================
+             Vendor        | Use | Version      | Dist    | Status     | Identifier
+            --------------------------------------------------------------------------------
+             Temurin       |     | 25.0.3       | tem     |            | 25.0.3-tem
+            ================================================================================
+        """.trimIndent()
+
+        assertEquals(VersionParseConfidence.Trusted, SdkmanListParser.parseVersionsReport(complete).confidence)
+        assertEquals(
+            VersionParseConfidence.Degraded,
+            SdkmanListParser.parseVersionsReport(complete, outputTruncated = true).confidence,
+        )
+    }
 }

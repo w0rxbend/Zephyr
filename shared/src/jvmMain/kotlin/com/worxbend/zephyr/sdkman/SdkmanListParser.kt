@@ -3,6 +3,7 @@ package com.worxbend.zephyr.sdkman
 import com.worxbend.zephyr.domain.CandidateCatalogItem
 import com.worxbend.zephyr.domain.CandidateKind
 import com.worxbend.zephyr.domain.CandidateVersion
+import com.worxbend.zephyr.domain.RemoteAvailability
 import com.worxbend.zephyr.domain.candidateKindFor
 import com.worxbend.zephyr.domain.displayNameFor
 import com.worxbend.zephyr.domain.isValidSdkmanCandidateName
@@ -81,17 +82,60 @@ object SdkmanListParser {
             .dropLastWhile { it.trim().isBlank() }
     }
 
-    fun parseVersions(output: String): List<CandidateVersion> {
+    fun parseVersions(output: String): List<CandidateVersion> =
+        parseVersionsReport(output).versions
+
+    fun parseVersionsReport(
+        output: String,
+        outputTruncated: Boolean = false,
+    ): VersionParseReport {
         val versions = mutableMapOf<String, CandidateVersion>()
+        val rejectedRows = mutableListOf<String>()
+        var hasVersionSection = false
+        var hasPipeHeader = false
+        var hasLooseLegend = false
+        var structuralBoundaries = 0
         output.lines().forEach { raw ->
             val line = raw.trim()
-            if (line.isBlank() || line.startsWith("=") || line.startsWith("-") || isVersionInstructionLine(line)) return@forEach
+            if (line.startsWith("Available ", ignoreCase = true) && line.contains(" Versions", ignoreCase = true)) {
+                hasVersionSection = true
+            }
+            if (line.startsWith("=") && line.length >= MIN_STRUCTURAL_SEPARATOR_LENGTH) {
+                structuralBoundaries += 1
+            }
+            if (isPipeHeader(line)) {
+                hasPipeHeader = true
+                return@forEach
+            }
+            if (isLooseLegendLine(line)) {
+                hasLooseLegend = true
+                return@forEach
+            }
+            if (line.isBlank() || line.startsWith("=") || line.startsWith("-") || isVersionInstructionLine(line)) {
+                return@forEach
+            }
             val parsed = parsePipeRow(line)?.let(::listOf) ?: parseLooseRow(line)
+            if (looksLikeRejectedVersionRow(line, parsed)) {
+                rejectedRows += line.take(MAX_REJECTED_ROW_LENGTH)
+            }
             parsed.forEach { version ->
                 versions[version.version] = version
             }
         }
-        return versions.values.sortedWith(versionComparator())
+        val issues = buildList {
+            if (outputTruncated) add("SDKMAN output was truncated.")
+            if (!hasVersionSection) add("Version section header was not recognized.")
+            if (!hasPipeHeader && !hasLooseLegend) add("Version table structure was not recognized.")
+            if (structuralBoundaries < MIN_STRUCTURAL_BOUNDARIES) add("Version table boundary was incomplete.")
+            if (versions.isEmpty()) add("No version rows were recognized.")
+            if (rejectedRows.isNotEmpty()) add("${rejectedRows.size} version-like row(s) were not recognized.")
+        }
+        return VersionParseReport(
+            versions = versions.values.sortedWith(versionComparator()),
+            confidence = if (issues.isEmpty()) VersionParseConfidence.Trusted else VersionParseConfidence.Degraded,
+            issues = issues,
+            rejectedRows = rejectedRows,
+        )
     }
 
     private fun parsePipeRow(line: String): CandidateVersion? {
@@ -109,7 +153,11 @@ object SdkmanListParser {
             version = identifier,
             isInstalled = "installed" in joined || "local only" in joined || "local" in joined,
             isDefault = ">>>" in joined || "current" in joined,
-            isRemoteAvailable = "local only" !in joined,
+            remoteAvailability = if ("local only" in joined) {
+                RemoteAvailability.LocalOnly
+            } else {
+                RemoteAvailability.Available
+            },
         )
     }
 
@@ -134,7 +182,11 @@ object SdkmanListParser {
                         version = token,
                         isInstalled = nextIsInstalled,
                         isDefault = nextIsDefault,
-                        isRemoteAvailable = !nextIsLocalOnly,
+                        remoteAvailability = if (nextIsLocalOnly) {
+                            RemoteAvailability.LocalOnly
+                        } else {
+                            RemoteAvailability.Available
+                        },
                     )
                     nextIsInstalled = false
                     nextIsDefault = false
@@ -160,6 +212,28 @@ object SdkmanListParser {
             lowered.startsWith("> -")
     }
 
+    private fun isPipeHeader(line: String): Boolean {
+        if (!line.contains('|')) return false
+        val cells = line.split('|').map { it.trim().lowercase() }
+        return "identifier" in cells && "version" in cells
+    }
+
+    private fun isLooseLegendLine(line: String): Boolean {
+        val lowered = line.lowercase()
+        return lowered.startsWith("+ -") ||
+            lowered.startsWith("* -") ||
+            lowered.startsWith("> -")
+    }
+
+    private fun looksLikeRejectedVersionRow(
+        line: String,
+        parsed: List<CandidateVersion>,
+    ): Boolean {
+        if (parsed.isNotEmpty() || !line.any(Char::isDigit)) return false
+        return line.contains('|') ||
+            line.firstOrNull()?.let { it.isDigit() || it in setOf('+', '*', '>') } == true
+    }
+
     private fun isLooseVersionToken(token: String): Boolean {
         val normalized = token.trim()
         val lowered = normalized.lowercase()
@@ -182,6 +256,25 @@ object SdkmanListParser {
         "64bit",
         "32bit",
     )
+
+    private const val MIN_STRUCTURAL_SEPARATOR_LENGTH = 8
+    private const val MIN_STRUCTURAL_BOUNDARIES = 2
+    private const val MAX_REJECTED_ROW_LENGTH = 160
+}
+
+enum class VersionParseConfidence {
+    Trusted,
+    Degraded,
+}
+
+data class VersionParseReport(
+    val versions: List<CandidateVersion>,
+    val confidence: VersionParseConfidence,
+    val issues: List<String>,
+    val rejectedRows: List<String>,
+) {
+    val isTrusted: Boolean
+        get() = confidence == VersionParseConfidence.Trusted
 }
 
 fun versionComparator(): Comparator<CandidateVersion> =

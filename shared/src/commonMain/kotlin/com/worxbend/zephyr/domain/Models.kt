@@ -35,6 +35,7 @@ data class Candidate(
     val hasLocalOnlyVersions: Boolean,
     val localOnlyVersionCount: Int,
     val localOnlyVersions: List<String>,
+    val remoteEvidence: RemoteEvidenceState = RemoteEvidenceState.Unknown,
 )
 
 enum class CandidateKind {
@@ -46,8 +47,38 @@ data class CandidateVersion(
     val version: String,
     val isInstalled: Boolean,
     val isDefault: Boolean,
-    val isRemoteAvailable: Boolean,
-)
+    val remoteAvailability: RemoteAvailability,
+) {
+    constructor(
+        version: String,
+        isInstalled: Boolean,
+        isDefault: Boolean,
+        isRemoteAvailable: Boolean,
+    ) : this(
+        version = version,
+        isInstalled = isInstalled,
+        isDefault = isDefault,
+        remoteAvailability = if (isRemoteAvailable) RemoteAvailability.Available else RemoteAvailability.LocalOnly,
+    )
+
+    val isRemoteAvailable: Boolean
+        get() = remoteAvailability == RemoteAvailability.Available
+
+    val isConfirmedLocalOnly: Boolean
+        get() = remoteAvailability == RemoteAvailability.LocalOnly
+}
+
+enum class RemoteAvailability(val label: String) {
+    Available("Available"),
+    LocalOnly("Local only"),
+    Unknown("Availability unknown"),
+}
+
+enum class RemoteEvidenceState(val label: String) {
+    Unknown("Remote evidence unavailable"),
+    LivePartial("Remote evidence incomplete"),
+    LiveComplete("Remote evidence verified"),
+}
 
 data class CandidateCatalogItem(
     val name: String,
@@ -71,8 +102,14 @@ data class JavaVersion(
     val providerName: String?,
     val isInstalled: Boolean,
     val isDefault: Boolean,
-    val isRemoteAvailable: Boolean,
-)
+    val remoteAvailability: RemoteAvailability,
+) {
+    val isRemoteAvailable: Boolean
+        get() = remoteAvailability == RemoteAvailability.Available
+
+    val isConfirmedLocalOnly: Boolean
+        get() = remoteAvailability == RemoteAvailability.LocalOnly
+}
 
 data class JavaVersionGroup(
     val title: String,
@@ -82,7 +119,16 @@ data class JavaVersionGroup(
 data class CommandOutcome(
     val success: Boolean,
     val message: String,
+    val status: CommandOutcomeStatus = if (success) CommandOutcomeStatus.Applied else CommandOutcomeStatus.Failed,
 )
+
+enum class CommandOutcomeStatus(val label: String) {
+    Applied("Applied"),
+    AppliedWithWarning("Applied with warning"),
+    AlreadySatisfied("Already satisfied"),
+    Failed("Failed"),
+    Indeterminate("Could not verify"),
+}
 
 fun candidateKindFor(name: String): CandidateKind =
     if (name == "java") CandidateKind.Jdk else CandidateKind.Sdk
@@ -109,6 +155,6 @@ fun CandidateVersion.toJavaVersion(): JavaVersion {
         providerName = javaProviderName(providerCode),
         isInstalled = isInstalled,
         isDefault = isDefault,
-        isRemoteAvailable = isRemoteAvailable,
+        remoteAvailability = remoteAvailability,
     )
 }

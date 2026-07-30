@@ -32,7 +32,7 @@ internal fun Candidate.comparisonRows(
                 installed = version.isInstalled,
                 default = version.isDefault || defaultVersion == version.version,
                 available = version.isRemoteAvailable,
-                localOnly = !version.isRemoteAvailable,
+                localOnly = version.isConfirmedLocalOnly,
                 protected = ProtectedVersion(name, version.version) in protectedVersions,
             )
         }

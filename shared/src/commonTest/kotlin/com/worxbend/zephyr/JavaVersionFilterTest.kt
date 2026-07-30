@@ -1,6 +1,7 @@
 package com.worxbend.zephyr
 
 import com.worxbend.zephyr.domain.JavaVersion
+import com.worxbend.zephyr.domain.RemoteAvailability
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -36,6 +37,6 @@ class JavaVersionFilterTest {
         providerName = providerName,
         isInstalled = installed,
         isDefault = false,
-        isRemoteAvailable = available,
+        remoteAvailability = if (available) RemoteAvailability.Available else RemoteAvailability.LocalOnly,
     )
 }

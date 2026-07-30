@@ -6,7 +6,7 @@ internal fun statusText(version: CandidateVersion): String =
     buildList {
         if (version.isDefault) add("Default")
         if (version.isInstalled) add("Installed")
-        if (version.isRemoteAvailable) add("Available") else add("Local only")
+        add(version.remoteAvailability.label)
     }.joinToString(" - ")
 
 internal fun List<CandidateVersion>.updateTargets(): List<CandidateVersion> =
