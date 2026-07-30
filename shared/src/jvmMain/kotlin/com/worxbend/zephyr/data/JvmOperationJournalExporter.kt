@@ -49,10 +49,7 @@ private fun defaultExportDirectory(): Path {
 }
 
 private fun defaultSensitivePaths(): List<String> =
-    listOfNotNull(
-        System.getProperty("user.home")?.takeIf { it.isNotBlank() },
-        System.getenv("SDKMAN_DIR")?.takeIf { it.isNotBlank() },
-    )
+    defaultSensitiveExportPaths()
 
 private fun uniqueDestination(directory: Path, stem: String, extension: String): Path {
     var destination = directory.resolve("$stem$extension")

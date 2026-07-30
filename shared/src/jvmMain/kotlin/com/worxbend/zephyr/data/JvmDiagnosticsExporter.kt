@@ -85,10 +85,7 @@ private fun defaultDiagnosticsDirectory(): Path {
 }
 
 private fun defaultDiagnosticsSensitivePaths(): List<String> =
-    listOfNotNull(
-        System.getProperty("user.home")?.takeIf { it.isNotBlank() },
-        System.getenv("SDKMAN_DIR")?.takeIf { it.isNotBlank() },
-    )
+    defaultSensitiveExportPaths()
 
 private fun String.redactPaths(sensitivePaths: List<String>): String =
     sensitivePaths
