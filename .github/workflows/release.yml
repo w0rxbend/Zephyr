@@ -129,6 +129,8 @@ jobs:
         id: publish
         if: github.ref_type == 'tag' && steps.snapcraft.outcome == 'success' && env.STORE_LOGIN != ''
         continue-on-error: true
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ env.STORE_LOGIN }}
         uses: snapcore/action-publish@9334eecb267cfd97a0ce3c8654215d095927252f # v1
         with:
           snap: ${{ steps.snapcraft.outputs.snap }}
