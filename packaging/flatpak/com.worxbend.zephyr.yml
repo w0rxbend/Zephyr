@@ -1,0 +1,37 @@
+id: com.worxbend.zephyr
+runtime: org.freedesktop.Platform
+runtime-version: "25.08"
+sdk: org.freedesktop.Sdk
+command: zephyr
+finish-args:
+  - --share=ipc
+  - --share=network
+  - --socket=fallback-x11
+  - --socket=wayland
+  - --device=dri
+  - --filesystem=home
+  - --talk-name=org.freedesktop.Flatpak
+  - --talk-name=org.freedesktop.Notifications
+  - --talk-name=org.freedesktop.secrets
+modules:
+  - name: zephyr
+    buildsystem: simple
+    build-commands:
+      - install -d /app/lib/zephyr /app/bin /app/share/applications /app/share/icons/hicolor/scalable/apps /app/share/metainfo
+      - cp -a app/. /app/lib/zephyr/
+      - install -m 0755 flatpak-launcher /app/bin/zephyr
+      - install -m 0644 com.worxbend.zephyr.desktop /app/share/applications/com.worxbend.zephyr.desktop
+      - install -m 0644 com.worxbend.zephyr.svg /app/share/icons/hicolor/scalable/apps/com.worxbend.zephyr.svg
+      - install -m 0644 com.worxbend.zephyr.metainfo.xml /app/share/metainfo/com.worxbend.zephyr.metainfo.xml
+    sources:
+      - type: dir
+        path: ../../desktopApp/build/compose/binaries/main/app/com.worxbend.zephyr
+        dest: app
+      - type: file
+        path: flatpak-launcher
+      - type: file
+        path: ../linux/com.worxbend.zephyr.desktop
+      - type: file
+        path: ../linux/com.worxbend.zephyr.svg
+      - type: file
+        path: ../linux/com.worxbend.zephyr.metainfo.xml

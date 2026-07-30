@@ -28,10 +28,16 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.AppImage, TargetFormat.Deb, TargetFormat.Rpm)
             packageName = "com.worxbend.zephyr"
-            packageVersion = "1.0.0"
+            packageVersion = providers.gradleProperty("zephyrVersion").get()
             description = "A desktop GUI for SDKMAN"
             vendor = "Worxbend"
             licenseFile.set(rootProject.file("LICENSE"))
+            linux {
+                iconFile.set(rootProject.file("packaging/linux/com.worxbend.zephyr.png"))
+                debMaintainer = "balyszyn@gmail.com"
+                appCategory = "Utility"
+                rpmLicenseType = "MIT"
+            }
         }
     }
 }

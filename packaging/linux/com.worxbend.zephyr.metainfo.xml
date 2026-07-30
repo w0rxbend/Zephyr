@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.worxbend.zephyr</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>Zephyr</name>
+  <summary>Manage SDKMAN toolchains from the desktop</summary>
+  <description>
+    <p>
+      Zephyr is a desktop interface for SDKMAN. It inventories installed JDKs
+      and SDKs, reviews updates and local-only versions, and keeps all changes
+      behind an explicit transaction preview.
+    </p>
+    <p>
+      Zephyr uses the existing SDKMAN installation in your home directory and
+      does not replace SDKMAN's package management.
+    </p>
+  </description>
+  <launchable type="desktop-id">com.worxbend.zephyr.desktop</launchable>
+  <provides>
+    <binary>zephyr</binary>
+  </provides>
+  <url type="homepage">https://github.com/w0rxbend/Zephyr</url>
+  <url type="bugtracker">https://github.com/w0rxbend/Zephyr/issues</url>
+  <developer id="com.worxbend">
+    <name>Worxbend</name>
+  </developer>
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/w0rxbend/Zephyr/main/Screenshot-1.png</image>
+      <caption>Zephyr SDKMAN workbench</caption>
+    </screenshot>
+  </screenshots>
+  <releases>
+    <release version="1.0.0" date="2026-07-30"/>
+  </releases>
+  <content_rating type="oars-1.1"/>
+</component>

@@ -5,6 +5,16 @@ Zephyr wraps the SDKMAN CLI and local filesystem — it does not reimplement pac
 
 ---
 
+## Downloads
+
+Linux releases provide AppImage, Snap, and Flatpak bundles for `amd64` and
+`arm64`. Download the available artifacts and `SHA256SUMS` from
+[GitHub Releases](https://github.com/w0rxbend/Zephyr/releases). Packaging,
+local build commands, Snap Store prerequisites, and Flatpak/Flathub scope are
+documented in [`DISTRIBUTION.md`](DISTRIBUTION.md).
+
+---
+
 ## The Idea
 
 SDKMAN is excellent for installing and switching JDKs and SDKs from the terminal. But over time it accumulates **local-only versions**: builds that are installed in `~/.sdkman/candidates/` but are no longer listed in SDKMAN's remote registry.
@@ -171,6 +181,7 @@ Navigation is grouped into Workspace, Discover, Maintenance, and application sec
 - Settings accepts an explicit proxy hostname, port, and optional username for SDKMAN network commands.
 - Proxy passwords are stored and retrieved only through Linux Secret Service via `secret-tool`; if it is unavailable, Zephyr refuses to persist the password.
 - Credentials never enter app preferences or shell command text. They are URL-encoded and scoped to the SDKMAN child-process environment.
+- Connectivity diagnostics use the same proxy environment as SDKMAN reads while keeping credentials out of the curl argument list.
 
 ### Custom SDKMAN home
 
@@ -232,9 +243,11 @@ Navigation is grouped into Workspace, Discover, Maintenance, and application sec
 ### Update Center
 
 - Update Center compares every installed candidate with its stable SDKMAN catalog target.
-- Candidates whose stable target is not installed are grouped into JDK and SDK updates.
-- Select all or individual updates, inspect candidate details, or review the next selected install.
-- Every update remains an ordinary typed install transaction with network preflight, disk-impact estimate, confirmation, and journal history.
+- Missing stable targets and installed-but-inactive stable targets are grouped into JDK and SDK updates.
+- Select all or individual updates, inspect candidate details, or review an install-and-activate plan.
+- Missing targets install before becoming the persisted SDKMAN default; installed targets activate without a download.
+- A failed install skips only its dependent default change while unrelated selected targets continue and remain journaled.
+- Every update uses typed review, disk-impact estimation, confirmation, and journal history. Switch-only plans work offline; plans containing installs run the route-aware network preflight.
 - Refreshing Update Center metadata is explicit and uses the same confirmed SDKMAN metadata transaction as the toolbar.
 
 ### Batch installs
@@ -242,7 +255,7 @@ Navigation is grouped into Workspace, Discover, Maintenance, and application sec
 - Select multiple Update Center targets and choose **Review selected** to create one typed batch plan.
 - The preview lists every candidate/version command and combines available sibling-based disk estimates.
 - Installs run strictly one at a time; a failed item does not prevent later selected items from running.
-- Update Center shows pending, running, successful, and failed status per target, while the status bar reports overall progress.
+- Update Center shows pending, running, successful, failed, and skipped status per install/default command, while the status bar reports overall progress.
 - The operation journal records the full batch command list and summary outcome.
 
 ### Batch uninstall
@@ -322,8 +335,10 @@ Shows the full SDKMAN remote catalog with display names, descriptions, stable ve
 ### Local-only cleanup
 
 - Run **Scan** from the header bar to audit every installed candidate against SDKMAN's remote registry.
+- Candidate reads run through a bounded worker pool and publish accessible completed/total progress and trusted partial findings as they finish.
+- Individual read failures retain successful findings and can be retried without repeating successful candidate reads.
 - The **Local-Only Versions** screen shows all affected packages as cards with orphaned version counts.
-- **Clean** removes only the flagged versions after a typed transaction preview lists every affected version.
+- **Clean** is available only for completed findings backed by live complete evidence and still uses fresh repository verification before a typed transaction preview.
 - If every installed version of a package is orphaned, the confirmation warns that the package may disappear from Installed after cleaning.
 - Partial failures are reported; cleaning continues for remaining eligible versions.
 
@@ -366,7 +381,8 @@ Every SDKMAN mutation is reviewed before execution:
 ### Connectivity awareness
 
 - The toolbar, status bar, Overview, and Diagnostics expose **Online**, **Offline**, **Checking**, or **Unknown** SDKMAN service state.
-- Clicking the Network control runs a short reachability probe without downloading candidate data.
+- Clicking the Network control runs a bounded read-only diagnostic through the active direct or proxy route without downloading candidate data.
+- Diagnostics classifies online, proxy-authentication, TLS, timeout, service, and indeterminate outcomes while exposing no route coordinates, credentials, paths, or raw output.
 - Transaction previews state whether an action needs the network or works offline.
 - Install, metadata, self-update, Browse, detail loading, and local-only scanning run an online preflight.
 - Default changes and uninstall remain available offline; cleanup requires connectivity because the repository re-verifies remote availability immediately before removal.

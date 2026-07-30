@@ -1,0 +1,71 @@
+name: zephyr-sdkman
+title: Zephyr
+summary: Manage SDKMAN toolchains from the desktop
+description: |
+  Zephyr is a desktop interface for SDKMAN. It inventories installed JDKs and
+  SDKs, reviews updates and local-only versions, and keeps all changes behind
+  an explicit transaction preview.
+
+  This snap uses classic confinement because Zephyr operates on the user's
+  existing SDKMAN installation and launches host toolchains and terminals.
+version: "1.0.0"
+license: MIT
+icon: packaging/linux/com.worxbend.zephyr.png
+base: core24
+grade: stable
+confinement: classic
+compression: lzo
+
+platforms:
+  amd64:
+    build-on: [amd64]
+    build-for: [amd64]
+  arm64:
+    build-on: [arm64]
+    build-for: [arm64]
+
+apps:
+  zephyr:
+    command: usr/lib/zephyr/bin/com.worxbend.zephyr
+    desktop: usr/share/applications/com.worxbend.zephyr.desktop
+    common-id: com.worxbend.zephyr
+
+parts:
+  zephyr:
+    plugin: nil
+    source: .
+    build-attributes:
+      - enable-patchelf
+    build-packages:
+      - openjdk-21-jdk-headless
+    stage-packages:
+      - libasound2t64
+      - libfontconfig1
+      - libfreetype6
+      - libgl1
+      - libx11-6
+      - libxext6
+      - libxi6
+      - libxrender1
+      - libxtst6
+    override-build: |
+      version=$(sed -n 's/^zephyrVersion=//p' "$CRAFT_PART_SRC/gradle.properties")
+      cd "$CRAFT_PART_SRC"
+      ./gradlew -PzephyrVersion="$version" :desktopApp:createDistributable --console=plain
+      install -d \
+        "$CRAFT_PART_INSTALL/usr/lib/zephyr" \
+        "$CRAFT_PART_INSTALL/usr/share/applications" \
+        "$CRAFT_PART_INSTALL/usr/share/icons/hicolor/scalable/apps" \
+        "$CRAFT_PART_INSTALL/usr/share/metainfo"
+      cp -a desktopApp/build/compose/binaries/main/app/com.worxbend.zephyr/. \
+        "$CRAFT_PART_INSTALL/usr/lib/zephyr/"
+      install -m 0644 packaging/linux/com.worxbend.zephyr.desktop \
+        "$CRAFT_PART_INSTALL/usr/share/applications/com.worxbend.zephyr.desktop"
+      sed -i 's/^Exec=.*/Exec=zephyr-sdkman.zephyr/' \
+        "$CRAFT_PART_INSTALL/usr/share/applications/com.worxbend.zephyr.desktop"
+      sed -i 's#^Icon=.*#Icon=${SNAP}/usr/share/icons/hicolor/scalable/apps/com.worxbend.zephyr.svg#' \
+        "$CRAFT_PART_INSTALL/usr/share/applications/com.worxbend.zephyr.desktop"
+      install -m 0644 packaging/linux/com.worxbend.zephyr.svg \
+        "$CRAFT_PART_INSTALL/usr/share/icons/hicolor/scalable/apps/com.worxbend.zephyr.svg"
+      install -m 0644 packaging/linux/com.worxbend.zephyr.metainfo.xml \
+        "$CRAFT_PART_INSTALL/usr/share/metainfo/com.worxbend.zephyr.metainfo.xml"
