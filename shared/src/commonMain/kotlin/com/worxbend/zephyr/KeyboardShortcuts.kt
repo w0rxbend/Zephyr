@@ -24,7 +24,7 @@ internal val keyboardShortcutHelp = listOf(
     KeyboardShortcutInfo("Ctrl/⌘ Shift S", "Open Installed SDKs"),
     KeyboardShortcutInfo("Ctrl/⌘ Shift U", "Open Update Center"),
     KeyboardShortcutInfo("Ctrl/⌘ Shift D", "Open Diagnostics"),
-    KeyboardShortcutInfo("Ctrl/⌘ Shift H", "Open Operation History"),
+    KeyboardShortcutInfo("Ctrl/⌘ Shift H", "Open Task Center"),
     KeyboardShortcutInfo("Ctrl/⌘ Shift R", "Refresh local state"),
     KeyboardShortcutInfo("Ctrl/⌘ Shift L", "Scan local-only versions"),
     KeyboardShortcutInfo("Tab / Shift+Tab", "Move focus forward / backward"),

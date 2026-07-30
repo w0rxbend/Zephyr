@@ -14,7 +14,7 @@ fun main() = application {
         title = "Zephyr",
     ) {
         LaunchedEffect(window) {
-            window.minimumSize = Dimension(1040, 680)
+            window.minimumSize = Dimension(800, 600)
         }
         App()
     }

@@ -27,7 +27,7 @@ internal fun operationNotification(
         message = if (succeeded) {
             "$stepCount reviewed step(s) completed in Zephyr."
         } else {
-            "$stepCount reviewed step(s) finished with a failure. Open Operation History for details."
+            "$stepCount reviewed step(s) finished with a failure. Open Task Center for details."
         },
     )
 }

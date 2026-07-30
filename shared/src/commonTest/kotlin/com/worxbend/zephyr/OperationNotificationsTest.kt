@@ -28,7 +28,7 @@ class OperationNotificationsTest {
 
         assertFalse(notification!!.message.contains("/home/alex"))
         assertEquals(
-            "1 reviewed step(s) finished with a failure. Open Operation History for details.",
+            "1 reviewed step(s) finished with a failure. Open Task Center for details.",
             notification.message,
         )
     }

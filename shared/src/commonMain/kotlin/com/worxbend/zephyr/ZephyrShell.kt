@@ -7,6 +7,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -18,8 +19,11 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -118,6 +122,7 @@ internal fun ZephyrScreen(
     val displayDensity = LocalDensity.current.density
     var globalSearchOpen by remember { mutableStateOf(false) }
     var commandPaletteOpen by remember { mutableStateOf(false) }
+    var navigationOverlayOpen by remember { mutableStateOf(false) }
     val activateSearchTarget: (GlobalSearchTarget) -> Unit = { target ->
         globalSearchOpen = false
         commandPaletteOpen = false
@@ -163,7 +168,7 @@ internal fun ZephyrScreen(
         )
     }
 
-    Column(
+    BoxWithConstraints(
         Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
@@ -210,53 +215,82 @@ internal fun ZephyrScreen(
                 }
             },
     ) {
-        WorkbenchToolbar(
-            state = state,
-            darkTheme = darkTheme,
-            showSdkmanHome = settings.showSdkmanHome,
-            onBack = viewModel::goBack,
-            onOpenSearch = { globalSearchOpen = true },
-            onToggleActivity = viewModel::toggleActivityCenter,
-            onToggleTheme = onToggleTheme,
-            onRefresh = viewModel::refreshInstalled,
-            onRefreshConnectivity = viewModel::refreshConnectivity,
-            onRefreshMetadata = { viewModel.requestTransaction(SdkmanTransaction.RefreshMetadata) },
-            onScan = viewModel::scanLocalOnly,
-            onCheckUpdates = { viewModel.requestTransaction(SdkmanTransaction.SelfUpdate) },
-        )
-        Row(Modifier.weight(1f).fillMaxWidth()) {
-            WorkbenchSidebar(
+        val shellLayout = shellLayoutForWidth(maxWidth.value)
+        LaunchedEffect(shellLayout) {
+            if (shellLayout.hasPersistentNavigation) navigationOverlayOpen = false
+        }
+        Column(Modifier.fillMaxSize()) {
+            WorkbenchToolbar(
                 state = state,
-                width = navigationWidth.dp,
-                onNavigate = viewModel::navigate,
+                layout = shellLayout,
+                darkTheme = darkTheme,
+                showSdkmanHome = settings.showSdkmanHome,
+                onBack = viewModel::goBack,
+                onToggleNavigation = { navigationOverlayOpen = !navigationOverlayOpen },
+                onOpenSearch = { globalSearchOpen = true },
+                onToggleActivity = viewModel::toggleActivityCenter,
+                onToggleTheme = onToggleTheme,
+                onRefresh = viewModel::refreshInstalled,
+                onRefreshConnectivity = viewModel::refreshConnectivity,
+                onRefreshMetadata = { viewModel.requestTransaction(SdkmanTransaction.RefreshMetadata) },
+                onScan = viewModel::scanLocalOnly,
+                onCheckUpdates = { viewModel.requestTransaction(SdkmanTransaction.SelfUpdate) },
             )
-            NavigationResizeHandle(
-                onDrag = { pixels ->
-                    navigationWidth = (navigationWidth + pixels / displayDensity)
-                        .coerceIn(MIN_NAVIGATION_WIDTH_DP.toFloat(), MAX_NAVIGATION_WIDTH_DP.toFloat())
-                },
-                onDragFinished = {
-                    onSettingsChange { it.copy(navigationWidthDp = navigationWidth.roundToInt()) }
-                },
-            )
-            Content(
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                Row(Modifier.fillMaxSize()) {
+                    if (shellLayout.hasPersistentNavigation) {
+                        WorkbenchSidebar(
+                            state = state,
+                            width = navigationWidth.dp,
+                            onNavigate = viewModel::navigate,
+                        )
+                        NavigationResizeHandle(
+                            onDrag = { pixels ->
+                                navigationWidth = (navigationWidth + pixels / displayDensity)
+                                    .coerceIn(MIN_NAVIGATION_WIDTH_DP.toFloat(), MAX_NAVIGATION_WIDTH_DP.toFloat())
+                            },
+                            onDragFinished = {
+                                onSettingsChange { it.copy(navigationWidthDp = navigationWidth.roundToInt()) }
+                            },
+                        )
+                    }
+                    Content(
+                        state = state,
+                        viewModel = viewModel,
+                        settings = settings,
+                        onSettingsChange = onSettingsChange,
+                        onClean = { candidate, versions ->
+                            viewModel.requestTransaction(SdkmanTransaction.CleanLocalOnly(candidate, versions))
+                        },
+                        onUninstall = { candidate, version ->
+                            viewModel.requestTransaction(SdkmanTransaction.Uninstall(candidate, version))
+                        },
+                    )
+                }
+                if (shellLayout == ShellLayout.Narrow && navigationOverlayOpen) {
+                    Surface(
+                        modifier = Modifier.fillMaxHeight().widthIn(max = 320.dp).fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.surface,
+                        shadowElevation = 12.dp,
+                    ) {
+                        WorkbenchSidebar(
+                            state = state,
+                            width = 320.dp,
+                            onNavigate = { route ->
+                                navigationOverlayOpen = false
+                                viewModel.navigate(route)
+                            },
+                        )
+                    }
+                }
+            }
+            WorkbenchStatusBar(
                 state = state,
-                viewModel = viewModel,
-                settings = settings,
-                onSettingsChange = onSettingsChange,
-                onClean = { candidate, versions ->
-                    viewModel.requestTransaction(SdkmanTransaction.CleanLocalOnly(candidate, versions))
-                },
-                onUninstall = { candidate, version ->
-                    viewModel.requestTransaction(SdkmanTransaction.Uninstall(candidate, version))
-                },
+                compact = shellLayout != ShellLayout.Wide,
+                showSdkmanHome = settings.showSdkmanHome,
+                metadataRefreshSchedule = settings.metadataRefreshSchedule,
             )
         }
-        WorkbenchStatusBar(
-            state = state,
-            showSdkmanHome = settings.showSdkmanHome,
-            metadataRefreshSchedule = settings.metadataRefreshSchedule,
-        )
     }
 
     if (state.activityCenterOpen) {
@@ -289,7 +323,10 @@ internal fun TransactionPreviewDialog(
         title = { Text(transaction.title) },
         text = {
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 440.dp)
+                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text(transaction.description)
@@ -418,9 +455,11 @@ private fun PlannedCommandRow(
 @Composable
 private fun WorkbenchToolbar(
     state: ZephyrUiState.Ready,
+    layout: ShellLayout,
     darkTheme: Boolean,
     showSdkmanHome: Boolean,
     onBack: () -> Unit,
+    onToggleNavigation: () -> Unit,
     onOpenSearch: () -> Unit,
     onToggleActivity: () -> Unit,
     onToggleTheme: () -> Unit,
@@ -443,6 +482,9 @@ private fun WorkbenchToolbar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(7.dp),
         ) {
+            if (layout == ShellLayout.Narrow) {
+                ZephyrToolbarButton("Menu", onClick = onToggleNavigation)
+            }
             if (state.previousRoute != null) {
                 IconButton(onClick = onBack, modifier = Modifier.size(metrics.controlHeight)) {
                     Icon(
@@ -460,7 +502,9 @@ private fun WorkbenchToolbar(
             ) {
                 Text("Z", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold)
             }
-            Column(Modifier.width(190.dp)) {
+            Column(
+                if (layout == ShellLayout.Wide) Modifier.width(190.dp) else Modifier.weight(1f),
+            ) {
                 Text(
                     headerTitle(state),
                     style = MaterialTheme.typography.titleSmall,
@@ -476,38 +520,115 @@ private fun WorkbenchToolbar(
                     overflow = TextOverflow.MiddleEllipsis,
                 )
             }
-            Spacer(Modifier.weight(1f))
-            GlobalSearchButton(onClick = onOpenSearch)
+            if (layout == ShellLayout.Wide) {
+                Spacer(Modifier.weight(1f))
+                GlobalSearchButton(onClick = onOpenSearch)
+            } else {
+                ZephyrToolbarButton("Find", onClick = onOpenSearch)
+            }
             val unreadActivity = state.activityEvents.count { !it.acknowledged }
             ZephyrToolbarButton(
                 label = "Activity",
                 detail = unreadActivity.takeIf { it > 0 }?.toString(),
                 onClick = onToggleActivity,
             )
-            HeaderThemeButton(darkTheme = darkTheme, onClick = onToggleTheme)
-            ZephyrToolbarButton(
-                label = "Network",
-                detail = state.connectivityStatus.state.label.lowercase(),
-                onClick = onRefreshConnectivity,
-                enabled = state.connectivityStatus.state != ConnectivityState.Checking,
-            )
-            ZephyrToolbarButton("Refresh", onClick = onRefresh, enabled = !busy)
-            ZephyrToolbarButton(
-                label = "Metadata",
-                detail = metadataShortLabel(state.sdkmanStatus.metadataStatus),
-                onClick = onRefreshMetadata,
-                enabled = !busy,
-            )
-            ZephyrToolbarButton("Scan", onClick = onScan, enabled = !busy)
-            ZephyrToolbarButton(
-                label = "SDKMAN update",
-                detail = selfUpdateShortLabel(state.sdkmanStatus.selfUpdateStatus),
-                onClick = onCheckUpdates,
-                enabled = !busy,
-            )
+            if (layout.showsFullToolbar) {
+                HeaderThemeButton(darkTheme = darkTheme, onClick = onToggleTheme)
+                ZephyrToolbarButton(
+                    label = "Network",
+                    detail = state.connectivityStatus.state.label.lowercase(),
+                    onClick = onRefreshConnectivity,
+                    enabled = state.connectivityStatus.state != ConnectivityState.Checking,
+                )
+                ZephyrToolbarButton("Refresh", onClick = onRefresh, enabled = !busy)
+                ZephyrToolbarButton(
+                    label = "Metadata",
+                    detail = metadataShortLabel(state.sdkmanStatus.metadataStatus),
+                    onClick = onRefreshMetadata,
+                    enabled = !busy,
+                )
+                ZephyrToolbarButton("Scan", onClick = onScan, enabled = !busy)
+                ZephyrToolbarButton(
+                    label = "SDKMAN update",
+                    detail = selfUpdateShortLabel(state.sdkmanStatus.selfUpdateStatus),
+                    onClick = onCheckUpdates,
+                    enabled = !busy,
+                )
+            } else {
+                ToolbarOverflow(
+                    darkTheme = darkTheme,
+                    networkLabel = state.connectivityStatus.state.label,
+                    metadataLabel = metadataShortLabel(state.sdkmanStatus.metadataStatus),
+                    updateLabel = selfUpdateShortLabel(state.sdkmanStatus.selfUpdateStatus),
+                    busy = busy,
+                    connectivityChecking = state.connectivityStatus.state == ConnectivityState.Checking,
+                    onToggleTheme = onToggleTheme,
+                    onRefresh = onRefresh,
+                    onRefreshConnectivity = onRefreshConnectivity,
+                    onRefreshMetadata = onRefreshMetadata,
+                    onScan = onScan,
+                    onCheckUpdates = onCheckUpdates,
+                )
+            }
         }
     }
     Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
+}
+
+@Composable
+private fun ToolbarOverflow(
+    darkTheme: Boolean,
+    networkLabel: String,
+    metadataLabel: String,
+    updateLabel: String,
+    busy: Boolean,
+    connectivityChecking: Boolean,
+    onToggleTheme: () -> Unit,
+    onRefresh: () -> Unit,
+    onRefreshConnectivity: () -> Unit,
+    onRefreshMetadata: () -> Unit,
+    onScan: () -> Unit,
+    onCheckUpdates: () -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val runAndClose: (() -> Unit) -> Unit = { action ->
+        expanded = false
+        action()
+    }
+    Box {
+        ZephyrToolbarButton("More", onClick = { expanded = true })
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(
+                text = { Text("Network · ${networkLabel.lowercase()}") },
+                enabled = !connectivityChecking,
+                onClick = { runAndClose(onRefreshConnectivity) },
+            )
+            DropdownMenuItem(
+                text = { Text("Refresh installed") },
+                enabled = !busy,
+                onClick = { runAndClose(onRefresh) },
+            )
+            DropdownMenuItem(
+                text = { Text("Refresh metadata · $metadataLabel") },
+                enabled = !busy,
+                onClick = { runAndClose(onRefreshMetadata) },
+            )
+            DropdownMenuItem(
+                text = { Text("Scan local-only versions") },
+                enabled = !busy,
+                onClick = { runAndClose(onScan) },
+            )
+            DropdownMenuItem(
+                text = { Text("Check SDKMAN update · $updateLabel") },
+                enabled = !busy,
+                onClick = { runAndClose(onCheckUpdates) },
+            )
+            DropdownMenuItem(
+                text = { Text(if (darkTheme) "Use light theme" else "Use dark theme") },
+                onClick = { runAndClose(onToggleTheme) },
+            )
+        }
+    }
 }
 
 @Composable
@@ -521,12 +642,12 @@ private fun ActivityCenterPanel(
     Surface(
         modifier = Modifier
             .fillMaxSize()
-            .padding(top = metrics.toolbarHeight + 8.dp, end = 16.dp),
+            .padding(top = metrics.toolbarHeight + 8.dp, start = 16.dp, end = 16.dp),
         color = androidx.compose.ui.graphics.Color.Transparent,
     ) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopEnd) {
             Surface(
-                modifier = Modifier.width(460.dp).heightIn(max = 520.dp),
+                modifier = Modifier.widthIn(max = 460.dp).fillMaxWidth().heightIn(max = 520.dp),
                 color = MaterialTheme.colorScheme.surface,
                 shape = androidx.compose.foundation.shape.RoundedCornerShape(metrics.cornerRadius),
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
@@ -636,102 +757,155 @@ private fun WorkbenchSidebar(
     val metrics = LocalZephyrMetrics.current
     val installedSdks = state.candidates.count { it.kind == CandidateKind.Sdk }
     val localOnly = state.candidates.sumOf { it.localOnlyVersionCount }
+    val updates = availableCandidateUpdates(state.candidates, state.catalog).size
+    val activeTask = navigationTaskFor(state.route)
+    var expandedTasks by remember { mutableStateOf(setOfNotNull(activeTask)) }
+    LaunchedEffect(activeTask) {
+        if (activeTask != null) expandedTasks = expandedTasks + activeTask
+    }
     Column(
         modifier = Modifier
             .width(width)
             .fillMaxHeight()
             .background(MaterialTheme.colorScheme.surface)
+            .verticalScroll(rememberScrollState())
             .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        ZephyrSectionLabel("Workspace")
-        ZephyrNavigationItem("O", "Overview", state.route is ZephyrRoute.Overview, { onNavigate(ZephyrRoute.Overview) })
+        ZephyrSectionLabel("Tasks")
         ZephyrNavigationItem(
-            "J",
-            "Installed JDK",
-            state.route is ZephyrRoute.InstalledJdk,
-            { onNavigate(ZephyrRoute.InstalledJdk) },
-            badge = state.candidates.firstOrNull { it.kind == CandidateKind.Jdk }?.installedVersions?.count { it.isInstalled }?.toString(),
+            "O",
+            "Overview",
+            state.route is ZephyrRoute.Overview,
+            { onNavigate(ZephyrRoute.Overview) },
         )
-        ZephyrNavigationItem(
-            "S",
-            "Installed SDKs",
-            state.route is ZephyrRoute.InstalledSdks,
-            { onNavigate(ZephyrRoute.InstalledSdks) },
-            badge = installedSdks.toString(),
-        )
-        ZephyrNavigationItem(
-            "P",
-            "Toolchain Profiles",
-            state.route is ZephyrRoute.Profiles,
-            { onNavigate(ZephyrRoute.Profiles) },
-        )
-        ZephyrNavigationItem(
-            "↥",
-            "Import .sdkmanrc",
-            state.route is ZephyrRoute.ProjectImport,
-            { onNavigate(ZephyrRoute.ProjectImport) },
-        )
-        ZephyrNavigationItem(
-            "↧",
-            "Export .sdkmanrc",
-            state.route is ZephyrRoute.ProjectExport,
-            { onNavigate(ZephyrRoute.ProjectExport) },
-        )
-        ZephyrNavigationItem(
-            "◎",
-            "Environment Snapshot",
-            state.route is ZephyrRoute.EnvironmentSnapshot,
-            { onNavigate(ZephyrRoute.EnvironmentSnapshot) },
-        )
-
-        ZephyrSectionLabel("Discover", Modifier.padding(top = 7.dp))
-        ZephyrNavigationItem("+J", "Browse JDKs", state.route is ZephyrRoute.BrowseJdks, { onNavigate(ZephyrRoute.BrowseJdks) })
-        ZephyrNavigationItem("+S", "Browse SDKs", state.route is ZephyrRoute.BrowseSdks, { onNavigate(ZephyrRoute.BrowseSdks) })
-        ZephyrNavigationItem(
-            "≡",
-            "Compare versions",
-            state.route is ZephyrRoute.Comparison,
-            { onNavigate(ZephyrRoute.Comparison) },
-        )
-
-        ZephyrSectionLabel("Maintenance", Modifier.padding(top = 7.dp))
-        ZephyrNavigationItem(
-            "!",
-            "Local-only versions",
-            state.route is ZephyrRoute.LocalOnly,
-            { onNavigate(ZephyrRoute.LocalOnly) },
-            badge = localOnly.takeIf { it > 0 }?.toString(),
-        )
-        val updates = availableCandidateUpdates(state.candidates, state.catalog).size
+        NavigationTaskGroup(
+            task = NavigationTask.Installed,
+            glyph = "I",
+            expanded = NavigationTask.Installed in expandedTasks,
+            active = activeTask == NavigationTask.Installed,
+            badge = (installedSdks + state.candidates.count { it.kind == CandidateKind.Jdk }).toString(),
+            onToggle = {
+                expandedTasks = expandedTasks.toggled(NavigationTask.Installed)
+            },
+        ) {
+            ZephyrNavigationItem(
+                "J",
+                "Installed JDK",
+                state.route is ZephyrRoute.InstalledJdk,
+                { onNavigate(ZephyrRoute.InstalledJdk) },
+                Modifier.padding(start = 14.dp),
+                state.candidates.firstOrNull { it.kind == CandidateKind.Jdk }
+                    ?.installedVersions
+                    ?.count { it.isInstalled }
+                    ?.toString(),
+            )
+            ZephyrNavigationItem(
+                "S",
+                "Installed SDKs",
+                state.route is ZephyrRoute.InstalledSdks,
+                { onNavigate(ZephyrRoute.InstalledSdks) },
+                Modifier.padding(start = 14.dp),
+                installedSdks.toString(),
+            )
+        }
+        NavigationTaskGroup(
+            task = NavigationTask.Discover,
+            glyph = "⌕",
+            expanded = NavigationTask.Discover in expandedTasks,
+            active = activeTask == NavigationTask.Discover,
+            onToggle = { expandedTasks = expandedTasks.toggled(NavigationTask.Discover) },
+        ) {
+            NavigationChild("+J", "Browse JDKs", state.route is ZephyrRoute.BrowseJdks, ZephyrRoute.BrowseJdks, onNavigate)
+            NavigationChild("+S", "Browse SDKs", state.route is ZephyrRoute.BrowseSdks, ZephyrRoute.BrowseSdks, onNavigate)
+            NavigationChild("≡", "Compare versions", state.route is ZephyrRoute.Comparison, ZephyrRoute.Comparison, onNavigate)
+        }
+        NavigationTaskGroup(
+            task = NavigationTask.Projects,
+            glyph = "P",
+            expanded = NavigationTask.Projects in expandedTasks,
+            active = activeTask == NavigationTask.Projects,
+            onToggle = { expandedTasks = expandedTasks.toggled(NavigationTask.Projects) },
+        ) {
+            NavigationChild("P", "Profiles", state.route is ZephyrRoute.Profiles, ZephyrRoute.Profiles, onNavigate)
+            NavigationChild("↥", "Import .sdkmanrc", state.route is ZephyrRoute.ProjectImport, ZephyrRoute.ProjectImport, onNavigate)
+            NavigationChild("↧", "Export .sdkmanrc", state.route is ZephyrRoute.ProjectExport, ZephyrRoute.ProjectExport, onNavigate)
+            NavigationChild("◎", "Snapshots", state.route is ZephyrRoute.EnvironmentSnapshot, ZephyrRoute.EnvironmentSnapshot, onNavigate)
+        }
         ZephyrNavigationItem(
             "↑",
-            "Update Center",
+            "Updates",
             state.route is ZephyrRoute.UpdateCenter,
             { onNavigate(ZephyrRoute.UpdateCenter) },
             badge = updates.takeIf { it > 0 }?.toString(),
         )
-        ZephyrNavigationItem(
-            "−",
-            "Batch Uninstall",
-            state.route is ZephyrRoute.BatchUninstall,
-            { onNavigate(ZephyrRoute.BatchUninstall) },
-        )
-        ZephyrNavigationItem("D", "Diagnostics", state.route is ZephyrRoute.Diagnostics, { onNavigate(ZephyrRoute.Diagnostics) })
-        ZephyrNavigationItem(
-            "H",
-            "Operation history",
-            state.route is ZephyrRoute.History,
-            { onNavigate(ZephyrRoute.History) },
+        NavigationTaskGroup(
+            task = NavigationTask.Storage,
+            glyph = "▣",
+            expanded = NavigationTask.Storage in expandedTasks,
+            active = activeTask == NavigationTask.Storage,
+            badge = localOnly.takeIf { it > 0 }?.toString(),
+            onToggle = { expandedTasks = expandedTasks.toggled(NavigationTask.Storage) },
+        ) {
+            NavigationChild("!", "Local-only", state.route is ZephyrRoute.LocalOnly, ZephyrRoute.LocalOnly, onNavigate)
+            NavigationChild("−", "Batch uninstall", state.route is ZephyrRoute.BatchUninstall, ZephyrRoute.BatchUninstall, onNavigate)
+        }
+        NavigationTaskGroup(
+            task = NavigationTask.Activity,
+            glyph = "A",
+            expanded = NavigationTask.Activity in expandedTasks,
+            active = activeTask == NavigationTask.Activity,
             badge = state.operationJournal.size.takeIf { it > 0 }?.toString(),
-        )
-
-        Spacer(Modifier.weight(1f))
+            onToggle = { expandedTasks = expandedTasks.toggled(NavigationTask.Activity) },
+        ) {
+            NavigationChild("D", "Diagnostics", state.route is ZephyrRoute.Diagnostics, ZephyrRoute.Diagnostics, onNavigate)
+            NavigationChild("T", "Task Center", state.route is ZephyrRoute.History, ZephyrRoute.History, onNavigate)
+        }
         Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
         ZephyrNavigationItem("⚙", "Settings", state.route is ZephyrRoute.Settings, { onNavigate(ZephyrRoute.Settings) })
         ZephyrNavigationItem("i", "About", state.route is ZephyrRoute.About, { onNavigate(ZephyrRoute.About) })
     }
 }
+
+@Composable
+private fun NavigationTaskGroup(
+    task: NavigationTask,
+    glyph: String,
+    expanded: Boolean,
+    active: Boolean,
+    badge: String? = null,
+    onToggle: () -> Unit,
+    children: @Composable () -> Unit,
+) {
+    ZephyrNavigationItem(
+        glyph = if (expanded) "⌄$glyph" else "›$glyph",
+        label = task.label,
+        selected = active,
+        onClick = onToggle,
+        badge = badge,
+    )
+    if (expanded) children()
+}
+
+@Composable
+private fun NavigationChild(
+    glyph: String,
+    label: String,
+    selected: Boolean,
+    route: ZephyrRoute,
+    onNavigate: (ZephyrRoute) -> Unit,
+) {
+    ZephyrNavigationItem(
+        glyph = glyph,
+        label = label,
+        selected = selected,
+        onClick = { onNavigate(route) },
+        modifier = Modifier.padding(start = 14.dp),
+    )
+}
+
+private fun Set<NavigationTask>.toggled(task: NavigationTask): Set<NavigationTask> =
+    if (task in this) this - task else this + task
 
 @Composable
 private fun NavigationResizeHandle(
@@ -765,6 +939,7 @@ private fun NavigationResizeHandle(
 @Composable
 private fun WorkbenchStatusBar(
     state: ZephyrUiState.Ready,
+    compact: Boolean,
     showSdkmanHome: Boolean,
     metadataRefreshSchedule: MetadataRefreshSchedule,
 ) {
@@ -796,25 +971,35 @@ private fun WorkbenchStatusBar(
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Text("•", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(
-                "${state.candidates.size} candidates",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text("•", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(
-                jdkSubtitle(state),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            if (metadataRefreshSchedule != MetadataRefreshSchedule.Off) {
+            if (!compact) {
                 Text("•", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(
-                    "Auto refresh: ${metadataRefreshSchedule.label}",
+                    "${state.candidates.size} candidates",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                Text("•", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    jdkSubtitle(state),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (metadataRefreshSchedule != MetadataRefreshSchedule.Off) {
+                    Text("•", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        "Auto refresh: ${metadataRefreshSchedule.label}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                state.catalogCachedAtEpochMillis?.takeIf { state.catalogIsCached }?.let { cachedAt ->
+                    Text("•", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        "Cached catalog: ${candidateCacheAgeLabel(cachedAt, currentEpochMillis())}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.tertiary,
+                    )
+                }
             }
             state.readRetryStatus?.let { retry ->
                 Text("•", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -822,18 +1007,11 @@ private fun WorkbenchStatusBar(
                     "Retrying ${retry.operation.label} (${retry.nextAttempt}/${retry.maximumAttempts})",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.tertiary,
-                )
-            }
-            state.catalogCachedAtEpochMillis?.takeIf { state.catalogIsCached }?.let { cachedAt ->
-                Text("•", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(
-                    "Cached catalog: ${candidateCacheAgeLabel(cachedAt, currentEpochMillis())}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.tertiary,
+                    maxLines = 1,
                 )
             }
             Spacer(Modifier.weight(1f))
-            if (showSdkmanHome) {
+            if (showSdkmanHome && !compact) {
                 Text(
                     state.sdkmanStatus.home.orEmpty(),
                     style = MaterialTheme.typography.labelSmall,
@@ -843,12 +1021,14 @@ private fun WorkbenchStatusBar(
                 )
                 Text("•", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Text(
-                sdkmanVersionLabel(state),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-            )
+            if (!compact) {
+                Text(
+                    sdkmanVersionLabel(state),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
+            }
         }
     }
 }
