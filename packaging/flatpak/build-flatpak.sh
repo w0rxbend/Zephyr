@@ -28,10 +28,6 @@ fi
 
 flatpak remote-add --user --if-not-exists flathub \
     https://dl.flathub.org/repo/flathub.flatpakrepo
-flatpak install --user --noninteractive flathub \
-    org.flatpak.Builder \
-    "org.freedesktop.Platform//25.08" \
-    "org.freedesktop.Sdk//25.08"
 
 build_root="$project_root/build/flatpak/$flatpak_arch"
 build_dir="$build_root/build-dir"
@@ -39,12 +35,11 @@ repo_dir="$build_root/repo"
 rm -rf "$build_dir" "$repo_dir"
 mkdir -p "$build_root" "$project_root/dist"
 
-flatpak run \
-    --filesystem="$project_root" \
-    --command=flatpak-builder \
-    org.flatpak.Builder \
+flatpak-builder \
     --arch="$flatpak_arch" \
     --force-clean \
+    --user \
+    --install-deps-from=flathub \
     --repo="$repo_dir" \
     "$build_dir" \
     "$project_root/packaging/flatpak/com.worxbend.zephyr.yml"
