@@ -17,11 +17,11 @@ modules:
   - name: zephyr
     buildsystem: simple
     build-commands:
-      - install -d /app/lib/zephyr /app/bin /app/share/applications /app/share/icons/hicolor/scalable/apps /app/share/metainfo
+      - install -d /app/lib/zephyr /app/bin /app/share/applications /app/share/icons/hicolor/512x512/apps /app/share/metainfo
       - cp -a app/. /app/lib/zephyr/
       - install -m 0755 flatpak-launcher /app/bin/zephyr
       - install -m 0644 com.worxbend.zephyr.desktop /app/share/applications/com.worxbend.zephyr.desktop
-      - install -m 0644 com.worxbend.zephyr.svg /app/share/icons/hicolor/scalable/apps/com.worxbend.zephyr.svg
+      - install -m 0644 com.worxbend.zephyr.png /app/share/icons/hicolor/512x512/apps/com.worxbend.zephyr.png
       - install -m 0644 com.worxbend.zephyr.metainfo.xml /app/share/metainfo/com.worxbend.zephyr.metainfo.xml
     sources:
       - type: dir
@@ -32,6 +32,6 @@ modules:
       - type: file
         path: ../linux/com.worxbend.zephyr.desktop
       - type: file
-        path: ../linux/com.worxbend.zephyr.svg
+        path: ../linux/com.worxbend.zephyr.png
       - type: file
         path: ../linux/com.worxbend.zephyr.metainfo.xml
