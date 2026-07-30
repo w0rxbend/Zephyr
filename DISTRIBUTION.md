@@ -66,7 +66,17 @@ host's SDKMAN installation and host toolchains. Canonical manually reviews
 classic snaps. Follow [`snap/STORE_REVIEW.md`](snap/STORE_REVIEW.md) to
 register the name, request approval, and configure the scoped
 `SNAPCRAFT_STORE_CREDENTIALS` Actions secret. Builds and GitHub publication do
-not depend on the secret; only the store-upload step does.
+not depend on the secret; only the store-upload step does. After the name and
+classic confinement are approved and the secret is configured, publish the
+already-verified release assets without rebuilding them:
+
+```shell
+gh workflow run publish-snap-store.yml -f release_tag=v1.0.0
+```
+
+The dedicated workflow downloads each architecture's `.snap` and
+`SHA256SUMS` from that GitHub release, verifies the digest and embedded Snap
+metadata, then publishes the two architectures independently to `stable`.
 
 ## Flatpak scope and Flathub preparation
 

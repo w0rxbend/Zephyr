@@ -26,7 +26,15 @@ Before the release workflow can publish:
 4. Save that file's complete contents as the repository Actions secret
    `SNAPCRAFT_STORE_CREDENTIALS`.
 5. Delete the exported credential file after the secret is configured.
+6. Publish the already-built, checksum-verified release snaps:
+
+   ```shell
+   gh workflow run publish-snap-store.yml -f release_tag=v1.0.0
+   ```
 
 Without the secret or while review is pending, both architecture-specific
 `.snap` files are still built and attached to the GitHub release. A failed
 Snap Store upload is reported but cannot discard successful release packages.
+The manually triggered publisher is strict: it reports failure if either
+architecture cannot be validated or published, while `fail-fast: false` still
+lets the other architecture attempt publication.
