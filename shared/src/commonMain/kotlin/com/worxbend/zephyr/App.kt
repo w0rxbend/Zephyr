@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import com.worxbend.zephyr.data.createDesktopNotificationService
 import com.worxbend.zephyr.data.createSdkmanRepository
 import com.worxbend.zephyr.data.createOperationStore
+import com.worxbend.zephyr.data.createActivityStore
 import com.worxbend.zephyr.data.currentEpochMillis
 import com.worxbend.zephyr.domain.CandidateMetadataStatus
 import com.worxbend.zephyr.domain.ProtectedVersion
@@ -51,6 +52,7 @@ fun App() {
         ZephyrViewModel(
             repository = createSdkmanRepository(),
             operationStore = createOperationStore(),
+            activityStore = createActivityStore(),
         )
     }
     val settingsStore = remember { AppSettingsStore(createAppSettingsRepository()) }

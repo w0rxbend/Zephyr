@@ -5,6 +5,8 @@ import com.worxbend.zephyr.data.OperationJournalExporter
 import com.worxbend.zephyr.data.OperationStore
 import com.worxbend.zephyr.data.NoOpOperationStore
 import com.worxbend.zephyr.data.CommandSatisfaction
+import com.worxbend.zephyr.data.ActivityStore
+import com.worxbend.zephyr.data.NoOpActivityStore
 import com.worxbend.zephyr.data.SdkmanRepository
 import com.worxbend.zephyr.data.createDiagnosticsExporter
 import com.worxbend.zephyr.data.createOperationJournalExporter
@@ -128,12 +130,14 @@ class ZephyrViewModel(
     private val diagnosticsExporter: DiagnosticsExporter = createDiagnosticsExporter(),
     private val readRetryDelaysMillis: List<Long> = listOf(500L, 1_500L),
     private val operationStore: OperationStore = NoOpOperationStore,
+    private val activityStore: ActivityStore = NoOpActivityStore,
     private val clock: () -> Long = ::currentEpochMillis,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
     private val _state = MutableStateFlow<ZephyrUiState>(ZephyrUiState.Loading)
     val state: StateFlow<ZephyrUiState> = _state
     private val operationMutex = Mutex()
+    private val activityStoreMutex = Mutex()
     private var nextJournalId = 1L
     private var nextActivityId = 1L
 
@@ -160,6 +164,7 @@ class ZephyrViewModel(
                     val protectedVersions = loadProtectedVersions()
                     val integrityChecks = loadIntegrityChecks()
                     val operationJournal = loadAndReconcileOperations()
+                    val activityEvents = loadActivityEvents()
                     _state.value = ZephyrUiState.Ready(
                         sdkmanStatus = status,
                         route = ZephyrRoute.Overview,
@@ -175,6 +180,7 @@ class ZephyrViewModel(
                         errorMessage = null,
                         lastOutcome = "Loaded ${candidates.size} installed SDKMAN package(s).",
                         operationJournal = operationJournal,
+                        activityEvents = activityEvents,
                         protectedVersions = protectedVersions,
                         integrityChecks = integrityChecks,
                     )
@@ -188,6 +194,7 @@ class ZephyrViewModel(
                         val candidates = repository.installedCandidates()
                         val cachedCatalog = repository.cachedCatalog()
                         val operationJournal = loadAndReconcileOperations()
+                        val activityEvents = loadActivityEvents()
                         _state.value = ZephyrUiState.Ready(
                             sdkmanStatus = detected.copy(cliVersion = repository.cliVersion()),
                             route = ZephyrRoute.BrowseSdks,
@@ -203,6 +210,7 @@ class ZephyrViewModel(
                             errorMessage = "SDKMAN catalog failed: ${failure.message}",
                             lastOutcome = null,
                             operationJournal = operationJournal,
+                            activityEvents = activityEvents,
                             protectedVersions = loadProtectedVersions(),
                             integrityChecks = loadIntegrityChecks(),
                         )
@@ -270,6 +278,7 @@ class ZephyrViewModel(
                 },
             )
         }
+        persistActivityEventsAsync()
     }
 
     fun toggleActivityCenter() {
@@ -284,6 +293,7 @@ class ZephyrViewModel(
                 },
             )
         }
+        persistActivityEventsAsync()
     }
 
     fun handleActivityAction(action: ActivityAction) {
@@ -1144,6 +1154,29 @@ class ZephyrViewModel(
         )
         _state.updateReady {
             it.copy(activityEvents = (listOf(event) + it.activityEvents).take(MAX_ACTIVITY_EVENTS))
+        }
+        persistActivityEventsAsync()
+    }
+
+    private suspend fun loadActivityEvents(): List<ActivityEvent> {
+        val loaded = runCatchingCancellable { activityStore.load() }
+            .getOrElse { failure ->
+                ZephyrLogger.warn("Unable to load the activity ledger.", failure)
+                emptyList()
+            }
+            .sortedByDescending(ActivityEvent::timestampEpochMillis)
+            .take(MAX_ACTIVITY_EVENTS)
+        nextActivityId = (loaded.maxOfOrNull(ActivityEvent::id) ?: 0L) + 1L
+        return loaded
+    }
+
+    private fun persistActivityEventsAsync() {
+        scope.launch {
+            activityStoreMutex.withLock {
+                val events = (_state.value as? ZephyrUiState.Ready)?.activityEvents.orEmpty()
+                runCatchingCancellable { activityStore.save(events) }
+                    .onFailure { ZephyrLogger.warn("Unable to persist the activity ledger.", it) }
+            }
         }
     }
 

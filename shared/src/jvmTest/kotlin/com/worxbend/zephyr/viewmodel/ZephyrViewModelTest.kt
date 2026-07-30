@@ -5,6 +5,7 @@ import com.worxbend.zephyr.data.CandidateMetadataCache
 import com.worxbend.zephyr.data.OperationJournalExporter
 import com.worxbend.zephyr.data.OperationStore
 import com.worxbend.zephyr.data.CommandSatisfaction
+import com.worxbend.zephyr.data.ActivityStore
 import com.worxbend.zephyr.data.SdkmanRepository
 import com.worxbend.zephyr.domain.Candidate
 import com.worxbend.zephyr.domain.CandidateCatalogItem
@@ -35,6 +36,9 @@ import com.worxbend.zephyr.domain.SdkmanStatus
 import com.worxbend.zephyr.domain.SdkmanTransaction
 import com.worxbend.zephyr.domain.SupportBundleExportResult
 import com.worxbend.zephyr.domain.UninstallTarget
+import com.worxbend.zephyr.domain.ActivityAction
+import com.worxbend.zephyr.domain.ActivityEvent
+import com.worxbend.zephyr.domain.ActivitySeverity
 import com.worxbend.zephyr.domain.StorageInventory
 import com.worxbend.zephyr.domain.StorageMeasurement
 import com.worxbend.zephyr.domain.VersionStorage
@@ -52,6 +56,36 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class ZephyrViewModelTest {
+    @Test
+    fun activityInboxLoadsAndPersistsAcknowledgementAcrossRestarts() {
+        val stored = ActivityEvent(
+            id = 19,
+            timestampEpochMillis = 500,
+            severity = ActivitySeverity.Warning,
+            message = "Interrupted task",
+            action = ActivityAction.OpenTaskCenter,
+        )
+        val activityStore = InMemoryActivityStore(listOf(stored))
+        val first = ZephyrViewModel(
+            repository = FakeSdkmanRepository(),
+            dispatcher = testScope(),
+            activityStore = activityStore,
+        )
+
+        assertEquals(listOf(stored), assertIs<ZephyrUiState.Ready>(first.state.value).activityEvents)
+        first.dismissActivity(stored.id)
+        assertTrue(activityStore.events.single().acknowledged)
+        first.close()
+
+        val second = ZephyrViewModel(
+            repository = FakeSdkmanRepository(),
+            dispatcher = testScope(),
+            activityStore = activityStore,
+        )
+        assertTrue(assertIs<ZephyrUiState.Ready>(second.state.value).activityEvents.single().acknowledged)
+        second.close()
+    }
+
     @Test
     fun openingStorageCenterLoadsSafeInventoryForCurrentCandidates() {
         val candidate = Candidate(
@@ -915,6 +949,19 @@ private class InMemoryOperationStore(
     override suspend fun save(entries: List<OperationJournalEntry>) {
         this.entries = entries
         saved += entries
+    }
+}
+
+private class InMemoryActivityStore(
+    initial: List<ActivityEvent> = emptyList(),
+) : ActivityStore {
+    var events: List<ActivityEvent> = initial
+        private set
+
+    override suspend fun load(): List<ActivityEvent> = events
+
+    override suspend fun save(events: List<ActivityEvent>) {
+        this.events = events
     }
 }
 
