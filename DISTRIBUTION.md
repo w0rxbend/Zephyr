@@ -28,9 +28,9 @@ Build the current machine's real single-file AppImage:
 packaging/appimage/build-appimage.sh
 ```
 
-Build the current machine's Flatpak bundle after installing the `flatpak` and
-`flatpak-builder` packages. The script installs the required Freedesktop
-runtime and SDK for the current user:
+Build the current machine's Flatpak bundle after installing the `flatpak`,
+`flatpak-builder`, and `elfutils` packages. The script installs the required
+Freedesktop runtime and SDK for the current user:
 
 ```shell
 packaging/flatpak/build-flatpak.sh
