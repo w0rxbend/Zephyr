@@ -14,6 +14,19 @@ internal data class ProjectTargetDiff(
     val status: ProjectTargetStatus,
 )
 
+internal enum class ProjectWorkspaceStatus(val label: String) {
+    Ready("Ready"),
+    DefaultsDiffer("Defaults differ"),
+    Missing("Missing versions"),
+}
+
+internal fun projectWorkspaceStatus(diff: List<ProjectTargetDiff>): ProjectWorkspaceStatus =
+    when {
+        diff.any { it.status == ProjectTargetStatus.Install } -> ProjectWorkspaceStatus.Missing
+        diff.any { it.status == ProjectTargetStatus.DefaultChange } -> ProjectWorkspaceStatus.DefaultsDiffer
+        else -> ProjectWorkspaceStatus.Ready
+    }
+
 internal fun compareProjectToolchain(
     targets: List<InstallTarget>,
     candidates: List<Candidate>,

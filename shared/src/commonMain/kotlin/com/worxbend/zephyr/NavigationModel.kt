@@ -27,6 +27,7 @@ internal fun navigationTaskFor(route: ZephyrRoute): NavigationTask? =
         is ZephyrRoute.SdkDetail,
         -> NavigationTask.Discover
         ZephyrRoute.Profiles,
+        ZephyrRoute.ProjectWorkspaces,
         ZephyrRoute.ProjectImport,
         ZephyrRoute.ProjectExport,
         ZephyrRoute.EnvironmentSnapshot,

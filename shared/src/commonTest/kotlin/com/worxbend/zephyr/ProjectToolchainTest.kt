@@ -37,5 +37,14 @@ class ProjectToolchainTest {
             listOf(ProjectTargetStatus.Current, ProjectTargetStatus.DefaultChange, ProjectTargetStatus.Install),
             diff.map { it.status },
         )
+        assertEquals(ProjectWorkspaceStatus.Missing, projectWorkspaceStatus(diff))
+        assertEquals(
+            ProjectWorkspaceStatus.DefaultsDiffer,
+            projectWorkspaceStatus(diff.filterNot { it.status == ProjectTargetStatus.Install }),
+        )
+        assertEquals(
+            ProjectWorkspaceStatus.Ready,
+            projectWorkspaceStatus(diff.filter { it.status == ProjectTargetStatus.Current }),
+        )
     }
 }

@@ -18,6 +18,7 @@ data class AppSettings(
     val favoriteJdkVendors: Set<String> = emptySet(),
     val recentCandidates: List<String> = emptyList(),
     val toolchainProfiles: List<ToolchainProfile> = emptyList(),
+    val projectWorkspaces: List<ProjectWorkspaceReference> = emptyList(),
     val navigationWidthDp: Int = 0,
     val installedViewMode: CollectionViewMode = CollectionViewMode.Cards,
     val catalogViewMode: CollectionViewMode = CollectionViewMode.Cards,
@@ -74,6 +75,20 @@ data class ToolchainProfile(
     val name: String,
     val targets: List<InstallTarget>,
 )
+
+data class ProjectWorkspaceReference(
+    val sdkmanRcPath: String,
+    val displayName: String,
+) {
+    init {
+        require(sdkmanRcPath.isNotBlank()) { "A project workspace path is required." }
+        require(displayName.isNotBlank()) { "A project workspace name is required." }
+        require(
+            sdkmanRcPath.none { it.code < 32 || it.code == 127 } &&
+                displayName.none { it.code < 32 || it.code == 127 },
+        ) { "Project workspace values contain unsupported control characters." }
+    }
+}
 
 fun AppSettings.recordRecentCandidate(candidate: String, limit: Int = 6): AppSettings {
     val normalized = candidate.trim()

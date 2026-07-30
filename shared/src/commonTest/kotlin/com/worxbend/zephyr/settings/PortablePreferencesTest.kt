@@ -13,6 +13,9 @@ class PortablePreferencesTest {
             toolchainProfiles = listOf(
                 ToolchainProfile("Backend\tJVM", listOf(InstallTarget("java", "21-tem"))),
             ),
+            projectWorkspaces = listOf(
+                ProjectWorkspaceReference("/private/work/backend/.sdkmanrc", "Backend"),
+            ),
             savedJdkFilters = listOf(SavedJdkFilter("Local", "17\nlts", "Installed", "tem", "Version")),
             navigationWidthDp = 300,
         )
@@ -25,8 +28,16 @@ class PortablePreferencesTest {
 
         val machineState = AppSettings(
             localOnlyObservations = listOf(LocalOnlyObservation("java", "old-local", 123)),
+            projectWorkspaces = listOf(
+                ProjectWorkspaceReference("/machine-only/.sdkmanrc", "Local"),
+            ),
         ).applyPortablePreferences(parsed)
         assertEquals(source.themePreference, machineState.themePreference)
         assertEquals(listOf(LocalOnlyObservation("java", "old-local", 123)), machineState.localOnlyObservations)
+        assertEquals(
+            listOf(ProjectWorkspaceReference("/machine-only/.sdkmanrc", "Local")),
+            machineState.projectWorkspaces,
+        )
+        assertEquals(false, rendered.contains("/private/work/backend"))
     }
 }

@@ -229,6 +229,7 @@ internal fun headerTitle(state: ZephyrUiState.Ready): String =
         ZephyrRoute.UpdateCenter -> "Update Center"
         ZephyrRoute.BatchUninstall -> "Batch Uninstall"
         ZephyrRoute.Profiles -> "Toolchain Profiles"
+        ZephyrRoute.ProjectWorkspaces -> "Project Workspaces"
         ZephyrRoute.ProjectImport -> "Project Toolchain Import"
         ZephyrRoute.ProjectExport -> "Project Toolchain Export"
         ZephyrRoute.EnvironmentSnapshot -> "Environment Snapshot"

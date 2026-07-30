@@ -133,6 +133,7 @@ internal fun Content(
             ZephyrRoute.UpdateCenter -> UpdateCenterScreen(state, viewModel)
             ZephyrRoute.BatchUninstall -> BatchUninstallScreen(state, viewModel)
             ZephyrRoute.Profiles -> ToolchainProfilesScreen(state, viewModel, settings, onSettingsChange)
+            ZephyrRoute.ProjectWorkspaces -> ProjectWorkspacesScreen(state, viewModel, settings, onSettingsChange)
             ZephyrRoute.ProjectImport -> ProjectToolchainImportScreen(state)
             ZephyrRoute.ProjectExport -> ProjectToolchainExportScreen(state, viewModel)
             ZephyrRoute.EnvironmentSnapshot -> EnvironmentSnapshotScreen(state, viewModel)

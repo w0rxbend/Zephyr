@@ -121,6 +121,7 @@ private fun MutableList<GlobalSearchItem>.addPageItems() {
         Triple("Update Center", ZephyrRoute.UpdateCenter, "Ctrl/⌘ Shift U"),
         Triple("Batch Uninstall", ZephyrRoute.BatchUninstall, null),
         Triple("Toolchain Profiles", ZephyrRoute.Profiles, null),
+        Triple("Project Workspaces", ZephyrRoute.ProjectWorkspaces, null),
         Triple("Import .sdkmanrc", ZephyrRoute.ProjectImport, null),
         Triple("Export .sdkmanrc", ZephyrRoute.ProjectExport, null),
         Triple("Environment Snapshot", ZephyrRoute.EnvironmentSnapshot, null),

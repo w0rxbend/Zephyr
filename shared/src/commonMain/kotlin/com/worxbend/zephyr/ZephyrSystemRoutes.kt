@@ -55,7 +55,9 @@ import com.worxbend.zephyr.data.currentEpochMillis
 import com.worxbend.zephyr.data.diffEnvironmentSnapshots
 import com.worxbend.zephyr.data.planSnapshotRestore
 import com.worxbend.zephyr.data.SdkmanRcDocument
+import com.worxbend.zephyr.data.ProjectWorkspaceDocument
 import com.worxbend.zephyr.data.createProjectToolchainService
+import com.worxbend.zephyr.data.createTerminalLauncher
 import com.worxbend.zephyr.data.ProxyConfiguration
 import com.worxbend.zephyr.data.createProxyConfigurationService
 import com.worxbend.zephyr.data.createSdkmanHomeConfigurationService
@@ -600,6 +602,265 @@ internal fun BatchUninstallScreen(
         }
     }
 }
+
+@Composable
+internal fun ProjectWorkspacesScreen(
+    state: ZephyrUiState.Ready,
+    viewModel: ZephyrViewModel,
+    settings: AppSettings,
+    onSettingsChange: ((AppSettings) -> AppSettings) -> Unit,
+) {
+    val metrics = LocalZephyrMetrics.current
+    val service = remember { createProjectToolchainService() }
+    val terminalLauncher = remember { createTerminalLauncher() }
+    val scope = rememberCoroutineScope()
+    var documents by remember { mutableStateOf<Map<String, ProjectWorkspaceDocument>>(emptyMap()) }
+    var errors by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var launchMessages by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var refreshGeneration by remember { mutableStateOf(0) }
+    var loading by remember { mutableStateOf(false) }
+    var pinning by remember { mutableStateOf(false) }
+
+    LaunchedEffect(settings.projectWorkspaces, refreshGeneration) {
+        loading = true
+        val nextDocuments = mutableMapOf<String, ProjectWorkspaceDocument>()
+        val nextErrors = mutableMapOf<String, String>()
+        settings.projectWorkspaces.forEach { reference ->
+            runCatching { service.readWorkspace(reference) }
+                .onSuccess { nextDocuments[reference.sdkmanRcPath] = it }
+                .onFailure { failure ->
+                    nextErrors[reference.sdkmanRcPath] =
+                        failure.message ?: "The project .sdkmanrc could not be read safely."
+                }
+        }
+        documents = nextDocuments
+        errors = nextErrors
+        loading = false
+    }
+
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(metrics.spacing * 2),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                PageTitle(
+                    "Project Workspaces",
+                    "Pin local .sdkmanrc projects and open terminals scoped to their directory and complete toolchain.",
+                )
+            }
+            ZephyrToolbarButton(
+                label = if (loading) "Refreshing…" else "Refresh",
+                onClick = { refreshGeneration += 1 },
+                enabled = !loading && !pinning,
+            )
+            ZephyrToolbarButton(
+                label = if (pinning) "Choosing…" else "Pin .sdkmanrc",
+                onClick = {
+                    if (!pinning) {
+                        scope.launch {
+                            pinning = true
+                            runCatching { service.chooseWorkspace() }
+                                .onSuccess { selected ->
+                                    if (selected != null) {
+                                        onSettingsChange {
+                                            it.copy(
+                                                projectWorkspaces = (
+                                                    it.projectWorkspaces.filterNot { existing ->
+                                                        existing.sdkmanRcPath == selected.reference.sdkmanRcPath
+                                                    } + selected.reference
+                                                    ).sortedBy { reference -> reference.displayName.lowercase() },
+                                            )
+                                        }
+                                        documents = documents + (selected.reference.sdkmanRcPath to selected)
+                                        errors = errors - selected.reference.sdkmanRcPath
+                                    }
+                                }
+                                .onFailure { failure ->
+                                    launchMessages = launchMessages + (
+                                        PIN_WORKSPACE_MESSAGE_KEY to
+                                            (failure.message ?: "Unable to pin the selected .sdkmanrc.")
+                                        )
+                                }
+                            pinning = false
+                        }
+                    }
+                },
+                enabled = !pinning && !loading,
+            )
+        }
+        launchMessages[PIN_WORKSPACE_MESSAGE_KEY]?.let {
+            Text(it, color = MaterialTheme.colorScheme.error)
+        }
+        if (settings.projectWorkspaces.isEmpty()) {
+            EmptyState(
+                "No project workspaces pinned",
+                "Pin a real project .sdkmanrc. Its machine-local path stays out of portable preference exports.",
+                "Pin .sdkmanrc",
+            ) {
+                if (!pinning) {
+                    scope.launch {
+                        pinning = true
+                        runCatching { service.chooseWorkspace() }
+                            .onSuccess { selected ->
+                                if (selected != null) {
+                                    onSettingsChange {
+                                        it.copy(projectWorkspaces = listOf(selected.reference))
+                                    }
+                                }
+                            }
+                            .onFailure { failure ->
+                                launchMessages = launchMessages + (
+                                    PIN_WORKSPACE_MESSAGE_KEY to
+                                        (failure.message ?: "Unable to pin the selected .sdkmanrc.")
+                                    )
+                            }
+                        pinning = false
+                    }
+                }
+            }
+            return@Column
+        }
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(metrics.spacing),
+        ) {
+            items(settings.projectWorkspaces, key = { it.sdkmanRcPath }) { reference ->
+                val document = documents[reference.sdkmanRcPath]
+                val error = errors[reference.sdkmanRcPath]
+                val diff = document?.let { compareProjectToolchain(it.targets, state.candidates) }.orEmpty()
+                val status = projectWorkspaceStatus(diff)
+                val missing = diff
+                    .filter { it.status == ProjectTargetStatus.Install }
+                    .map(ProjectTargetDiff::target)
+                ZephyrPanel(Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(metrics.panelPadding),
+                        verticalArrangement = Arrangement.spacedBy(9.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    document?.reference?.displayName ?: reference.displayName,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                                Text(
+                                    when {
+                                        error != null -> "Workspace unavailable"
+                                        document == null -> "Loading local .sdkmanrc"
+                                        document.targets.isEmpty() -> "No valid targets"
+                                        status == ProjectWorkspaceStatus.DefaultsDiffer ->
+                                            "All versions are installed; global defaults differ and will remain unchanged."
+                                        status == ProjectWorkspaceStatus.Ready ->
+                                            "Every target is installed and already matches the persisted defaults."
+                                        else -> "${missing.size} target(s) must be installed before launch."
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            if (document != null && document.targets.isNotEmpty()) {
+                                Badge(
+                                    status.label,
+                                    when (status) {
+                                        ProjectWorkspaceStatus.Ready -> BadgeTone.Success
+                                        ProjectWorkspaceStatus.DefaultsDiffer -> BadgeTone.Primary
+                                        ProjectWorkspaceStatus.Missing -> BadgeTone.Warning
+                                    },
+                                )
+                            }
+                            ZephyrToolbarButton(
+                                "Remove",
+                                onClick = {
+                                    onSettingsChange {
+                                        it.copy(
+                                            projectWorkspaces = it.projectWorkspaces.filterNot { workspace ->
+                                                workspace.sdkmanRcPath == reference.sdkmanRcPath
+                                            },
+                                        )
+                                    }
+                                },
+                            )
+                        }
+                        error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                        document?.let { workspace ->
+                            if (workspace.warnings.isNotEmpty()) {
+                                Text(
+                                    "${workspace.warnings.size} invalid line(s) were ignored; only validated targets are used.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.tertiary,
+                                )
+                            }
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(7.dp),
+                                verticalArrangement = Arrangement.spacedBy(7.dp),
+                            ) {
+                                diff.forEach { item ->
+                                    Badge(
+                                        "${item.target.candidate} ${item.target.version}",
+                                        when (item.status) {
+                                            ProjectTargetStatus.Current -> BadgeTone.Success
+                                            ProjectTargetStatus.DefaultChange -> BadgeTone.Primary
+                                            ProjectTargetStatus.Install -> BadgeTone.Warning
+                                        },
+                                    )
+                                }
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                if (missing.isNotEmpty()) {
+                                    ZephyrToolbarButton(
+                                        "Review missing (${missing.size})",
+                                        onClick = {
+                                            viewModel.requestTransaction(SdkmanTransaction.BatchInstall(missing))
+                                        },
+                                    )
+                                }
+                                ZephyrToolbarButton(
+                                    "Open scoped terminal",
+                                    enabled = missing.isEmpty() &&
+                                        workspace.targets.isNotEmpty() &&
+                                        !state.sdkmanStatus.home.isNullOrBlank(),
+                                    onClick = {
+                                        val result = terminalLauncher.launchWorkspace(
+                                            sdkmanHome = state.sdkmanStatus.home.orEmpty(),
+                                            workingDirectory = workspace.projectDirectory,
+                                            targets = workspace.targets,
+                                        )
+                                        launchMessages = launchMessages + (
+                                            reference.sdkmanRcPath to result.message
+                                            )
+                                    },
+                                )
+                                launchMessages[reference.sdkmanRcPath]?.let { message ->
+                                    Text(
+                                        message,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private const val PIN_WORKSPACE_MESSAGE_KEY = "<pin-workspace>"
 
 @Composable
 internal fun ToolchainProfilesScreen(

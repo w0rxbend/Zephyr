@@ -25,6 +25,7 @@ class NavigationModelTest {
             ZephyrRoute.UpdateCenter,
             ZephyrRoute.BatchUninstall,
             ZephyrRoute.Profiles,
+            ZephyrRoute.ProjectWorkspaces,
             ZephyrRoute.ProjectImport,
             ZephyrRoute.ProjectExport,
             ZephyrRoute.EnvironmentSnapshot,

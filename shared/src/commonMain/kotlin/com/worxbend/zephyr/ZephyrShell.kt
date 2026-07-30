@@ -827,6 +827,7 @@ private fun WorkbenchSidebar(
             active = activeTask == NavigationTask.Projects,
             onToggle = { expandedTasks = expandedTasks.toggled(NavigationTask.Projects) },
         ) {
+            NavigationChild("W", "Workspaces", state.route is ZephyrRoute.ProjectWorkspaces, ZephyrRoute.ProjectWorkspaces, onNavigate)
             NavigationChild("P", "Profiles", state.route is ZephyrRoute.Profiles, ZephyrRoute.Profiles, onNavigate)
             NavigationChild("↥", "Import .sdkmanrc", state.route is ZephyrRoute.ProjectImport, ZephyrRoute.ProjectImport, onNavigate)
             NavigationChild("↧", "Export .sdkmanrc", state.route is ZephyrRoute.ProjectExport, ZephyrRoute.ProjectExport, onNavigate)

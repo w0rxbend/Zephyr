@@ -3,6 +3,7 @@ package com.worxbend.zephyr.data
 import com.worxbend.zephyr.domain.InstallTarget
 import com.worxbend.zephyr.domain.isValidSdkmanCandidateName
 import com.worxbend.zephyr.domain.isValidSdkmanVersion
+import com.worxbend.zephyr.settings.ProjectWorkspaceReference
 
 data class SdkmanRcDocument(
     val fileName: String,
@@ -15,9 +16,23 @@ data class SdkmanRcExportResult(
     val exportedTargets: Int,
 )
 
+data class ProjectWorkspaceDocument(
+    val reference: ProjectWorkspaceReference,
+    val projectDirectory: String,
+    val sdkmanRc: SdkmanRcDocument,
+) {
+    val targets: List<InstallTarget>
+        get() = sdkmanRc.targets
+
+    val warnings: List<String>
+        get() = sdkmanRc.warnings
+}
+
 interface ProjectToolchainService {
     suspend fun chooseAndRead(): SdkmanRcDocument?
     suspend fun chooseAndWrite(targets: List<InstallTarget>): SdkmanRcExportResult?
+    suspend fun chooseWorkspace(): ProjectWorkspaceDocument?
+    suspend fun readWorkspace(reference: ProjectWorkspaceReference): ProjectWorkspaceDocument
 }
 
 expect fun createProjectToolchainService(): ProjectToolchainService

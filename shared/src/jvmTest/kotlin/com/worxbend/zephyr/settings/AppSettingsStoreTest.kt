@@ -32,6 +32,9 @@ class AppSettingsStoreTest {
             toolchainProfiles = listOf(
                 ToolchainProfile("Backend", listOf(InstallTarget("java", "21.0.5-tem"))),
             ),
+            projectWorkspaces = listOf(
+                ProjectWorkspaceReference("/srv/backend/.sdkmanrc", "Backend"),
+            ),
             navigationWidthDp = 286,
             installedViewMode = CollectionViewMode.Table,
             catalogViewMode = CollectionViewMode.Table,
@@ -81,6 +84,10 @@ class AppSettingsStoreTest {
                             InstallTarget("gradle", "8.14"),
                         ),
                     ),
+                ),
+                projectWorkspaces = listOf(
+                    ProjectWorkspaceReference("/work/backend/.sdkmanrc", "Backend"),
+                    ProjectWorkspaceReference("/work/mobile/.sdkmanrc", "Mobile"),
                 ),
                 navigationWidthDp = 320,
                 installedViewMode = CollectionViewMode.Table,

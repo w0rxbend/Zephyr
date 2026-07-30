@@ -29,6 +29,7 @@ internal class JvmAppSettingsRepository(
             favoriteJdkVendors = preferences.stringSet(FAVORITE_JDK_VENDORS_KEY),
             recentCandidates = preferences.stringList(RECENT_CANDIDATES_KEY),
             toolchainProfiles = preferences.profiles(PROFILES_KEY),
+            projectWorkspaces = preferences.projectWorkspaces(PROJECT_WORKSPACES_KEY),
             navigationWidthDp = preferences.getInt(NAVIGATION_WIDTH_KEY, 0).normalizedNavigationWidth(),
             installedViewMode = preferences.enumValue(INSTALLED_VIEW_MODE_KEY, CollectionViewMode.Cards),
             catalogViewMode = preferences.enumValue(CATALOG_VIEW_MODE_KEY, CollectionViewMode.Cards),
@@ -51,6 +52,7 @@ internal class JvmAppSettingsRepository(
         preferences.put(FAVORITE_JDK_VENDORS_KEY, settings.favoriteJdkVendors.encode())
         preferences.put(RECENT_CANDIDATES_KEY, settings.recentCandidates.encode())
         preferences.put(PROFILES_KEY, settings.toolchainProfiles.encodeProfiles())
+        preferences.put(PROJECT_WORKSPACES_KEY, settings.projectWorkspaces.encodeProjectWorkspaces())
         preferences.putInt(NAVIGATION_WIDTH_KEY, settings.navigationWidthDp.normalizedNavigationWidth())
         preferences.put(INSTALLED_VIEW_MODE_KEY, settings.installedViewMode.name)
         preferences.put(CATALOG_VIEW_MODE_KEY, settings.catalogViewMode.name)
@@ -123,6 +125,28 @@ internal class JvmAppSettingsRepository(
                     addAll(profile.targets.map { "${it.candidate}$TARGET_FIELD_SEPARATOR${it.version}" })
                 }.joinToString(PROFILE_FIELD_SEPARATOR.toString())
             }
+            .map { PROFILE_ENCODER.encodeToString(it.toByteArray(StandardCharsets.UTF_8)) }
+            .joinToString("\n")
+
+    private fun Preferences.projectWorkspaces(key: String): List<ProjectWorkspaceReference> =
+        get(key, "")
+            .lineSequence()
+            .mapNotNull { encoded ->
+                runCatching {
+                    val fields = String(PROFILE_DECODER.decode(encoded), StandardCharsets.UTF_8)
+                        .split(PROFILE_FIELD_SEPARATOR, limit = 2)
+                    if (fields.size != 2) return@runCatching null
+                    ProjectWorkspaceReference(fields[0], fields[1])
+                }.getOrNull()
+            }
+            .distinctBy(ProjectWorkspaceReference::sdkmanRcPath)
+            .toList()
+
+    private fun List<ProjectWorkspaceReference>.encodeProjectWorkspaces(): String =
+        asSequence()
+            .distinctBy(ProjectWorkspaceReference::sdkmanRcPath)
+            .sortedBy { it.displayName.lowercase() }
+            .map { "${it.sdkmanRcPath}$PROFILE_FIELD_SEPARATOR${it.displayName}" }
             .map { PROFILE_ENCODER.encodeToString(it.toByteArray(StandardCharsets.UTF_8)) }
             .joinToString("\n")
 
@@ -214,6 +238,7 @@ internal class JvmAppSettingsRepository(
         const val FAVORITE_JDK_VENDORS_KEY = "favorite-jdk-vendors"
         const val RECENT_CANDIDATES_KEY = "recent-candidates"
         const val PROFILES_KEY = "toolchain-profiles"
+        const val PROJECT_WORKSPACES_KEY = "project-workspaces"
         const val NAVIGATION_WIDTH_KEY = "navigation-width-dp"
         const val INSTALLED_VIEW_MODE_KEY = "installed-view-mode"
         const val CATALOG_VIEW_MODE_KEY = "catalog-view-mode"
