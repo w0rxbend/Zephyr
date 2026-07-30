@@ -11,7 +11,8 @@ Before the release workflow can publish:
 2. Submit a classic-confinement request in Canonical's store-requests forum.
    Zephyr fits the documented supported category “tools for local, non-root
    user driven configuration of/switching to development
-   workspaces/environments.”
+   workspaces/environments.” Copy the complete, forum-ready request from
+   [`CLASSIC_CONFINEMENT_REQUEST.md`](CLASSIC_CONFINEMENT_REQUEST.md).
 3. After approval, create a least-privilege store credential:
 
    ```shell

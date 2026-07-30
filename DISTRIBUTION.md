@@ -100,6 +100,7 @@ deliberately not represented as Flathub-ready.
 - [AppImage manual packaging](https://docs.appimage.org/packaging-guide/manual.html)
 - [Snapcraft platforms and architectures](https://snapcraft.io/docs/reference/project-file/snapcraft-yaml)
 - [Snap classic-confinement review](https://snapcraft.io/docs/reference/administration/reviewing-classic-confinement-snaps/)
+- [Snap classic-confinement request template](https://forum.snapcraft.io/t/about-the-classic-confinement-category/43830)
 - [Snapcraft publish action](https://github.com/snapcore/action-publish)
 - [Flatpak manifests](https://docs.flatpak.org/en/latest/manifests.html)
 - [Flatpak Gradle dependency generator](https://github.com/flatpak/flatpak-builder-tools/tree/master/gradle)

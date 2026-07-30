@@ -10,6 +10,10 @@ description: |
   existing SDKMAN installation and launches host toolchains and terminals.
 version: "1.0.0"
 license: MIT
+website: https://github.com/w0rxbend/Zephyr
+source-code: https://github.com/w0rxbend/Zephyr
+issues: https://github.com/w0rxbend/Zephyr/issues
+contact: https://github.com/w0rxbend/Zephyr/issues
 icon: packaging/linux/com.worxbend.zephyr.png
 base: core24
 grade: stable
