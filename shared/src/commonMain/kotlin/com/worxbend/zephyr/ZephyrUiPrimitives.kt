@@ -254,7 +254,7 @@ internal fun AccordionHeader(
             .clip(RoundedCornerShape(metrics.cornerRadius))
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f))
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(metrics.cornerRadius))
-            .clickable(onClick = onClick)
+            .clickable(role = Role.Button, onClick = onClick)
             .padding(horizontal = 11.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -267,7 +267,7 @@ internal fun AccordionHeader(
                 actionLabel,
                 modifier = Modifier
                     .clip(RoundedCornerShape(5.dp))
-                    .clickable(onClick = onAction)
+                    .clickable(role = Role.Button, onClick = onAction)
                     .padding(horizontal = 7.dp, vertical = 3.dp),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary,

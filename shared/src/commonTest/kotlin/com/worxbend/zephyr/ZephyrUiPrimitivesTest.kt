@@ -12,6 +12,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertHasClickAction
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -25,6 +27,7 @@ import androidx.compose.ui.test.rightClick
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.luminance
 import com.worxbend.zephyr.settings.AppSettings
 import com.worxbend.zephyr.settings.CleanupGracePeriod
 import com.worxbend.zephyr.settings.MetadataRefreshSchedule
@@ -39,6 +42,7 @@ import com.worxbend.zephyr.domain.DiskImpactEstimate
 import com.worxbend.zephyr.domain.DiskImpactKind
 import com.worxbend.zephyr.domain.EstimateConfidence
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import kotlin.test.Test
 
 class ZephyrUiPrimitivesTest {
@@ -116,6 +120,49 @@ class ZephyrUiPrimitivesTest {
         assertEquals("×", statusSymbol(StatusTone.Error))
         assertEquals("Healthy", statusLabel(StatusTone.Success))
         assertEquals("Error", statusLabel(StatusTone.Error))
+    }
+
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun sharedControlsExposeInteractiveAndSelectionSemantics() = runComposeUiTest {
+        setContent {
+            ZephyrTheme(darkTheme = false) {
+                Column {
+                    ZephyrNavigationItem("O", "Overview", true, {}, Modifier.testTag("audit-navigation"))
+                    ZephyrToolbarButton("Refresh", {}, Modifier.testTag("audit-button"))
+                    ZephyrSegmentedControl(
+                        options = listOf("Compact", "Comfortable"),
+                        selected = "Compact",
+                        label = { it },
+                        onSelected = {},
+                    )
+                    StatusDot(StatusTone.Warning)
+                }
+            }
+        }
+
+        onNodeWithTag("audit-navigation").assertHasClickAction().assertIsSelected()
+        onNodeWithTag("audit-button").assertHasClickAction()
+        onNodeWithText("Compact").assertHasClickAction().assertIsSelected()
+        onNodeWithContentDescription("Attention status").assertExists()
+    }
+
+    @Test
+    fun coreTextColorPairsMeetWcagAaContrast() {
+        listOf(
+            Triple("light primary", ZephyrLightColors.onPrimary, ZephyrLightColors.primary),
+            Triple("light primary container", ZephyrLightColors.onPrimaryContainer, ZephyrLightColors.primaryContainer),
+            Triple("light surface", ZephyrLightColors.onSurface, ZephyrLightColors.surface),
+            Triple("light surface variant", ZephyrLightColors.onSurfaceVariant, ZephyrLightColors.surfaceVariant),
+            Triple("dark primary", ZephyrDarkColors.onPrimary, ZephyrDarkColors.primary),
+            Triple("dark primary container", ZephyrDarkColors.onPrimaryContainer, ZephyrDarkColors.primaryContainer),
+            Triple("dark surface", ZephyrDarkColors.onSurface, ZephyrDarkColors.surface),
+            Triple("dark surface variant", ZephyrDarkColors.onSurfaceVariant, ZephyrDarkColors.surfaceVariant),
+        ).forEach { (name, foreground, background) ->
+            val lighter = maxOf(foreground.luminance(), background.luminance())
+            val darker = minOf(foreground.luminance(), background.luminance())
+            assertTrue((lighter + 0.05f) / (darker + 0.05f) >= 4.5f, "$name contrast is below 4.5:1")
+        }
     }
 
     @Test

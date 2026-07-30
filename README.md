@@ -190,6 +190,12 @@ Navigation is grouped into Workspace, Discover, Maintenance, and application sec
 - Stable action IDs distinguish immediate reads from review-only operations; integrations cannot bypass typed transaction confirmation.
 - Unknown versions, IDs, parameters, control characters, and oversized values are rejected. The compatibility policy is documented in [`ACTION_CONTRACT.md`](ACTION_CONTRACT.md).
 
+### Accessibility quality gate
+
+- Navigation, search results, accordions, buttons, segmented choices, status, and progress publish explicit interaction, selection, and state semantics.
+- Automated tests enforce WCAG AA contrast for core light/dark text pairs, non-color status signals, reduced-motion semantics, keyboard actions, and 200% text scaling.
+- The completed manual keyboard, screen-reader, zoom, motion, and release checklist is maintained in [`ACCESSIBILITY_AUDIT.md`](ACCESSIBILITY_AUDIT.md).
+
 ### Local-only cleanup grace
 
 - Settings provides opt-in Off, 7-day, 30-day, and 90-day review thresholds.

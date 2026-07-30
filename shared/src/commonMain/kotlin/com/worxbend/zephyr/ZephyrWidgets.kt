@@ -34,6 +34,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -141,6 +142,7 @@ internal fun ZephyrNavigationItem(
                 RoundedCornerShape(metrics.cornerRadius),
             )
             .onFocusChanged { focused = it.isFocused }
+            .semantics { this.selected = selected }
             .clickable(role = Role.Button, onClick = onClick)
             .padding(horizontal = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -290,6 +292,7 @@ internal fun <T> ZephyrSegmentedControl(
                         if (active) MaterialTheme.colorScheme.surface else Color.Transparent,
                         RoundedCornerShape((metrics.cornerRadius - 2.dp).coerceAtLeast(2.dp)),
                     )
+                    .semantics { this.selected = active }
                     .clickable(role = Role.RadioButton) { onSelected(option) }
                     .padding(horizontal = 12.dp, vertical = 6.dp),
                 color = if (active) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,

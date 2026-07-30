@@ -93,8 +93,8 @@ private fun ZephyrMetrics.scaledForText(factor: Float): ZephyrMetrics {
     )
 }
 
-private val ZephyrLightColors = lightColorScheme(
-    primary = Color(0xFF3574F0),
+internal val ZephyrLightColors = lightColorScheme(
+    primary = Color(0xFF2F65D5),
     onPrimary = Color.White,
     primaryContainer = Color(0xFFDCE8FF),
     onPrimaryContainer = Color(0xFF163A70),
@@ -107,7 +107,7 @@ private val ZephyrLightColors = lightColorScheme(
     surface = Color(0xFFFFFFFF),
     onSurface = Color(0xFF2B2D30),
     surfaceVariant = Color(0xFFF0F1F3),
-    onSurfaceVariant = Color(0xFF6C7078),
+    onSurfaceVariant = Color(0xFF62666E),
     outline = Color(0xFFC9CCD1),
     outlineVariant = Color(0xFFE1E3E6),
     error = Color(0xFFC9362B),
@@ -118,9 +118,9 @@ private val ZephyrLightColors = lightColorScheme(
     inverseOnSurface = Color(0xFFF8FAFC),
 )
 
-private val ZephyrDarkColors = darkColorScheme(
+internal val ZephyrDarkColors = darkColorScheme(
     primary = Color(0xFF6B9BFA),
-    onPrimary = Color(0xFFFFFFFF),
+    onPrimary = Color(0xFF10244A),
     primaryContainer = Color(0xFF2E436E),
     onPrimaryContainer = Color(0xFFD9E6FF),
     secondary = Color(0xFFB8BCC6),

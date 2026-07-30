@@ -108,7 +108,7 @@ The first product slice delivers:
 | ECO-05 Custom SDKMAN home | Delivered | Native directory selection persists only normalized paths containing the required init script and candidates directory, with a clear automatic-discovery reset. |
 | ECO-06 Portable preferences | Delivered | A deterministic native import/export format serializes an explicit non-sensitive allowlist while preserving and excluding all machine-local state. |
 | ECO-07 Plugin-ready actions | Delivered | Versioned stable action IDs dispatch through a validated handler boundary without exposing ViewModel, Compose state, repositories, or confirmation bypasses. |
-| ECO-08 | Planned | Prioritized below and implemented sequentially. |
+| ECO-08 Accessibility audit | Delivered | Automated role/selection/status/motion/scale and WCAG AA contrast gates pass alongside the checked-in keyboard and screen-reader audit checklist. |
 
 ## Groomed feature backlog
 
