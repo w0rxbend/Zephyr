@@ -116,8 +116,43 @@ jobs:
         continue-on-error: true
         uses: snapcore/action-build@3bdaa03e1ba6bf59a65f84a751d943d549a54e79
 
-      - name: Normalize Snap artifact name
+      - name: Validate Snap metadata
+        id: snap-validate
         if: steps.snapcraft.outcome == 'success'
+        continue-on-error: true
+        env:
+          SNAP_PATH: ${{ steps.snapcraft.outputs.snap }}
+          EXPECTED_ARCH: ${{ matrix.arch }}
+        run: |
+          if ! command -v unsquashfs >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install --yes --no-install-recommends squashfs-tools
+          fi
+
+          version=$(sed -n 's/^zephyrVersion=//p' gradle.properties)
+          case "$(basename "$SNAP_PATH")" in
+            "zephyr-sdkman_${version}_${EXPECTED_ARCH}.snap") ;;
+            *)
+              echo "Unexpected Snap artifact name: $SNAP_PATH" >&2
+              exit 1
+              ;;
+          esac
+
+          metadata=$(unsquashfs -cat "$SNAP_PATH" meta/snap.yaml)
+          grep -Fxq "name: zephyr-sdkman" <<<"$metadata"
+          grep -Fxq "version: $version" <<<"$metadata"
+          grep -Fxq "confinement: classic" <<<"$metadata"
+          grep -Fxq "grade: stable" <<<"$metadata"
+          grep -Fxq -- "- $EXPECTED_ARCH" <<<"$metadata"
+
+          listing=$(mktemp)
+          unsquashfs -ll "$SNAP_PATH" > "$listing"
+          grep -Fq "meta/gui/zephyr.desktop" "$listing"
+          grep -Fq "usr/share/applications/com.worxbend.zephyr.desktop" "$listing"
+          grep -Fq "usr/lib/zephyr/bin/com.worxbend.zephyr" "$listing"
+
+      - name: Normalize Snap artifact name
+        if: steps.snapcraft.outcome == 'success' && steps.snap-validate.outcome == 'success'
         env:
           SNAP_PATH: ${{ steps.snapcraft.outputs.snap }}
         run: |
@@ -127,11 +162,11 @@ jobs:
 
       - name: Publish Snap to stable
         id: publish
-        if: github.ref_type == 'tag' && steps.snapcraft.outcome == 'success' && env.STORE_LOGIN != ''
+        if: github.ref_type == 'tag' && steps.snapcraft.outcome == 'success' && steps.snap-validate.outcome == 'success' && env.STORE_LOGIN != ''
         continue-on-error: true
         env:
           SNAPCRAFT_STORE_CREDENTIALS: ${{ env.STORE_LOGIN }}
-        uses: snapcore/action-publish@9334eecb267cfd97a0ce3c8654215d095927252f # v1
+        uses: snapcore/action-publish@9334eecb267cfd97a0ce3c8654215d095927252f # v1.2.0
         with:
           snap: ${{ steps.snapcraft.outputs.snap }}
           release: stable
@@ -140,6 +175,7 @@ jobs:
         if: always()
         run: |
           echo "Snap build: ${{ steps.snapcraft.outcome }}"
+          echo "Snap validation: ${{ steps.snap-validate.outcome }}"
           echo "Snap Store publish: ${{ steps.publish.outcome }}"
           if [[ -z "$STORE_LOGIN" ]]; then
             echo "SNAPCRAFT_STORE_CREDENTIALS is not configured; store publishing was skipped."

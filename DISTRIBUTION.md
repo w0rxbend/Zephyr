@@ -10,7 +10,7 @@ those components.
 | Format | Architectures | Publication |
 | --- | --- | --- |
 | AppImage | `amd64`, `arm64` | GitHub Releases |
-| Snap | `amd64`, `arm64` | GitHub Releases and Snap Store `stable` |
+| Snap | `amd64`, `arm64` | GitHub Releases; Snap Store `stable` after store setup |
 | Flatpak bundle | `amd64`, `arm64` | GitHub Releases |
 
 The tag is the release trigger. Every package/architecture build is isolated
@@ -18,7 +18,9 @@ and allowed to fail independently. The final job downloads all successful
 artifacts and publishes the GitHub release if at least one `.AppImage`,
 `.flatpak`, or `.snap` exists. It fails only when none of the distributions
 could be produced. `SHA256SUMS` and `BUILD-MANIFEST.txt` describe the exact
-assets that survived the build.
+assets that survived the build. Before a Snap is uploaded or released, the
+workflow checks its declared name, version, architecture, confinement, grade,
+desktop entry, and executable.
 
 ## Local builds
 
