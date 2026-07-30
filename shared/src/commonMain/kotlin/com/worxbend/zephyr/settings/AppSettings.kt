@@ -2,6 +2,7 @@ package com.worxbend.zephyr.settings
 
 import com.worxbend.zephyr.domain.InstallTarget
 import com.worxbend.zephyr.domain.ProtectedVersion
+import com.worxbend.zephyr.domain.DesiredToolchainState
 
 data class AppSettings(
     val themePreference: ThemePreference = ThemePreference.System,
@@ -19,6 +20,7 @@ data class AppSettings(
     val recentCandidates: List<String> = emptyList(),
     val toolchainProfiles: List<ToolchainProfile> = emptyList(),
     val projectWorkspaces: List<ProjectWorkspaceReference> = emptyList(),
+    val desiredToolchainState: DesiredToolchainState? = null,
     val navigationWidthDp: Int = 0,
     val installedViewMode: CollectionViewMode = CollectionViewMode.Cards,
     val catalogViewMode: CollectionViewMode = CollectionViewMode.Cards,

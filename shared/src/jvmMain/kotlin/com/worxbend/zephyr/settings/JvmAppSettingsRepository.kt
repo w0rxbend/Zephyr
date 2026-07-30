@@ -1,6 +1,9 @@
 package com.worxbend.zephyr.settings
 
 import com.worxbend.zephyr.domain.InstallTarget
+import com.worxbend.zephyr.domain.DesiredCandidateState
+import com.worxbend.zephyr.domain.DesiredStateSourceKind
+import com.worxbend.zephyr.domain.DesiredToolchainState
 import java.nio.charset.StandardCharsets
 import java.util.Base64
 import java.util.prefs.Preferences
@@ -30,6 +33,7 @@ internal class JvmAppSettingsRepository(
             recentCandidates = preferences.stringList(RECENT_CANDIDATES_KEY),
             toolchainProfiles = preferences.profiles(PROFILES_KEY),
             projectWorkspaces = preferences.projectWorkspaces(PROJECT_WORKSPACES_KEY),
+            desiredToolchainState = preferences.desiredToolchainState(),
             navigationWidthDp = preferences.getInt(NAVIGATION_WIDTH_KEY, 0).normalizedNavigationWidth(),
             installedViewMode = preferences.enumValue(INSTALLED_VIEW_MODE_KEY, CollectionViewMode.Cards),
             catalogViewMode = preferences.enumValue(CATALOG_VIEW_MODE_KEY, CollectionViewMode.Cards),
@@ -53,6 +57,7 @@ internal class JvmAppSettingsRepository(
         preferences.put(RECENT_CANDIDATES_KEY, settings.recentCandidates.encode())
         preferences.put(PROFILES_KEY, settings.toolchainProfiles.encodeProfiles())
         preferences.put(PROJECT_WORKSPACES_KEY, settings.projectWorkspaces.encodeProjectWorkspaces())
+        preferences.saveDesiredToolchainState(settings.desiredToolchainState)
         preferences.putInt(NAVIGATION_WIDTH_KEY, settings.navigationWidthDp.normalizedNavigationWidth())
         preferences.put(INSTALLED_VIEW_MODE_KEY, settings.installedViewMode.name)
         preferences.put(CATALOG_VIEW_MODE_KEY, settings.catalogViewMode.name)
@@ -150,6 +155,77 @@ internal class JvmAppSettingsRepository(
             .map { PROFILE_ENCODER.encodeToString(it.toByteArray(StandardCharsets.UTF_8)) }
             .joinToString("\n")
 
+    private fun Preferences.desiredToolchainState(): DesiredToolchainState? {
+        val chunks = getInt(DESIRED_STATE_CHUNK_COUNT_KEY, 0)
+        if (chunks !in 1..MAX_DESIRED_STATE_CHUNKS) return null
+        val encoded = buildString {
+            repeat(chunks) { index ->
+                append(get("$DESIRED_STATE_CHUNK_PREFIX$index", ""))
+            }
+        }
+        if (encoded.isEmpty()) return null
+        return runCatching {
+            val content = String(PROFILE_DECODER.decode(encoded), StandardCharsets.UTF_8)
+            val lines = content.lineSequence().filter(String::isNotBlank).toList()
+            val header = lines.first().split(PROFILE_FIELD_SEPARATOR)
+            require(header.size == 3)
+            val candidates = lines.drop(1).map { line ->
+                val fields = line.split(PROFILE_FIELD_SEPARATOR)
+                require(fields.size == 3)
+                DesiredCandidateState(
+                    candidate = fields[0],
+                    defaultVersion = fields[1].ifEmpty { null },
+                    installedVersions = fields[2].split(',').filter(String::isNotBlank),
+                )
+            }
+            DesiredToolchainState(
+                schemaVersion = header[0].toInt(),
+                sourceKind = DesiredStateSourceKind.valueOf(header[1]),
+                sourceLabel = header[2],
+                candidates = candidates,
+            )
+        }.getOrNull()
+    }
+
+    private fun Preferences.saveDesiredToolchainState(state: DesiredToolchainState?) {
+        val previousChunks = getInt(DESIRED_STATE_CHUNK_COUNT_KEY, 0)
+        if (state == null) {
+            repeat(previousChunks.coerceAtLeast(0)) { index ->
+                remove("$DESIRED_STATE_CHUNK_PREFIX$index")
+            }
+            remove(DESIRED_STATE_CHUNK_COUNT_KEY)
+            return
+        }
+        val content = buildString {
+            appendLine(
+                listOf(
+                    state.schemaVersion.toString(),
+                    state.sourceKind.name,
+                    state.sourceLabel,
+                ).joinToString(PROFILE_FIELD_SEPARATOR.toString()),
+            )
+            state.candidates.forEach { candidate ->
+                appendLine(
+                    listOf(
+                        candidate.candidate,
+                        candidate.defaultVersion.orEmpty(),
+                        candidate.installedVersions.joinToString(","),
+                    ).joinToString(PROFILE_FIELD_SEPARATOR.toString()),
+                )
+            }
+        }
+        val encoded = PROFILE_ENCODER.encodeToString(content.toByteArray(StandardCharsets.UTF_8))
+        val chunks = encoded.chunked(DESIRED_STATE_CHUNK_SIZE)
+        require(chunks.size <= MAX_DESIRED_STATE_CHUNKS) { "Desired toolchain state is too large to persist." }
+        chunks.forEachIndexed { index, chunk ->
+            put("$DESIRED_STATE_CHUNK_PREFIX$index", chunk)
+        }
+        for (index in chunks.size until previousChunks) {
+            remove("$DESIRED_STATE_CHUNK_PREFIX$index")
+        }
+        putInt(DESIRED_STATE_CHUNK_COUNT_KEY, chunks.size)
+    }
+
     private fun Preferences.savedJdkFilters(key: String): List<SavedJdkFilter> =
         get(key, "")
             .lineSequence()
@@ -239,6 +315,10 @@ internal class JvmAppSettingsRepository(
         const val RECENT_CANDIDATES_KEY = "recent-candidates"
         const val PROFILES_KEY = "toolchain-profiles"
         const val PROJECT_WORKSPACES_KEY = "project-workspaces"
+        const val DESIRED_STATE_CHUNK_COUNT_KEY = "desired-state-chunks"
+        const val DESIRED_STATE_CHUNK_PREFIX = "desired-state-"
+        const val DESIRED_STATE_CHUNK_SIZE = 3_000
+        const val MAX_DESIRED_STATE_CHUNKS = 128
         const val NAVIGATION_WIDTH_KEY = "navigation-width-dp"
         const val INSTALLED_VIEW_MODE_KEY = "installed-view-mode"
         const val CATALOG_VIEW_MODE_KEY = "catalog-view-mode"

@@ -47,6 +47,7 @@ import com.worxbend.zephyr.domain.javaProviderName
 import com.worxbend.zephyr.domain.recoveryGuidance
 import com.worxbend.zephyr.domain.resumableCommands
 import com.worxbend.zephyr.domain.searchOperationJournal
+import com.worxbend.zephyr.domain.calculateDesiredStateDrift
 import com.worxbend.zephyr.data.formatLocalTimestamp
 import com.worxbend.zephyr.data.captureEnvironmentSnapshot
 import com.worxbend.zephyr.data.createBrowserLauncher
@@ -84,12 +85,15 @@ internal fun OverviewScreen(
     state: ZephyrUiState.Ready,
     viewModel: ZephyrViewModel,
     settings: AppSettings,
+    onSettingsChange: ((AppSettings) -> AppSettings) -> Unit,
 ) {
     val metrics = LocalZephyrMetrics.current
     val jdk = state.candidates.firstOrNull { it.kind == CandidateKind.Jdk }
     val sdks = state.candidates.count { it.kind == CandidateKind.Sdk }
     val installedVersions = state.candidates.sumOf { candidate -> candidate.installedVersions.count { it.isInstalled } }
     val localOnly = state.candidates.sumOf { it.localOnlyVersionCount }
+    val desiredState = settings.desiredToolchainState
+    val desiredDrift = desiredState?.let { calculateDesiredStateDrift(it, state.candidates) }
 
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -144,6 +148,68 @@ internal fun OverviewScreen(
                         ZephyrToolbarButton("Batch Uninstall", onClick = { viewModel.navigate(ZephyrRoute.BatchUninstall) })
                         ZephyrToolbarButton("Refresh local state", onClick = viewModel::refreshInstalled)
                         ZephyrToolbarButton("Scan local-only", onClick = viewModel::scanLocalOnly)
+                    }
+                    PanelHeading("Desired state", "Continuous drift visibility; extra versions are report-only")
+                    if (desiredState == null || desiredDrift == null) {
+                        Text(
+                            "Choose a toolchain profile or environment snapshot as the desired baseline.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        ZephyrToolbarButton(
+                            "Choose in Profiles",
+                            onClick = { viewModel.navigate(ZephyrRoute.Profiles) },
+                        )
+                    } else {
+                        Text(
+                            "${desiredState.sourceKind.label}: ${desiredState.sourceLabel}",
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(7.dp),
+                            verticalArrangement = Arrangement.spacedBy(7.dp),
+                        ) {
+                            Badge(
+                                if (desiredDrift.isAligned) "Aligned" else "Drift detected",
+                                if (desiredDrift.isAligned) BadgeTone.Success else BadgeTone.Warning,
+                            )
+                            if (desiredDrift.missingVersions.isNotEmpty()) {
+                                Badge("${desiredDrift.missingVersions.size} missing", BadgeTone.Warning)
+                            }
+                            if (desiredDrift.defaultChanges.isNotEmpty()) {
+                                Badge("${desiredDrift.defaultChanges.size} defaults differ", BadgeTone.Primary)
+                            }
+                            if (desiredDrift.extraInstalledVersions.isNotEmpty()) {
+                                Badge("${desiredDrift.extraInstalledVersions.size} extra (report only)")
+                            }
+                            if (desiredDrift.localOnlyDesiredVersions.isNotEmpty()) {
+                                Badge("${desiredDrift.localOnlyDesiredVersions.size} desired local-only", BadgeTone.Warning)
+                            }
+                        }
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            if (desiredDrift.remediationCommands.isNotEmpty()) {
+                                ZephyrToolbarButton(
+                                    "Review repair (${desiredDrift.remediationCommands.size})",
+                                    onClick = {
+                                        viewModel.requestTransaction(
+                                            SdkmanTransaction.ToolchainActivation(
+                                                profileName = "Desired state · ${desiredState.sourceLabel}",
+                                                commands = desiredDrift.remediationCommands,
+                                            ),
+                                        )
+                                    },
+                                )
+                            }
+                            ZephyrToolbarButton(
+                                "Clear desired state",
+                                onClick = {
+                                    onSettingsChange { it.copy(desiredToolchainState = null) }
+                                },
+                            )
+                        }
                     }
                     PanelHeading("Toolchain summary", "Persisted SDKMAN defaults")
                     KeyValueRow("SDKMAN", sdkmanVersionLabel(state))
@@ -951,6 +1017,8 @@ internal fun ToolchainProfilesScreen(
         ) {
             items(settings.toolchainProfiles, key = ToolchainProfile::name) { profile ->
                 val activationPlan = planToolchainActivation(profile.targets, state.candidates)
+                val profileDesiredState = desiredStateFromProfile(profile)
+                val isDesiredState = settings.desiredToolchainState == profileDesiredState
                 val missingCount = activationPlan.count { it.action == SdkmanCommandAction.Install }
                 val defaultChangeCount = activationPlan.count { it.action == SdkmanCommandAction.SetDefault }
                 ZephyrPanel(Modifier.fillMaxWidth()) {
@@ -985,6 +1053,18 @@ internal fun ToolchainProfilesScreen(
                                 )
                             } else {
                                 Badge("Active", BadgeTone.Success)
+                            }
+                            if (isDesiredState) {
+                                Badge("Desired state", BadgeTone.Primary)
+                            } else {
+                                ZephyrToolbarButton(
+                                    label = "Use as desired",
+                                    onClick = {
+                                        onSettingsChange {
+                                            it.copy(desiredToolchainState = profileDesiredState)
+                                        }
+                                    },
+                                )
                             }
                             ZephyrToolbarButton(
                                 label = "Delete profile",
@@ -1277,6 +1357,7 @@ internal fun ProjectToolchainExportScreen(
 internal fun EnvironmentSnapshotScreen(
     state: ZephyrUiState.Ready,
     viewModel: ZephyrViewModel,
+    onSettingsChange: ((AppSettings) -> AppSettings) -> Unit,
 ) {
     val metrics = LocalZephyrMetrics.current
     val service = remember { createEnvironmentSnapshotService() }
@@ -1417,6 +1498,16 @@ internal fun EnvironmentSnapshotScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                    ZephyrToolbarButton(
+                        "Use imported as desired",
+                        enabled = it.candidates.any { candidate -> candidate.installedVersions.isNotEmpty() },
+                        onClick = {
+                            onSettingsChange {
+                                it.copy(desiredToolchainState = desiredStateFromSnapshot(restoreSnapshot!!))
+                            }
+                            message = "Imported snapshot is now the desired state."
+                        },
+                    )
                 }
             }
         }
@@ -1455,6 +1546,31 @@ internal fun EnvironmentSnapshotScreen(
                 tone = if (changes.isEmpty()) StatusTone.Success else StatusTone.Warning,
                 modifier = Modifier.weight(1f),
             )
+        }
+        ZephyrPanel(Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(metrics.panelPadding),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Desired-state baseline", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "Persist this snapshot’s candidate/version identifiers without retaining a source file path.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                ZephyrToolbarButton(
+                    "Use current as desired",
+                    onClick = {
+                        onSettingsChange {
+                            it.copy(desiredToolchainState = desiredStateFromSnapshot(current))
+                        }
+                        message = "Current environment is now the desired state."
+                    },
+                )
+            }
         }
         LazyColumn(
             modifier = Modifier.fillMaxSize(),

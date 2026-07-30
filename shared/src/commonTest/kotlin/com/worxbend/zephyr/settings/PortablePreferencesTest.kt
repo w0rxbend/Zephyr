@@ -1,6 +1,9 @@
 package com.worxbend.zephyr.settings
 
 import com.worxbend.zephyr.domain.InstallTarget
+import com.worxbend.zephyr.domain.DesiredCandidateState
+import com.worxbend.zephyr.domain.DesiredStateSourceKind
+import com.worxbend.zephyr.domain.DesiredToolchainState
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -15,6 +18,11 @@ class PortablePreferencesTest {
             ),
             projectWorkspaces = listOf(
                 ProjectWorkspaceReference("/private/work/backend/.sdkmanrc", "Backend"),
+            ),
+            desiredToolchainState = DesiredToolchainState(
+                sourceKind = DesiredStateSourceKind.Profile,
+                sourceLabel = "Source profile",
+                candidates = listOf(DesiredCandidateState("java", "21-tem", listOf("21-tem"))),
             ),
             savedJdkFilters = listOf(SavedJdkFilter("Local", "17\nlts", "Installed", "tem", "Version")),
             navigationWidthDp = 300,
@@ -31,6 +39,11 @@ class PortablePreferencesTest {
             projectWorkspaces = listOf(
                 ProjectWorkspaceReference("/machine-only/.sdkmanrc", "Local"),
             ),
+            desiredToolchainState = DesiredToolchainState(
+                sourceKind = DesiredStateSourceKind.Snapshot,
+                sourceLabel = "Machine baseline",
+                candidates = listOf(DesiredCandidateState("gradle", "9.0", listOf("9.0"))),
+            ),
         ).applyPortablePreferences(parsed)
         assertEquals(source.themePreference, machineState.themePreference)
         assertEquals(listOf(LocalOnlyObservation("java", "old-local", 123)), machineState.localOnlyObservations)
@@ -38,6 +51,8 @@ class PortablePreferencesTest {
             listOf(ProjectWorkspaceReference("/machine-only/.sdkmanrc", "Local")),
             machineState.projectWorkspaces,
         )
+        assertEquals(DesiredStateSourceKind.Snapshot, machineState.desiredToolchainState?.sourceKind)
+        assertEquals("Machine baseline", machineState.desiredToolchainState?.sourceLabel)
         assertEquals(false, rendered.contains("/private/work/backend"))
     }
 }

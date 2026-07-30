@@ -79,7 +79,7 @@ internal fun Content(
     val metrics = LocalZephyrMetrics.current
     Box(Modifier.fillMaxSize().padding(metrics.pagePadding)) {
         when (val route = state.route) {
-            ZephyrRoute.Overview -> OverviewScreen(state, viewModel, settings)
+            ZephyrRoute.Overview -> OverviewScreen(state, viewModel, settings, onSettingsChange)
             ZephyrRoute.InstalledJdk -> InstalledJdkScreen(
                 state,
                 viewModel::navigate,
@@ -136,7 +136,7 @@ internal fun Content(
             ZephyrRoute.ProjectWorkspaces -> ProjectWorkspacesScreen(state, viewModel, settings, onSettingsChange)
             ZephyrRoute.ProjectImport -> ProjectToolchainImportScreen(state)
             ZephyrRoute.ProjectExport -> ProjectToolchainExportScreen(state, viewModel)
-            ZephyrRoute.EnvironmentSnapshot -> EnvironmentSnapshotScreen(state, viewModel)
+            ZephyrRoute.EnvironmentSnapshot -> EnvironmentSnapshotScreen(state, viewModel, onSettingsChange)
             ZephyrRoute.Comparison -> CandidateComparisonScreen(state, viewModel)
             ZephyrRoute.Diagnostics -> DiagnosticsScreen(
                 state,

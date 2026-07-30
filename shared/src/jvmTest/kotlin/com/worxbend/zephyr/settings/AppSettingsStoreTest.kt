@@ -7,6 +7,9 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import com.worxbend.zephyr.domain.InstallTarget
 import com.worxbend.zephyr.domain.ProtectedVersion
+import com.worxbend.zephyr.domain.DesiredCandidateState
+import com.worxbend.zephyr.domain.DesiredStateSourceKind
+import com.worxbend.zephyr.domain.DesiredToolchainState
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -34,6 +37,11 @@ class AppSettingsStoreTest {
             ),
             projectWorkspaces = listOf(
                 ProjectWorkspaceReference("/srv/backend/.sdkmanrc", "Backend"),
+            ),
+            desiredToolchainState = DesiredToolchainState(
+                sourceKind = DesiredStateSourceKind.Profile,
+                sourceLabel = "Backend",
+                candidates = listOf(DesiredCandidateState("java", "21.0.5-tem", listOf("21.0.5-tem"))),
             ),
             navigationWidthDp = 286,
             installedViewMode = CollectionViewMode.Table,
@@ -88,6 +96,18 @@ class AppSettingsStoreTest {
                 projectWorkspaces = listOf(
                     ProjectWorkspaceReference("/work/backend/.sdkmanrc", "Backend"),
                     ProjectWorkspaceReference("/work/mobile/.sdkmanrc", "Mobile"),
+                ),
+                desiredToolchainState = DesiredToolchainState(
+                    sourceKind = DesiredStateSourceKind.Snapshot,
+                    sourceLabel = "Snapshot 1234",
+                    candidates = listOf(
+                        DesiredCandidateState(
+                            "java",
+                            "21.0.5-tem",
+                            listOf("17.0.1-tem", "21.0.5-tem"),
+                        ),
+                        DesiredCandidateState("gradle", "8.14", listOf("8.14")),
+                    ),
                 ),
                 navigationWidthDp = 320,
                 installedViewMode = CollectionViewMode.Table,
